@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API = "http://127.0.0.1:5000";
+const API = "https://luxora-store-mkva.onrender.com";
 
 const categories = [
   "Bags",
