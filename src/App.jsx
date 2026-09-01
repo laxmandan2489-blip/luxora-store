@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
 
-const API = "http://127.0.0.1:5000";
+const API = "https://luxora-store-mkva.onrender.com";
 
 function getImageUrl(image) {
   if (!image) return "";
