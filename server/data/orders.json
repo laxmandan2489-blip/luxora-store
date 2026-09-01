@@ -1,0 +1,93 @@
+[
+  {
+    "orderId": "LUX-1788114562020-D530M",
+    "status": "Order Received",
+    "paymentStatus": "Pending",
+    "customer": {
+      "name": "KND'LK'DOS",
+      "mobile": "6953233213",
+      "email": "test@mail.com",
+      "address": "6V1142\nopposite Govt. Collage JNVU\nKudi Bhagtasni Housing Board",
+      "city": "Jodhpur",
+      "state": "Rajasthan",
+      "pincode": "342005"
+    },
+    "items": [
+      {
+        "productId": 1788084940602,
+        "name": "test bag",
+        "category": "Bags",
+        "price": 2999,
+        "quantity": 1,
+        "color": "Black",
+        "image": "/uploads/1788084940586-9wwxvg.webp",
+        "itemTotal": 2999
+      }
+    ],
+    "totalAmount": 2999,
+    "currency": "INR",
+    "createdAt": "2026-08-30T18:29:22.021Z",
+    "updatedAt": "2026-08-30T18:29:22.021Z"
+  },
+  {
+    "orderId": "LUX-1788094349267-CD8Q0",
+    "status": "Order Received",
+    "paymentStatus": "Pending",
+    "customer": {
+      "name": "Laxman Dan",
+      "mobile": "9461515979",
+      "email": "testmail@7768.com",
+      "address": "test adress",
+      "city": "jodhpur",
+      "state": "jodhpur",
+      "pincode": "989898"
+    },
+    "items": [
+      {
+        "productId": 1788084940602,
+        "name": "test bag",
+        "category": "Bags",
+        "price": 2999,
+        "quantity": 1,
+        "color": "Black",
+        "image": "/uploads/1788084940586-9wwxvg.webp",
+        "itemTotal": 2999
+      }
+    ],
+    "totalAmount": 2999,
+    "currency": "INR",
+    "createdAt": "2026-08-30T12:52:29.268Z",
+    "updatedAt": "2026-08-30T12:52:29.268Z"
+  },
+  {
+    "id": "LX90693193",
+    "orderId": "LX90693193",
+    "orderReference": "LX90693193",
+    "reference": "LX90693193",
+    "customer": {
+      "name": "Growcend India pvt.ltd.",
+      "mobile": "8498984984",
+      "email": "growcendindiapvtltd@gmail.com",
+      "address": "6V1142\nopposite Govt. Collage JNVU\nKudi Bhagtasni Housing Board",
+      "city": "Jodhpur",
+      "state": "Rajasthan",
+      "pincode": "342005"
+    },
+    "items": [
+      {
+        "id": 1788290153259,
+        "name": "test",
+        "category": "Bags",
+        "price": 2999,
+        "quantity": 1,
+        "image": "http://127.0.0.1:5000/uploads/1788290153213-334627-images-2.jpg"
+      }
+    ],
+    "subtotal": 2999,
+    "deliveryCharge": 0,
+    "totalAmount": 2999,
+    "status": "Pending",
+    "createdAt": "2026-09-01T19:24:53.194Z",
+    "updatedAt": "2026-09-01T19:24:53.984Z"
+  }
+]

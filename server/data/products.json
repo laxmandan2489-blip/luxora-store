@@ -1,0 +1,86 @@
+[
+  {
+    "id": 1788081708834,
+    "name": "test bag",
+    "category": "Bags",
+    "price": 2999,
+    "oldPrice": 4499,
+    "stock": 10,
+    "description": "1254654+8",
+    "image": "",
+    "createdAt": "2026-08-30T09:21:48.834Z"
+  },
+  {
+    "id": 1788083510574,
+    "name": "test bags",
+    "category": "Handbags",
+    "price": 2999,
+    "oldPrice": 44999,
+    "stock": 10,
+    "description": "10",
+    "image": "",
+    "createdAt": "2026-08-30T09:51:50.574Z"
+  },
+  {
+    "id": 1788084940602,
+    "name": "test bag",
+    "category": "Bags",
+    "price": 2999,
+    "oldPrice": 44999,
+    "stock": 8,
+    "description": "sjfn",
+    "image": "/uploads/1788084940586-9wwxvg.webp",
+    "createdAt": "2026-08-30T10:15:40.602Z"
+  },
+  {
+    "id": 1788282174644,
+    "name": "TEST JPG",
+    "category": "Bags",
+    "price": 1999,
+    "oldPrice": 2999,
+    "stock": 5,
+    "description": "JPG upload test",
+    "colors": "Black",
+    "images": [
+      "/uploads/1788282174633-699790-test-upload.jpg"
+    ],
+    "image": "/uploads/1788282174633-699790-test-upload.jpg",
+    "createdAt": "2026-09-01T17:02:54.644Z"
+  },
+  {
+    "id": 1788282265979,
+    "name": "TEST 4",
+    "category": "Bags",
+    "price": 299,
+    "oldPrice": 499,
+    "stock": 10,
+    "description": "KJSDFN",
+    "colors": "Black",
+    "images": [
+      "/uploads/1788282265954-718723-images.jpg",
+      "/uploads/1788282265955-929221-images-2.jpg",
+      "/uploads/1788282265955-386290-images-1.jpg",
+      "/uploads/1788282265956-853371-images-Copy.jpg"
+    ],
+    "image": "/uploads/1788282265954-718723-images.jpg",
+    "createdAt": "2026-09-01T17:04:25.979Z"
+  },
+  {
+    "id": 1788290153259,
+    "name": "test",
+    "category": "Bags",
+    "price": 2999,
+    "oldPrice": 4999,
+    "stock": 10,
+    "description": "a.kjs;knsf",
+    "colors": "Black",
+    "images": [
+      "/uploads/1788290153213-334627-images-2.jpg",
+      "/uploads/1788290153221-700120-images-1.jpg",
+      "/uploads/1788290153222-739667-images-Copy.jpg",
+      "/uploads/1788290153222-314831-shopping.webp"
+    ],
+    "image": "/uploads/1788290153213-334627-images-2.jpg",
+    "createdAt": "2026-09-01T19:15:53.259Z"
+  }
+]

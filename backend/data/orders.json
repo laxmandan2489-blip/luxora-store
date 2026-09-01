@@ -1,0 +1,74 @@
+[
+  {
+    "id": "1788125850394",
+    "orderNumber": "ORD-20260831-5694",
+    "createdAt": "2026-08-30T21:37:30.394Z",
+    "status": "Pending",
+    "customer": {
+      "name": "LaxmN",
+      "mobile": "9461515979",
+      "phone": "9461515979",
+      "email": "test@gmail.com",
+      "address": "Bsnakaka",
+      "city": "Nnemskalalal",
+      "state": "Namakalal",
+      "pincode": "616161"
+    },
+    "items": [
+      {
+        "productId": 1788081708834,
+        "id": 1788081708834,
+        "name": "test bag",
+        "category": "Bags",
+        "price": 2999,
+        "quantity": 1,
+        "color": "Black",
+        "image": ""
+      }
+    ],
+    "totalItems": 1,
+    "subtotal": 2999,
+    "deliveryCharge": 0,
+    "totalAmount": 2999,
+    "total": 2999,
+    "paymentMethod": "COD",
+    "paymentStatus": "Pending",
+    "notes": ""
+  },
+  {
+    "id": "1788121748538",
+    "orderNumber": "ORD-20260831-7184",
+    "createdAt": "2026-08-30T20:29:08.538Z",
+    "status": "Pending",
+    "customer": {
+      "name": "test",
+      "mobile": "9876543210",
+      "phone": "9876543210",
+      "email": "test@gmail.com",
+      "address": "Test Address",
+      "city": "Jodhpur",
+      "state": "Rajasthan",
+      "pincode": "342001"
+    },
+    "items": [
+      {
+        "productId": 1788084940602,
+        "id": 1788084940602,
+        "name": "test bag",
+        "category": "Bags",
+        "price": 2999,
+        "quantity": 1,
+        "color": "Black",
+        "image": "http://127.0.0.1:5000/uploads/1788084940586-9wwxvg.webp"
+      }
+    ],
+    "totalItems": 1,
+    "subtotal": 2999,
+    "deliveryCharge": 0,
+    "totalAmount": 2999,
+    "total": 2999,
+    "paymentMethod": "COD",
+    "paymentStatus": "Pending",
+    "notes": ""
+  }
+]

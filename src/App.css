@@ -1,0 +1,3187 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap");
+
+/* =========================================================
+   LUXORA — PREMIUM LUXURY STORE
+   COMPLETE APP CSS
+========================================================= */
+
+:root {
+  --lux-bg: #f8f7f3;
+  --lux-paper: #fbfaf7;
+  --lux-soft: #f0eee9;
+  --lux-soft-2: #eeece7;
+  --lux-line: #ddd9d1;
+  --lux-line-dark: #cbc5bb;
+  --lux-text: #171717;
+  --lux-muted: #777168;
+  --lux-light: #999188;
+  --lux-dark: #191816;
+  --lux-dark-2: #24211d;
+}
+
+/* =========================================================
+   RESET
+========================================================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--lux-bg);
+  color: var(--lux-text);
+  font-family: "DM Sans", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body:has(.lux-product-overlay),
+body:has(.lux-cart-overlay),
+body:has(.lux-checkout-overlay) {
+  overflow: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+img {
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* =========================================================
+   APP
+========================================================= */
+
+.luxora-app {
+  min-height: 100vh;
+  background: var(--lux-bg);
+}
+
+/* =========================================================
+   ANNOUNCEMENT
+========================================================= */
+
+.lux-announcement {
+  min-height: 34px;
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--lux-dark);
+  color: #eeeae2;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.lux-announcement-center {
+  opacity: 0.6;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.lux-header {
+  position: sticky;
+  top: 0;
+  z-index: 9000;
+  background: rgba(248, 247, 243, 0.94);
+  border-bottom: 1px solid var(--lux-line);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.lux-header-inner {
+  width: min(1440px, 94vw);
+  min-height: 88px;
+  margin: auto;
+  display: grid;
+  grid-template-columns: 190px 1fr 150px;
+  align-items: center;
+  gap: 30px;
+}
+
+.lux-logo {
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  user-select: none;
+}
+
+.lux-logo span {
+  color: var(--lux-text);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 25px;
+  letter-spacing: 6px;
+  line-height: 1;
+}
+
+.lux-logo small {
+  margin-top: 7px;
+  color: #8a8479;
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 2.8px;
+}
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+.lux-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 28px;
+}
+
+.lux-nav button {
+  position: relative;
+  padding: 8px 0;
+  border: 0;
+  background: transparent;
+  color: #5c5851;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  transition: color 0.25s ease;
+}
+
+.lux-nav button::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  width: 0;
+  height: 1px;
+  background: var(--lux-text);
+  transition: width 0.25s ease;
+}
+
+.lux-nav button:hover,
+.lux-nav button.active {
+  color: #111;
+}
+
+.lux-nav button:hover::after,
+.lux-nav button.active::after {
+  width: 100%;
+}
+
+/* =========================================================
+   HEADER ACTIONS
+========================================================= */
+
+.lux-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 15px;
+}
+
+.lux-header-actions button {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  background: transparent;
+  color: #222;
+  font-size: 21px;
+  transition: transform 0.2s ease;
+}
+
+.lux-header-actions button:hover {
+  transform: translateY(-1px);
+}
+
+.lux-cart-icon span {
+  position: absolute;
+  top: -2px;
+  right: -1px;
+  width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--lux-dark);
+  color: #fff;
+  font-size: 8px;
+}
+
+/* =========================================================
+   MOBILE MENU
+========================================================= */
+
+.lux-mobile-menu {
+  display: none;
+  border: 0;
+  background: transparent;
+  color: #171717;
+  font-size: 22px;
+}
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+.lux-search-bar {
+  border-top: 1px solid var(--lux-line);
+  background: var(--lux-bg);
+}
+
+.lux-search-inner {
+  width: min(1100px, 92vw);
+  min-height: 80px;
+  margin: auto;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lux-search-inner span {
+  color: #888175;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.lux-search-inner input {
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lux-text);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 24px;
+}
+
+.lux-search-inner input::placeholder {
+  color: #aaa39a;
+}
+
+.lux-search-inner button {
+  border: 0;
+  background: transparent;
+  color: #222;
+  font-size: 26px;
+}
+
+/* =========================================================
+   HERO
+========================================================= */
+
+.lux-hero {
+  position: relative;
+  min-height: 720px;
+  overflow: hidden;
+  background: #d8d0c3;
+}
+
+.lux-hero-image {
+  position: absolute;
+  inset: 0;
+  background: #ddd7ce;
+}
+
+.lux-hero-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.72);
+}
+
+.lux-hero-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.45);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 100px;
+  letter-spacing: 20px;
+}
+
+.lux-hero-image-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(22, 20, 17, 0.76) 0%,
+      rgba(22, 20, 17, 0.43) 38%,
+      rgba(22, 20, 17, 0.08) 73%,
+      rgba(22, 20, 17, 0.18) 100%
+    );
+}
+
+.lux-hero-content {
+  position: relative;
+  z-index: 2;
+  width: min(1400px, 90vw);
+  min-height: 720px;
+  margin: auto;
+  padding: 120px 0 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.lux-hero-kicker {
+  margin-bottom: 25px;
+  color: #e8dfd2;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 3px;
+}
+
+.lux-hero-content h1 {
+  max-width: 900px;
+  margin: 0;
+  color: #fff;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(60px, 8vw, 112px);
+  font-weight: 400;
+  line-height: 0.94;
+  letter-spacing: -4px;
+}
+
+.lux-hero-content p {
+  max-width: 540px;
+  margin: 30px 0 36px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  line-height: 1.8;
+  letter-spacing: 0.3px;
+}
+
+.lux-hero-content button {
+  width: fit-content;
+  min-height: 52px;
+  padding: 0 23px;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  backdrop-filter: blur(8px);
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.lux-hero-content button:hover {
+  background: #fff;
+  color: var(--lux-text);
+  transform: translateY(-2px);
+}
+
+.lux-hero-content button span {
+  font-size: 17px;
+}
+
+.lux-hero-bottom {
+  position: absolute;
+  left: 5%;
+  right: 5%;
+  bottom: 28px;
+  z-index: 3;
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+/* =========================================================
+   EDITORIAL STRIP
+========================================================= */
+
+.lux-editorial-strip {
+  min-height: 150px;
+  padding: 35px 5vw;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  background: var(--lux-soft);
+  border-bottom: 1px solid #dad6ce;
+}
+
+.lux-editorial-strip > div {
+  padding: 5px 40px;
+  border-right: 1px solid #d5d1c9;
+}
+
+.lux-editorial-strip > div:last-child {
+  border-right: 0;
+}
+
+.lux-editorial-strip span {
+  display: block;
+  margin-bottom: 12px;
+  color: #a09a91;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+
+.lux-editorial-strip strong {
+  display: block;
+  color: #222;
+  font-size: 10px;
+  letter-spacing: 1.8px;
+}
+
+.lux-editorial-strip p {
+  margin: 8px 0 0;
+  color: #858078;
+  font-size: 11px;
+}
+
+/* =========================================================
+   COLLECTION HEADER
+========================================================= */
+
+.lux-collection-header {
+  width: min(1400px, 90vw);
+  margin: auto;
+  padding: 100px 0 45px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.lux-collection-header > div:first-child > span {
+  color: #9a9288;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+}
+
+.lux-collection-header h2 {
+  margin: 13px 0 0;
+  color: #1c1b19;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(42px, 5vw, 70px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lux-collection-right {
+  text-align: right;
+}
+
+.lux-collection-right p {
+  margin: 0 0 9px;
+  color: #222;
+  font-size: 12px;
+}
+
+.lux-collection-right span {
+  color: #9a9288;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+/* =========================================================
+   API ERROR
+========================================================= */
+
+.lux-api-error {
+  width: min(1400px, 90vw);
+  margin: 0 auto 30px;
+  padding: 15px 18px;
+  border: 1px solid #dfcaca;
+  background: #fff4f4;
+  color: #8d4141;
+  font-size: 12px;
+}
+
+/* =========================================================
+   PRODUCT GRID
+========================================================= */
+
+.lux-product-grid {
+  width: min(1400px, 90vw);
+  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 55px 20px;
+}
+
+.lux-product-card {
+  position: relative;
+  cursor: pointer;
+  min-width: 0;
+}
+
+/* =========================================================
+   HOME PRODUCT IMAGE
+========================================================= */
+
+.lux-card-image {
+  position: relative;
+  aspect-ratio: 0.86;
+  overflow: hidden;
+  background:
+    radial-gradient(
+      circle at center,
+      #fff 0%,
+      #f3f1ec 65%,
+      #e9e6df 100%
+    );
+}
+
+.lux-card-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  padding: 7%;
+  transition:
+    transform 0.75s cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 0.5s ease;
+}
+
+.lux-product-card:hover .lux-card-image img {
+  transform: scale(1.035);
+}
+
+.lux-card-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa39a;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 28px;
+  letter-spacing: 6px;
+}
+
+/* =========================================================
+   PRODUCT CARD BADGES
+========================================================= */
+
+.lux-card-badge {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 4;
+  padding: 7px 10px;
+  background: var(--lux-dark);
+  color: white;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+.lux-card-sold {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  z-index: 4;
+  padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #333;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+/* =========================================================
+   PRODUCT CARD ACTION BAR
+========================================================= */
+
+.lux-card-overlay {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
+  z-index: 8;
+  min-height: 48px;
+  padding: 0 8px;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 5px;
+  background: rgba(20, 19, 17, 0.95);
+  color: #fff;
+  opacity: 0;
+  transform: translateY(12px);
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.12);
+}
+
+.lux-product-card:hover .lux-card-overlay {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.lux-card-overlay button {
+  flex: 1;
+  min-height: 46px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  transition: background 0.2s ease;
+}
+
+.lux-card-overlay button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.lux-card-overlay button:disabled {
+  opacity: 0.4;
+}
+
+.lux-card-overlay button + button {
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.lux-card-overlay span {
+  font-size: 13px;
+  margin-left: 5px;
+}
+
+/* =========================================================
+   PRODUCT CARD INFO
+========================================================= */
+
+.lux-card-info {
+  padding-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.lux-card-info > div:first-child {
+  min-width: 0;
+}
+
+.lux-card-info > div:first-child span {
+  color: #9b958b;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.lux-card-info h3 {
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: #24221f;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lux-card-price {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.lux-card-price strong {
+  color: #222;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lux-card-price del {
+  display: block;
+  margin-top: 5px;
+  color: #aaa39a;
+  font-size: 10px;
+}
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+.lux-loading {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  color: #8d877e;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+
+.lux-spinner {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #c8c3ba;
+  border-top-color: var(--lux-text);
+  border-radius: 50%;
+  animation: luxSpin 0.8s linear infinite;
+}
+
+@keyframes luxSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   EMPTY
+========================================================= */
+
+.lux-empty {
+  min-height: 350px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.lux-empty > span {
+  color: #9d978e;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-empty h3 {
+  margin: 13px 0 8px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 35px;
+  font-weight: 400;
+}
+
+.lux-empty p {
+  color: #858078;
+  font-size: 12px;
+}
+
+.lux-empty button {
+  margin-top: 18px;
+  padding: 14px 20px;
+  border: 1px solid var(--lux-dark);
+  background: var(--lux-dark);
+  color: white;
+  font-size: 8px;
+  letter-spacing: 1.7px;
+}
+
+/* =========================================================
+   BRAND STORY
+========================================================= */
+
+.lux-brand-story {
+  min-height: 570px;
+  margin-top: 120px;
+  padding: 90px 9vw;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #201e1a;
+  color: white;
+}
+
+.lux-brand-story-copy {
+  max-width: 600px;
+}
+
+.lux-brand-story-copy > span {
+  color: #a99e8f;
+  font-size: 9px;
+  letter-spacing: 2.5px;
+}
+
+.lux-brand-story-copy h2 {
+  margin: 22px 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(48px, 6vw, 78px);
+  font-weight: 400;
+  line-height: 0.98;
+}
+
+.lux-brand-story-copy p {
+  max-width: 500px;
+  color: #bdb5aa;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.lux-brand-story-copy button {
+  margin-top: 25px;
+  padding: 15px 20px;
+  display: flex;
+  align-items: center;
+  gap: 25px;
+  border: 1px solid #8f877a;
+  background: transparent;
+  color: white;
+  font-size: 8px;
+  letter-spacing: 2px;
+  transition: all 0.25s ease;
+}
+
+.lux-brand-story-copy button:hover {
+  background: #fff;
+  color: #171717;
+}
+
+.lux-brand-story-mark {
+  width: 330px;
+  height: 330px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  text-align: center;
+}
+
+.lux-brand-story-mark > span {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 150px;
+  font-weight: 400;
+  line-height: 0.7;
+}
+
+.lux-brand-story-mark small {
+  margin-top: 30px;
+  color: #a99e8f;
+  font-size: 8px;
+  letter-spacing: 3px;
+  line-height: 2;
+}
+
+/* =========================================================
+   REVIEWS — HOME
+========================================================= */
+
+.lux-reviews {
+  width: min(1400px, 90vw);
+  margin: 120px auto 0;
+  padding-bottom: 110px;
+}
+
+.lux-reviews-heading {
+  margin-bottom: 45px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+}
+
+.lux-reviews-heading .lux-eyebrow {
+  color: #958e84;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+}
+
+.lux-reviews-heading h2 {
+  margin: 12px 0 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(42px, 5vw, 65px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lux-review-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #4d4841;
+  font-size: 10px;
+}
+
+.lux-review-rating strong {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.lux-review-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.lux-review {
+  min-height: 245px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--lux-line);
+  background: rgba(255, 255, 255, 0.22);
+  transition:
+    transform 0.3s ease,
+    background 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.lux-review:hover {
+  transform: translateY(-4px);
+  background: #fbfaf7;
+  border-color: #cfc9c0;
+}
+
+.lux-review-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.lux-review-top > span {
+  color: #9a9389;
+  font-size: 7px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.lux-review-top strong {
+  color: #25221e;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.lux-review .lux-stars {
+  margin-top: 16px;
+  color: #4b463f;
+  font-size: 10px;
+  letter-spacing: 2px;
+}
+
+.lux-review p {
+  margin: 16px 0 0;
+  color: #6f6961;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.lux-review small {
+  margin-top: 25px;
+  color: #a09a91;
+  font-size: 7px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+/* =========================================================
+   FOOTER
+========================================================= */
+
+.lux-footer {
+  padding: 75px 5vw 25px;
+  background: var(--lux-soft);
+}
+
+.lux-footer-top {
+  width: min(1400px, 90vw);
+  margin: auto;
+  padding-bottom: 60px;
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 80px;
+}
+
+.lux-footer-logo {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 32px;
+  letter-spacing: 6px;
+}
+
+.lux-footer-brand > p {
+  margin: 9px 0;
+  color: #858078;
+  font-size: 7px;
+  letter-spacing: 2.5px;
+}
+
+.lux-footer-brand > span {
+  display: block;
+  margin-top: 28px;
+  max-width: 250px;
+  color: #777168;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.lux-footer-links {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.lux-footer-links > div {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lux-footer-links strong {
+  margin-bottom: 8px;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+
+.lux-footer-links button,
+.lux-footer-links span {
+  width: fit-content;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #777168;
+  font-size: 10px;
+  text-align: left;
+}
+
+.lux-footer-links button:hover {
+  color: var(--lux-text);
+}
+
+.lux-footer-bottom {
+  width: min(1400px, 90vw);
+  margin: auto;
+  padding-top: 20px;
+  border-top: 1px solid #d6d2ca;
+  display: flex;
+  justify-content: space-between;
+  color: #918b82;
+  font-size: 7px;
+  letter-spacing: 1.8px;
+}
+
+/* =========================================================
+   PRODUCT DETAIL OVERLAY
+========================================================= */
+
+.lux-product-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  padding: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 17, 15, 0.78);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  overflow-y: auto;
+}
+
+/* =========================================================
+   PRODUCT DETAIL PAGE
+========================================================= */
+
+.lux-product-page {
+  position: relative;
+  width: min(1320px, 96vw);
+  height: min(900px, 92vh);
+  max-height: 92vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(420px, 0.76fr);
+  background: var(--lux-bg);
+  overflow: hidden;
+  box-shadow:
+    0 35px 100px rgba(0, 0, 0, 0.42),
+    0 8px 30px rgba(0, 0, 0, 0.12);
+  animation: luxProductOpen 0.35s ease;
+}
+
+@keyframes luxProductOpen {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* =========================================================
+   PRODUCT CLOSE
+========================================================= */
+
+.lux-product-close {
+  position: absolute;
+  top: 17px;
+  right: 17px;
+  z-index: 80;
+  width: 43px;
+  height: 43px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.93);
+  color: var(--lux-text);
+  font-size: 25px;
+  font-weight: 300;
+  transition: all 0.25s ease;
+}
+
+.lux-product-close:hover {
+  background: var(--lux-text);
+  color: white;
+  transform: rotate(90deg);
+}
+
+/* =========================================================
+   PRODUCT GALLERY
+   PREMIUM — CONTROLLED IMAGE SIZE
+========================================================= */
+
+.lux-gallery {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background:
+    radial-gradient(
+      circle at 50% 42%,
+      #ffffff 0%,
+      #faf8f3 38%,
+      #f1eee8 72%,
+      #e8e4dc 100%
+    );
+  overflow: hidden;
+}
+
+.lux-gallery-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+/*
+  IMPORTANT:
+  Image is intentionally smaller than the gallery.
+  This prevents huge/cropped product images.
+*/
+
+.lux-main-image {
+  width: 76%;
+  height: 78%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: luxImageIn 0.35s ease;
+}
+
+@keyframes luxImageIn {
+  from {
+    opacity: 0;
+    transform: scale(0.975);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lux-main-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  padding: 2%;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition:
+    transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1),
+    opacity 0.25s ease;
+}
+
+.lux-main-image:hover img {
+  transform: scale(1.018);
+}
+
+/* =========================================================
+   GALLERY ARROWS
+========================================================= */
+
+.lux-gallery-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 35;
+  width: 48px;
+  height: 48px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.11);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--lux-text);
+  font-family: Arial, sans-serif;
+  font-size: 27px;
+  font-weight: 200;
+  line-height: 1;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.07);
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.lux-gallery-prev {
+  left: 25px;
+}
+
+.lux-gallery-next {
+  right: 25px;
+}
+
+.lux-gallery-arrow:hover {
+  background: var(--lux-text);
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+
+.lux-gallery-prev:hover {
+  transform: translate(-3px, -50%);
+}
+
+.lux-gallery-next:hover {
+  transform: translate(3px, -50%);
+}
+
+/* =========================================================
+   IMAGE COUNTER
+========================================================= */
+
+.lux-gallery-counter {
+  position: absolute;
+  top: 27px;
+  left: 28px;
+  z-index: 30;
+  color: #777168;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+}
+
+.lux-gallery-counter span {
+  margin: 0 6px;
+  color: #aaa39a;
+}
+
+/* =========================================================
+   IMAGE DOTS
+========================================================= */
+
+.lux-gallery-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(0, 0, 0, 0.07);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.lux-gallery-dots button {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 20px;
+  background: #bcb7ae;
+  transition:
+    width 0.25s ease,
+    background 0.25s ease;
+}
+
+.lux-gallery-dots button.active {
+  width: 23px;
+  background: var(--lux-text);
+}
+
+/* =========================================================
+   GALLERY BRAND
+========================================================= */
+
+.lux-gallery-brand {
+  position: absolute;
+  right: 27px;
+  bottom: 27px;
+  color: rgba(80, 75, 68, 0.45);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 9px;
+  letter-spacing: 2px;
+}
+
+.lux-gallery-swipe-label {
+  position: absolute;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  color: rgba(80, 75, 68, 0.45);
+  font-size: 7px;
+  letter-spacing: 1.8px;
+  pointer-events: none;
+}
+
+/* Hide swipe text when dots exist */
+.lux-gallery-dots + .lux-gallery-brand + .lux-gallery-swipe-label {
+  opacity: 0.35;
+}
+
+/* =========================================================
+   IMAGE EMPTY
+========================================================= */
+
+.lux-image-empty {
+  width: 65%;
+  height: 65%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eeece7;
+  color: #8f887e;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 35px;
+  letter-spacing: 7px;
+}
+
+/* =========================================================
+   PRODUCT INFORMATION
+========================================================= */
+
+.lux-product-info {
+  min-width: 0;
+  padding: 68px 55px 45px;
+  overflow-y: auto;
+  background: var(--lux-bg);
+}
+
+.lux-product-eyebrow {
+  color: #938c82;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+.lux-product-title {
+  margin: 14px 0 0;
+  color: var(--lux-text);
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(38px, 3.8vw, 56px);
+  font-weight: 400;
+  line-height: 1.02;
+  letter-spacing: -1.5px;
+}
+
+.lux-rating-row {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #4e4a44;
+  font-size: 11px;
+}
+
+.lux-stars {
+  color: #39352f;
+  letter-spacing: 2px;
+}
+
+.lux-review-count {
+  color: #969087;
+}
+
+.lux-price-row {
+  margin-top: 27px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 13px;
+}
+
+.lux-current-price {
+  color: var(--lux-text);
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.lux-old-price {
+  color: #aaa39a;
+  font-size: 14px;
+}
+
+.lux-discount {
+  padding: 5px 8px;
+  background: #24221e;
+  color: white;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1px;
+}
+
+.lux-price-note {
+  margin-top: 9px;
+  color: #969087;
+  font-size: 10px;
+}
+
+.lux-divider {
+  height: 1px;
+  margin: 25px 0;
+  background: var(--lux-line);
+}
+
+.lux-description p {
+  margin: 0 0 25px;
+  color: #6d675f;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+/* =========================================================
+   COLOR SECTION HIDDEN
+   Current JSX does not use colors.
+========================================================= */
+
+.lux-option-section,
+.lux-color-options,
+.lux-color,
+.lux-color-swatch {
+  display: none;
+}
+
+/* =========================================================
+   QUANTITY
+========================================================= */
+
+.lux-quantity-section {
+  margin-top: 26px;
+  padding-top: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-option-label {
+  color: #8c857c;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+}
+
+.lux-quantity {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  border: 1px solid #d3cec6;
+  background: #fbfaf7;
+}
+
+.lux-quantity button {
+  width: 40px;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: #333;
+  font-size: 17px;
+}
+
+.lux-quantity button:hover {
+  background: #ece9e3;
+}
+
+.lux-quantity span {
+  min-width: 35px;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* =========================================================
+   PRODUCT BUTTONS
+========================================================= */
+
+.lux-product-actions {
+  margin-top: 22px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.lux-add-button,
+.lux-buy-button {
+  min-height: 56px;
+  border: 1px solid var(--lux-text);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.lux-add-button {
+  background: var(--lux-text);
+  color: white;
+}
+
+.lux-buy-button {
+  background: transparent;
+  color: var(--lux-text);
+}
+
+.lux-add-button:hover,
+.lux-buy-button:hover {
+  background: #302d28;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.lux-add-button:disabled,
+.lux-buy-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* =========================================================
+   SERVICE LIST
+========================================================= */
+
+.lux-service-list {
+  margin-top: 27px;
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-service-item {
+  padding: 15px 0;
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 10px;
+  border-bottom: 1px solid #e2ded7;
+}
+
+.lux-service-item > span {
+  color: #aaa39a;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.lux-service-item strong {
+  color: #292620;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+.lux-service-item p {
+  margin: 5px 0 0;
+  color: #8d877e;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+   DETAILS
+========================================================= */
+
+.lux-details {
+  margin-top: 22px;
+}
+
+.lux-details details {
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-details details:last-child {
+  border-bottom: 1px solid var(--lux-line);
+}
+
+.lux-details summary {
+  padding: 18px 0;
+  display: flex;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  color: #33302a;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+}
+
+.lux-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.lux-details summary span {
+  font-size: 16px;
+  font-weight: 300;
+}
+
+.lux-details-content {
+  padding: 0 0 20px;
+  color: #777168;
+  font-size: 11px;
+  line-height: 1.8;
+}
+
+.lux-details-content p {
+  margin: 0 0 12px;
+}
+
+.lux-specs {
+  margin-top: 17px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.lux-specs div {
+  padding: 10px;
+  background: #efede8;
+}
+
+.lux-specs span,
+.lux-specs strong {
+  display: block;
+}
+
+.lux-specs span {
+  color: #999187;
+  font-size: 8px;
+}
+
+.lux-specs strong {
+  margin-top: 5px;
+  color: #39352e;
+  font-size: 9px;
+}
+
+/* =========================================================
+   PRODUCT DETAIL REVIEWS
+========================================================= */
+
+.lux-product-reviews {
+  margin-top: 35px;
+  padding-top: 28px;
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-product-reviews-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 15px;
+}
+
+.lux-product-reviews-head > div:first-child {
+  min-width: 0;
+}
+
+.lux-product-reviews-head span {
+  color: #958e84;
+  font-size: 7px;
+  letter-spacing: 1.7px;
+  text-transform: uppercase;
+}
+
+.lux-product-reviews-head h3 {
+  margin: 8px 0 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 25px;
+  font-weight: 400;
+}
+
+.lux-product-reviews-head > strong {
+  color: #3f3a34;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.lux-product-reviews .lux-review {
+  min-height: auto;
+  margin-top: 15px;
+  padding: 20px;
+  background: #f1eee8;
+  border: 1px solid #ded9d1;
+}
+
+.lux-product-reviews .lux-review p {
+  margin: 12px 0 0;
+}
+
+.lux-product-reviews .lux-review small {
+  display: block;
+  margin-top: 14px;
+}
+
+/* =========================================================
+   PRODUCT INFO SCROLLBAR
+========================================================= */
+
+.lux-product-info::-webkit-scrollbar {
+  width: 4px;
+}
+
+.lux-product-info::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lux-product-info::-webkit-scrollbar-thumb {
+  background: #c9c3ba;
+}
+
+/* =========================================================
+   CART OVERLAY
+========================================================= */
+
+.lux-cart-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  background: rgba(15, 14, 12, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.lux-cart {
+  width: min(500px, 100vw);
+  height: 100%;
+  background: var(--lux-bg);
+  display: flex;
+  flex-direction: column;
+  animation: luxCartIn 0.3s ease;
+}
+
+@keyframes luxCartIn {
+  from {
+    transform: translateX(100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+.lux-cart-header {
+  min-height: 105px;
+  padding: 25px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--lux-line);
+}
+
+.lux-cart-header span {
+  color: #999187;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-cart-header h2 {
+  margin: 8px 0 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 29px;
+  font-weight: 400;
+}
+
+.lux-cart-header button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d5d0c8;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 23px;
+  transition: all 0.2s ease;
+}
+
+.lux-cart-header button:hover {
+  background: #171717;
+  color: #fff;
+}
+
+/* =========================================================
+   CART ITEMS
+========================================================= */
+
+.lux-cart-items {
+  flex: 1;
+  padding: 25px 28px;
+  overflow-y: auto;
+}
+
+.lux-cart-item {
+  padding: 0 0 20px;
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: 95px 1fr;
+  gap: 15px;
+  border-bottom: 1px solid var(--lux-line);
+}
+
+.lux-cart-item-image {
+  aspect-ratio: 0.85;
+  overflow: hidden;
+  background: #ece9e3;
+}
+
+.lux-cart-item-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  padding: 7%;
+}
+
+.lux-cart-item-info > span {
+  color: #9a9389;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.lux-cart-item-info h3 {
+  margin: 6px 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 17px;
+  font-weight: 400;
+}
+
+.lux-cart-item-info small {
+  display: block;
+  color: #8e877e;
+  font-size: 9px;
+}
+
+.lux-cart-item-info > strong {
+  display: block;
+  margin-top: 9px;
+  font-size: 12px;
+}
+
+.lux-cart-controls {
+  margin-top: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lux-cart-controls > button:not(.lux-remove) {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d5d0c8;
+  background: transparent;
+}
+
+.lux-cart-controls > button:not(.lux-remove):hover {
+  background: #e9e6df;
+}
+
+.lux-cart-controls > span {
+  min-width: 22px;
+  text-align: center;
+  font-size: 10px;
+}
+
+.lux-cart-controls .lux-remove {
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+  color: #918a80;
+  font-size: 9px;
+  text-decoration: underline;
+}
+
+/* =========================================================
+   CART SUMMARY
+========================================================= */
+
+.lux-cart-summary {
+  padding: 25px 28px 30px;
+  border-top: 1px solid #d9d5ce;
+  background: var(--lux-soft);
+}
+
+.lux-cart-summary > div {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  color: #6e685f;
+  font-size: 11px;
+}
+
+.lux-cart-summary .lux-total {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #d1ccc4;
+  color: var(--lux-text);
+}
+
+.lux-cart-summary .lux-total strong {
+  font-size: 18px;
+}
+
+.lux-checkout-button {
+  width: 100%;
+  min-height: 55px;
+  margin-top: 14px;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 0;
+  background: var(--lux-dark);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  transition: background 0.2s ease;
+}
+
+.lux-checkout-button:hover {
+  background: #302d28;
+}
+
+.lux-checkout-button span {
+  font-size: 18px;
+}
+
+/* =========================================================
+   EMPTY CART
+========================================================= */
+
+.lux-cart-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.lux-cart-empty > div {
+  font-size: 42px;
+  color: #aaa39a;
+}
+
+.lux-cart-empty h3 {
+  margin: 17px 0 7px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 28px;
+  font-weight: 400;
+}
+
+.lux-cart-empty p {
+  color: #898279;
+  font-size: 11px;
+}
+
+.lux-cart-empty button {
+  margin-top: 20px;
+  padding: 13px 18px;
+  border: 1px solid var(--lux-text);
+  background: var(--lux-text);
+  color: white;
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+/* =========================================================
+   CHECKOUT OVERLAY
+========================================================= */
+
+.lux-checkout-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40000;
+  overflow-y: auto;
+  background: #eeece7;
+}
+
+.lux-checkout {
+  width: min(1450px, 94vw);
+  min-height: 100vh;
+  margin: auto;
+  background: var(--lux-bg);
+}
+
+/* =========================================================
+   CHECKOUT TOP BAR
+========================================================= */
+
+.lux-checkout-topbar {
+  min-height: 85px;
+  padding: 0 35px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  border-bottom: 1px solid var(--lux-line);
+}
+
+.lux-checkout-logo {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 24px;
+  letter-spacing: 5px;
+}
+
+.lux-checkout-topbar > div:nth-child(2) {
+  color: #8f887f;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.lux-checkout-close {
+  justify-self: end;
+  width: 40px;
+  height: 40px;
+  border: 1px solid #d4cfc7;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 22px;
+}
+
+.lux-checkout-close:hover {
+  background: var(--lux-text);
+  color: #fff;
+}
+
+/* =========================================================
+   CHECKOUT HEADING
+========================================================= */
+
+.lux-checkout-heading {
+  width: min(1150px, 88vw);
+  margin: auto;
+  padding: 70px 0 35px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.lux-checkout-heading span {
+  color: #938c82;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-checkout-heading h1 {
+  margin: 12px 0 7px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(40px, 5vw, 60px);
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lux-checkout-heading p {
+  margin: 0;
+  color: #817a71;
+  font-size: 11px;
+}
+
+.lux-checkout-secure {
+  padding: 13px 17px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #ddd8d0;
+  background: var(--lux-soft);
+}
+
+.lux-checkout-secure > span {
+  font-size: 15px;
+}
+
+.lux-checkout-secure strong,
+.lux-checkout-secure small {
+  display: block;
+}
+
+.lux-checkout-secure strong {
+  font-size: 8px;
+  letter-spacing: 1.5px;
+}
+
+.lux-checkout-secure small {
+  margin-top: 4px;
+  color: #8e877e;
+  font-size: 8px;
+}
+
+/* =========================================================
+   CHECKOUT PROGRESS
+========================================================= */
+
+.lux-checkout-progress {
+  width: min(1150px, 88vw);
+  margin: auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid #d9d4cc;
+  border-bottom: 1px solid #d9d4cc;
+}
+
+.lux-checkout-progress > div {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  color: #a19a91;
+  font-size: 8px;
+  letter-spacing: 1.3px;
+}
+
+.lux-checkout-progress > div:not(:last-child) {
+  border-right: 1px solid #d9d4cc;
+}
+
+.lux-checkout-progress span {
+  padding-left: 18px;
+}
+
+.lux-checkout-progress .active {
+  color: var(--lux-text);
+}
+
+.lux-checkout-progress .active span {
+  font-weight: 600;
+}
+
+/* =========================================================
+   CHECKOUT GRID
+========================================================= */
+
+.lux-checkout-grid {
+  width: min(1150px, 88vw);
+  margin: auto;
+  padding: 55px 0 80px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(380px, 0.9fr);
+  gap: 70px;
+}
+
+/* =========================================================
+   CUSTOMER FORM
+========================================================= */
+
+.lux-form-title {
+  margin-bottom: 30px;
+}
+
+.lux-form-title span {
+  color: #958e84;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-form-title h2 {
+  margin: 9px 0 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.lux-customer-form label {
+  display: block;
+  margin-bottom: 20px;
+  color: #777168;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+}
+
+.lux-customer-form input,
+.lux-customer-form textarea {
+  width: 100%;
+  margin-top: 8px;
+  padding: 14px;
+  border: 1px solid #d4cfc7;
+  outline: none;
+  background: #fbfaf7;
+  color: #25221e;
+  font-size: 12px;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.lux-customer-form input:focus,
+.lux-customer-form textarea:focus {
+  border-color: #5f5950;
+  background: white;
+}
+
+.lux-customer-form input:invalid:not(:placeholder-shown) {
+  border-color: #c7a9a1;
+}
+
+.lux-customer-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+.lux-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.lux-form-row.three {
+  grid-template-columns: 1fr 1fr 0.75fr;
+}
+
+.lux-input-help {
+  display: block;
+  margin-top: 5px;
+  color: #aaa39a;
+  font-size: 7px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+
+.lux-checkout-note {
+  margin-top: 30px;
+  padding: 17px;
+  display: flex;
+  gap: 12px;
+  background: var(--lux-soft-2);
+}
+
+.lux-checkout-note span {
+  color: #555047;
+  font-size: 13px;
+}
+
+.lux-checkout-note p {
+  margin: 0;
+  color: #807970;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   ORDER SUMMARY
+========================================================= */
+
+.lux-order-summary {
+  padding: 30px;
+  background: var(--lux-soft-2);
+  align-self: start;
+}
+
+.lux-summary-heading > span {
+  color: #938c82;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-summary-heading h2 {
+  margin: 9px 0 25px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 30px;
+  font-weight: 400;
+}
+
+.lux-summary-products {
+  border-top: 1px solid #d5d0c8;
+}
+
+.lux-summary-item {
+  padding: 17px 0;
+  display: grid;
+  grid-template-columns: 65px 1fr auto;
+  gap: 13px;
+  border-bottom: 1px solid #d5d0c8;
+}
+
+.lux-summary-image {
+  position: relative;
+  width: 65px;
+  height: 76px;
+  overflow: hidden;
+  background: #ded9d0;
+}
+
+.lux-summary-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  padding: 5%;
+}
+
+.lux-summary-image > span {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 17px;
+  height: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--lux-text);
+  color: white;
+  font-size: 8px;
+}
+
+.lux-summary-item section > span {
+  color: #9a9389;
+  font-size: 7px;
+  letter-spacing: 1px;
+}
+
+.lux-summary-item h3 {
+  margin: 5px 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.lux-summary-item p {
+  margin: 0;
+  color: #8b847b;
+  font-size: 8px;
+}
+
+.lux-summary-item > strong {
+  font-size: 10px;
+}
+
+.lux-summary-lines {
+  margin-top: 23px;
+}
+
+.lux-summary-lines > div {
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  color: #6e685f;
+  font-size: 10px;
+}
+
+.lux-summary-grand {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #cfc9c0;
+  color: var(--lux-text) !important;
+}
+
+.lux-summary-grand strong {
+  font-size: 20px;
+}
+
+.lux-place-order {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 17px;
+  padding: 0 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border: 0;
+  background: var(--lux-text);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  transition: background 0.2s ease;
+}
+
+.lux-place-order:hover {
+  background: #302d28;
+}
+
+.lux-place-order span {
+  font-size: 18px;
+}
+
+.lux-payment-trust {
+  margin-top: 18px;
+  padding-top: 17px;
+  display: flex;
+  gap: 10px;
+  border-top: 1px solid #d3cec6;
+}
+
+.lux-payment-trust > span {
+  font-size: 14px;
+}
+
+.lux-payment-trust strong {
+  display: block;
+  color: #3b3731;
+  font-size: 8px;
+  letter-spacing: 1px;
+}
+
+.lux-payment-trust p {
+  margin: 5px 0 0;
+  color: #8d867d;
+  font-size: 8px;
+}
+
+.lux-accepted {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lux-accepted > span {
+  color: #999188;
+  font-size: 7px;
+  letter-spacing: 1.5px;
+}
+
+.lux-accepted > div {
+  display: flex;
+  gap: 5px;
+}
+
+.lux-accepted b {
+  padding: 5px 7px;
+  border: 1px solid #d1ccc4;
+  background: #f7f5f1;
+  color: #6e685f;
+  font-size: 7px;
+}
+
+/* =========================================================
+   ORDER SUCCESS
+========================================================= */
+
+.lux-order-success {
+  min-height: calc(100vh - 85px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.lux-success-ring {
+  width: 95px;
+  height: 95px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #aaa39a;
+  border-radius: 50%;
+}
+
+.lux-success-ring span {
+  width: 62px;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--lux-dark);
+  color: white;
+  font-size: 23px;
+}
+
+.lux-success-label {
+  margin-top: 30px;
+  color: #948d84;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-order-reference {
+  margin-top: 12px;
+  color: #817a71;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+
+.lux-order-success h1 {
+  margin: 15px 0 10px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 65px;
+  font-weight: 400;
+}
+
+.lux-order-success p {
+  color: #777168;
+  font-size: 12px;
+}
+
+.lux-success-line {
+  width: 55px;
+  height: 1px;
+  margin: 22px 0;
+  background: #aaa39a;
+}
+
+.lux-order-success button {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--lux-text);
+  background: var(--lux-text);
+  color: white;
+  font-size: 8px;
+  letter-spacing: 1.8px;
+}
+
+/* =========================================================
+   TABLET — 1100
+========================================================= */
+
+@media (max-width: 1100px) {
+  .lux-header-inner {
+    grid-template-columns: 150px 1fr 110px;
+    gap: 15px;
+  }
+
+  .lux-nav {
+    gap: 15px;
+  }
+
+  .lux-nav button {
+    font-size: 8px;
+  }
+
+  .lux-product-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .lux-product-page {
+    grid-template-columns: minmax(0, 1fr) minmax(360px, 0.9fr);
+  }
+
+  .lux-main-image {
+    width: 76%;
+    height: 74%;
+  }
+
+  .lux-product-info {
+    padding: 55px 40px 35px;
+  }
+
+  .lux-checkout-grid {
+    gap: 35px;
+  }
+
+  .lux-review-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* =========================================================
+   TABLET SMALL — 850
+========================================================= */
+
+@media (max-width: 850px) {
+  .lux-announcement-center {
+    display: none;
+  }
+
+  .lux-header-inner {
+    grid-template-columns: 40px 1fr 100px;
+  }
+
+  .lux-mobile-menu {
+    display: block;
+  }
+
+  .lux-nav {
+    display: none;
+  }
+
+  .lux-logo {
+    align-items: center;
+  }
+
+  .lux-header-actions {
+    gap: 5px;
+  }
+
+  .lux-hero,
+  .lux-hero-content {
+    min-height: 620px;
+  }
+
+  .lux-hero-content {
+    padding-top: 80px;
+  }
+
+  .lux-hero-content h1 {
+    font-size: 70px;
+  }
+
+  .lux-editorial-strip {
+    grid-template-columns: 1fr;
+    gap: 25px;
+  }
+
+  .lux-editorial-strip > div {
+    border-right: 0;
+    border-bottom: 1px solid #d5d1c9;
+    padding: 0 0 20px;
+  }
+
+  .lux-editorial-strip > div:last-child {
+    border-bottom: 0;
+  }
+
+  .lux-product-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .lux-product-page {
+    width: 96vw;
+    height: 90vh;
+    max-height: 90vh;
+    grid-template-columns: 1fr 0.9fr;
+  }
+
+  .lux-main-image {
+    width: 78%;
+    height: 72%;
+  }
+
+  .lux-checkout-heading,
+  .lux-checkout-grid,
+  .lux-checkout-progress {
+    width: 90vw;
+  }
+
+  .lux-checkout-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-order-summary {
+    order: -1;
+  }
+
+  .lux-footer-top {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-reviews {
+    margin-top: 90px;
+  }
+}
+
+/* =========================================================
+   MOBILE — 650
+========================================================= */
+
+@media (max-width: 650px) {
+  .lux-announcement {
+    min-height: 31px;
+    padding: 0 14px;
+    justify-content: center;
+    font-size: 7px;
+    letter-spacing: 1.2px;
+  }
+
+  .lux-header-inner {
+    min-height: 72px;
+    width: 92vw;
+  }
+
+  .lux-logo span {
+    font-size: 20px;
+    letter-spacing: 4px;
+  }
+
+  .lux-logo small {
+    font-size: 5px;
+    letter-spacing: 2px;
+  }
+
+  .lux-header-actions button {
+    width: 34px;
+    height: 34px;
+  }
+
+  /* HERO */
+
+  .lux-hero,
+  .lux-hero-content {
+    min-height: 590px;
+  }
+
+  .lux-hero-content {
+    width: 86vw;
+    padding: 70px 0;
+  }
+
+  .lux-hero-content h1 {
+    font-size: 58px;
+    letter-spacing: -2px;
+  }
+
+  .lux-hero-content p {
+    max-width: 320px;
+    font-size: 12px;
+  }
+
+  .lux-hero-bottom {
+    font-size: 6px;
+  }
+
+  /* COLLECTION */
+
+  .lux-collection-header {
+    padding: 70px 0 35px;
+    display: block;
+  }
+
+  .lux-collection-header h2 {
+    font-size: 45px;
+  }
+
+  .lux-collection-right {
+    margin-top: 18px;
+    text-align: left;
+  }
+
+  /* PRODUCTS */
+
+  .lux-product-grid {
+    width: 92vw;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 35px 10px;
+  }
+
+  .lux-card-image {
+    aspect-ratio: 0.82;
+  }
+
+  .lux-card-image img {
+    padding: 8%;
+  }
+
+  .lux-card-info {
+    display: block;
+  }
+
+  .lux-card-info h3 {
+    font-size: 15px;
+  }
+
+  .lux-card-price {
+    margin-top: 8px;
+    text-align: left;
+  }
+
+  /*
+     MOBILE ADD TO CART
+     Keep action bar visible instead of hover.
+  */
+
+  .lux-card-overlay {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    min-height: 42px;
+    opacity: 1;
+    transform: none;
+    padding: 0 5px;
+  }
+
+  .lux-card-overlay button {
+    min-height: 40px;
+    font-size: 7px;
+    letter-spacing: 1px;
+  }
+
+  .lux-card-overlay button + button {
+    display: none;
+  }
+
+  /* BRAND STORY */
+
+  .lux-brand-story {
+    min-height: 650px;
+    margin-top: 80px;
+    padding: 70px 8vw;
+    display: block;
+  }
+
+  .lux-brand-story-mark {
+    width: 200px;
+    height: 200px;
+    margin: 50px auto 0;
+  }
+
+  .lux-brand-story-mark > span {
+    font-size: 95px;
+  }
+
+  /* REVIEWS */
+
+  .lux-reviews {
+    width: 92vw;
+    margin-top: 80px;
+    padding-bottom: 70px;
+  }
+
+  .lux-reviews-heading {
+    display: block;
+    margin-bottom: 30px;
+  }
+
+  .lux-reviews-heading h2 {
+    font-size: 43px;
+  }
+
+  .lux-review-rating {
+    margin-top: 18px;
+  }
+
+  .lux-review-list {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .lux-review {
+    min-height: 220px;
+    padding: 23px;
+  }
+
+  /* FOOTER */
+
+  .lux-footer-top {
+    width: 92vw;
+  }
+
+  .lux-footer-links {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 35px;
+  }
+
+  .lux-footer-bottom {
+    width: 92vw;
+    display: block;
+  }
+
+  .lux-footer-bottom span {
+    display: block;
+    margin-top: 8px;
+  }
+
+  /* =====================================================
+     PRODUCT DETAIL MOBILE
+  ===================================================== */
+
+  .lux-product-overlay {
+    padding: 0;
+    align-items: flex-start;
+    background: #f8f7f3;
+    backdrop-filter: none;
+  }
+
+  .lux-product-page {
+    width: 100%;
+    min-height: 100vh;
+    height: auto;
+    max-height: none;
+    display: block;
+    overflow: visible;
+    box-shadow: none;
+  }
+
+  .lux-product-close {
+    top: 12px;
+    right: 12px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255, 255, 255, 0.94);
+  }
+
+  /*
+     CONTROLLED MOBILE GALLERY.
+     Product image DOES NOT fill the whole screen.
+  */
+
+  .lux-gallery {
+    width: 100%;
+    height: min(108vw, 510px);
+    min-height: 400px;
+  }
+
+  .lux-gallery-stage {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .lux-main-image {
+    width: 78%;
+    height: 76%;
+  }
+
+  .lux-main-image img {
+    padding: 3%;
+  }
+
+  .lux-gallery-arrow {
+    width: 39px;
+    height: 39px;
+    font-size: 22px;
+  }
+
+  .lux-gallery-prev {
+    left: 11px;
+  }
+
+  .lux-gallery-next {
+    right: 11px;
+  }
+
+  .lux-gallery-counter {
+    top: 18px;
+    left: 18px;
+    font-size: 8px;
+  }
+
+  .lux-gallery-dots {
+    bottom: 15px;
+    padding: 7px 10px;
+    gap: 6px;
+  }
+
+  .lux-gallery-dots button.active {
+    width: 19px;
+  }
+
+  .lux-gallery-brand {
+    display: none;
+  }
+
+  .lux-gallery-swipe-label {
+    bottom: 17px;
+    right: 16px;
+    left: auto;
+    transform: none;
+    font-size: 6px;
+  }
+
+  .lux-product-info {
+    padding: 40px 22px 55px;
+    overflow: visible;
+  }
+
+  .lux-product-title {
+    font-size: 37px;
+  }
+
+  .lux-current-price {
+    font-size: 26px;
+  }
+
+  .lux-product-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-specs {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-product-reviews {
+    margin-top: 30px;
+  }
+
+  /* =====================================================
+     CHECKOUT
+  ===================================================== */
+
+  .lux-checkout {
+    width: 100%;
+  }
+
+  .lux-checkout-topbar {
+    min-height: 70px;
+    padding: 0 18px;
+  }
+
+  .lux-checkout-logo {
+    font-size: 19px;
+    letter-spacing: 3px;
+  }
+
+  .lux-checkout-topbar > div:nth-child(2) {
+    display: none;
+  }
+
+  .lux-checkout-heading {
+    width: 90vw;
+    padding: 45px 0 25px;
+    display: block;
+  }
+
+  .lux-checkout-heading h1 {
+    font-size: 43px;
+  }
+
+  .lux-checkout-secure {
+    margin-top: 25px;
+    width: fit-content;
+  }
+
+  .lux-checkout-progress {
+    width: 90vw;
+  }
+
+  .lux-checkout-progress > div {
+    min-height: 50px;
+  }
+
+  .lux-checkout-progress strong {
+    display: none;
+  }
+
+  .lux-checkout-grid {
+    width: 90vw;
+    padding-top: 35px;
+  }
+
+  .lux-form-row,
+  .lux-form-row.three {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .lux-order-summary {
+    padding: 22px;
+  }
+
+  .lux-order-success {
+    padding: 30px 20px;
+  }
+
+  .lux-order-success h1 {
+    font-size: 53px;
+  }
+}
+
+/* =========================================================
+   VERY SMALL MOBILE — 420
+========================================================= */
+
+@media (max-width: 420px) {
+  .lux-hero-content h1 {
+    font-size: 49px;
+  }
+
+  .lux-product-grid {
+    gap: 30px 8px;
+  }
+
+  .lux-card-info h3 {
+    font-size: 14px;
+  }
+
+  .lux-card-price strong {
+    font-size: 11px;
+  }
+
+  .lux-card-overlay button {
+    font-size: 6.5px;
+  }
+
+  .lux-gallery {
+    height: 400px;
+    min-height: 400px;
+  }
+
+  .lux-main-image {
+    width: 76%;
+    height: 74%;
+  }
+
+  .lux-product-title {
+    font-size: 33px;
+  }
+
+  .lux-current-price {
+    font-size: 25px;
+  }
+
+  .lux-review {
+    padding: 20px;
+  }
+}
+
+/* =========================================================
+   REDUCED MOTION
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

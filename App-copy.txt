@@ -1,0 +1,3715 @@
+import { useEffect, useMemo, useState } from "react";
+import "./App.css";
+
+const API = "http://127.0.0.1:5000";
+
+const categories = [
+  "All Bags",
+  "Bags",
+  "Handbags",
+  "Sling Bags",
+  "Tote Bags",
+  "Backpacks",
+  "Laptop Bags",
+  "Travel Bags",
+  "Clutches",
+  "Wallets",
+  "Girls",
+  "Boys",
+  "Jewellery",
+  "Rings",
+  "Bracelets",
+  "Accessories",
+];
+
+/* =========================================
+   IMAGE URL
+========================================= */
+
+function getImageUrl(image) {
+  if (!image) return "";
+
+  const value = String(image).trim();
+
+  if (!value) return "";
+
+  if (
+    value.startsWith("http://") ||
+    value.startsWith("https://") ||
+    value.startsWith("data:")
+  ) {
+    return value;
+  }
+
+  if (value.startsWith("/")) {
+    return `${API}${value}`;
+  }
+
+  return `${API}/${value}`;
+}
+
+/* =========================================
+   SAFE NUMBER
+========================================= */
+
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+
+  return Number.isFinite(number)
+    ? number
+    : fallback;
+}
+
+/* =========================================
+   NORMALIZE PRODUCT
+========================================= */
+
+function normalizeProduct(product, index) {
+  const colors =
+    Array.isArray(product?.colors) &&
+    product.colors.length > 0
+      ? product.colors
+      : ["Black"];
+
+  return {
+    ...product,
+
+    id:
+      product?.id ??
+      product?._id ??
+      `product-${index}`,
+
+    name:
+      product?.name ||
+      "Luxury Bag",
+
+    category:
+      product?.category ||
+      "Bags",
+
+    description:
+      product?.description ||
+      "Premium quality product from the LUXORA collection.",
+
+    price: safeNumber(
+      product?.price,
+      0
+    ),
+
+    oldPrice: safeNumber(
+      product?.oldPrice,
+      safeNumber(product?.price, 0)
+    ),
+
+    stock: safeNumber(
+      product?.stock,
+      0
+    ),
+
+    rating: safeNumber(
+      product?.rating,
+      4.8
+    ),
+
+    reviews: safeNumber(
+      product?.reviews,
+      0
+    ),
+
+    colors: colors.map(String),
+
+    image: getImageUrl(
+      product?.image
+    ),
+  };
+}
+
+/* =========================================
+   APP
+========================================= */
+
+function App() {
+  const [products, setProducts] = useState([]);
+
+  const [loadingProducts, setLoadingProducts] =
+    useState(true);
+
+  const [apiError, setApiError] =
+    useState("");
+
+  const [selectedCategory, setSelectedCategory] =
+    useState("All Bags");
+
+  const [searchOpen, setSearchOpen] =
+    useState(false);
+
+  const [searchText, setSearchText] =
+    useState("");
+
+  const [wishlist, setWishlist] =
+    useState([]);
+
+  const [selectedProduct, setSelectedProduct] =
+    useState(null);
+
+  const [selectedColor, setSelectedColor] =
+    useState("Black");
+
+  const [detailQuantity, setDetailQuantity] =
+    useState(1);
+
+  const [cart, setCart] =
+    useState([]);
+
+  const [cartOpen, setCartOpen] =
+    useState(false);
+
+  const [checkoutOpen, setCheckoutOpen] =
+    useState(false);
+
+  const [orderPlaced, setOrderPlaced] =
+    useState(false);
+
+  const [orderLoading, setOrderLoading] =
+    useState(false);
+
+  const [orderReference, setOrderReference] =
+    useState("");
+
+  /* =========================================
+     PAYMENT
+  ========================================= */
+
+  const [paymentMethod, setPaymentMethod] =
+    useState("UPI");
+
+  const [selectedBank, setSelectedBank] =
+    useState("");
+
+  const [upiId, setUpiId] =
+    useState("");
+
+  const [cardDetails, setCardDetails] =
+    useState({
+      cardNumber: "",
+      expiry: "",
+      cvv: "",
+      name: "",
+    });
+
+  /* =========================================
+     CUSTOMER
+  ========================================= */
+
+  const [customer, setCustomer] =
+    useState({
+      name: "",
+      mobile: "",
+      email: "",
+      address: "",
+      city: "",
+      state: "",
+      pincode: "",
+    });
+
+  /* =========================================
+     LOAD PRODUCTS
+  ========================================= */
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadProducts() {
+      try {
+        setLoadingProducts(true);
+        setApiError("");
+
+        const response =
+          await fetch(
+            `${API}/api/products`
+          );
+
+        if (!response.ok) {
+          throw new Error(
+            `Products API returned ${response.status}`
+          );
+        }
+
+        const data =
+          await response.json();
+
+        console.log(
+          "PRODUCT API:",
+          data
+        );
+
+        if (
+          !data ||
+          !data.success ||
+          !Array.isArray(
+            data.products
+          )
+        ) {
+          throw new Error(
+            "Invalid products response."
+          );
+        }
+
+        const normalized =
+          data.products.map(
+            normalizeProduct
+          );
+
+        if (!cancelled) {
+          setProducts(
+            normalized
+          );
+        }
+      } catch (error) {
+        console.error(
+          "PRODUCT LOAD ERROR:",
+          error
+        );
+
+        if (!cancelled) {
+          setProducts([]);
+
+          setApiError(
+            "Backend se products load nahi ho rahe."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingProducts(false);
+        }
+      }
+    }
+
+    loadProducts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /* =========================================
+     FILTER
+  ========================================= */
+
+  const filteredProducts =
+    useMemo(() => {
+      const search =
+        searchText
+          .trim()
+          .toLowerCase();
+
+      return products.filter(
+        (product) => {
+          const category =
+            String(
+              product.category || ""
+            ).toLowerCase();
+
+          const selected =
+            selectedCategory.toLowerCase();
+
+          const matchesCategory =
+            selectedCategory ===
+              "All Bags" ||
+            selectedCategory ===
+              "Bags" ||
+            category === selected;
+
+          const searchableText =
+            [
+              product.name,
+              product.category,
+              product.description,
+            ]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+
+          const matchesSearch =
+            !search ||
+            searchableText.includes(
+              search
+            );
+
+          return (
+            matchesCategory &&
+            matchesSearch
+          );
+        }
+      );
+    }, [
+      products,
+      selectedCategory,
+      searchText,
+    ]);
+
+  /* =========================================
+     CART TOTALS
+  ========================================= */
+
+  const totalItems =
+    cart.reduce(
+      (total, item) =>
+        total +
+        safeNumber(
+          item.quantity,
+          0
+        ),
+      0
+    );
+
+  const totalPrice =
+    cart.reduce(
+      (total, item) =>
+        total +
+        safeNumber(
+          item.price,
+          0
+        ) *
+          safeNumber(
+            item.quantity,
+            0
+          ),
+      0
+    );
+
+  const deliveryCharge =
+    totalPrice >= 1999 ||
+    totalPrice === 0
+      ? 0
+      : 99;
+
+  const checkoutTotal =
+    totalPrice +
+    deliveryCharge;
+
+  /* =========================================
+     WISHLIST
+  ========================================= */
+
+  function toggleWishlist(id) {
+    setWishlist(
+      (current) =>
+        current.includes(id)
+          ? current.filter(
+              (itemId) =>
+                itemId !== id
+            )
+          : [
+              ...current,
+              id,
+            ]
+    );
+  }
+
+  /* =========================================
+     PRODUCT
+  ========================================= */
+
+  function openProduct(product) {
+    setSelectedProduct(
+      product
+    );
+
+    setSelectedColor(
+      product.colors?.[0] ||
+        "Black"
+    );
+
+    setDetailQuantity(1);
+  }
+
+  function closeProduct() {
+    setSelectedProduct(null);
+  }
+
+  /* =========================================
+     ADD TO CART
+  ========================================= */
+
+  function addToCart(
+    product,
+    quantity = 1,
+    color = ""
+  ) {
+    if (!product) return;
+
+    const availableStock =
+      safeNumber(
+        product.stock,
+        0
+      );
+
+    if (availableStock <= 0) {
+      alert(
+        "This product is currently out of stock."
+      );
+      return;
+    }
+
+    const finalColor =
+      color ||
+      product.colors?.[0] ||
+      "Black";
+
+    const finalQuantity =
+      Math.max(
+        1,
+        safeNumber(
+          quantity,
+          1
+        )
+      );
+
+    setCart(
+      (currentCart) => {
+        const existing =
+          currentCart.find(
+            (item) =>
+              String(item.id) ===
+                String(
+                  product.id
+                ) &&
+              item.color ===
+                finalColor
+          );
+
+        if (existing) {
+          const newQuantity =
+            safeNumber(
+              existing.quantity,
+              0
+            ) +
+            finalQuantity;
+
+          if (
+            newQuantity >
+            availableStock
+          ) {
+            alert(
+              `Only ${availableStock} item(s) available in stock.`
+            );
+
+            return currentCart;
+          }
+
+          return currentCart.map(
+            (item) =>
+              String(
+                item.id
+              ) ===
+                String(
+                  product.id
+                ) &&
+              item.color ===
+                finalColor
+                ? {
+                    ...item,
+                    quantity:
+                      newQuantity,
+                  }
+                : item
+          );
+        }
+
+        const safeQuantity =
+          Math.min(
+            finalQuantity,
+            availableStock
+          );
+
+        return [
+          ...currentCart,
+          {
+            ...product,
+            id: String(
+              product.id
+            ),
+            quantity:
+              safeQuantity,
+            color:
+              finalColor,
+          },
+        ];
+      }
+    );
+
+    setCartOpen(true);
+  }
+
+  /* =========================================
+     CART QUANTITY
+  ========================================= */
+
+  function increaseQuantity(
+    id,
+    color
+  ) {
+    const product =
+      products.find(
+        (item) =>
+          String(item.id) ===
+          String(id)
+      );
+
+    const stock =
+      safeNumber(
+        product?.stock,
+        0
+      );
+
+    setCart(
+      (currentCart) =>
+        currentCart.map(
+          (item) => {
+            if (
+              String(
+                item.id
+              ) !==
+                String(id) ||
+              item.color !==
+                color
+            ) {
+              return item;
+            }
+
+            const newQuantity =
+              safeNumber(
+                item.quantity,
+                0
+              ) + 1;
+
+            if (
+              stock > 0 &&
+              newQuantity >
+                stock
+            ) {
+              alert(
+                `Only ${stock} item(s) available in stock.`
+              );
+
+              return item;
+            }
+
+            return {
+              ...item,
+              quantity:
+                newQuantity,
+            };
+          }
+        )
+    );
+  }
+
+  function decreaseQuantity(
+    id,
+    color
+  ) {
+    setCart(
+      (currentCart) =>
+        currentCart
+          .map(
+            (item) =>
+              String(
+                item.id
+              ) ===
+                String(id) &&
+              item.color ===
+                color
+                ? {
+                    ...item,
+                    quantity:
+                      safeNumber(
+                        item.quantity,
+                        0
+                      ) - 1,
+                  }
+                : item
+          )
+          .filter(
+            (item) =>
+              safeNumber(
+                item.quantity,
+                0
+              ) > 0
+          )
+    );
+  }
+
+  function removeFromCart(
+    id,
+    color
+  ) {
+    setCart(
+      (currentCart) =>
+        currentCart.filter(
+          (item) =>
+            !(
+              String(
+                item.id
+              ) ===
+                String(id) &&
+              item.color ===
+                color
+            )
+        )
+    );
+  }
+
+  /* =========================================
+     CUSTOMER INPUT
+  ========================================= */
+
+  function updateCustomer(
+    field,
+    value
+  ) {
+    let cleanedValue =
+      value;
+
+    if (
+      field === "name" ||
+      field === "city" ||
+      field === "state"
+    ) {
+      cleanedValue =
+        value.replace(
+          /[^A-Za-zÀ-ÿ\s.'-]/g,
+          ""
+        );
+    }
+
+    if (
+      field === "mobile" ||
+      field === "pincode"
+    ) {
+      cleanedValue =
+        value
+          .replace(
+            /\D/g,
+            ""
+          )
+          .slice(
+            0,
+            field ===
+              "mobile"
+              ? 10
+              : 6
+          );
+    }
+
+    if (
+      field === "email"
+    ) {
+      cleanedValue =
+        value
+          .replace(
+            /\s/g,
+            ""
+          )
+          .slice(
+            0,
+            150
+          );
+    }
+
+    if (
+      field === "address"
+    ) {
+      cleanedValue =
+        value.replace(
+          /[^A-Za-z0-9À-ÿ\s.,/#()'&-]/g,
+          ""
+        );
+    }
+
+    setCustomer(
+      (current) => ({
+        ...current,
+        [field]:
+          cleanedValue,
+      })
+    );
+  }
+
+  /* =========================================
+     CARD
+  ========================================= */
+
+  function updateCard(
+    field,
+    value
+  ) {
+    let cleanedValue =
+      value;
+
+    if (
+      field ===
+      "cardNumber"
+    ) {
+      cleanedValue =
+        value
+          .replace(
+            /\D/g,
+            ""
+          )
+          .slice(
+            0,
+            16
+          )
+          .replace(
+            /(.{4})/g,
+            "$1 "
+          )
+          .trim();
+    }
+
+    if (
+      field ===
+      "expiry"
+    ) {
+      cleanedValue =
+        value
+          .replace(
+            /\D/g,
+            ""
+          )
+          .slice(
+            0,
+            4
+          );
+
+      if (
+        cleanedValue.length >
+        2
+      ) {
+        cleanedValue =
+          `${cleanedValue.slice(
+            0,
+            2
+          )}/${cleanedValue.slice(
+            2
+          )}`;
+      }
+    }
+
+    if (
+      field === "cvv"
+    ) {
+      cleanedValue =
+        value
+          .replace(
+            /\D/g,
+            ""
+          )
+          .slice(
+            0,
+            3
+          );
+    }
+
+    if (
+      field === "name"
+    ) {
+      cleanedValue =
+        value.replace(
+          /[^A-Za-zÀ-ÿ\s.'-]/g,
+          ""
+        );
+    }
+
+    setCardDetails(
+      (current) => ({
+        ...current,
+        [field]:
+          cleanedValue,
+      })
+    );
+  }
+
+  /* =========================================
+     PAYMENT METHOD
+  ========================================= */
+
+  function changePaymentMethod(
+    method
+  ) {
+    setPaymentMethod(
+      method
+    );
+
+    setSelectedBank("");
+    setUpiId("");
+
+    setCardDetails({
+      cardNumber: "",
+      expiry: "",
+      cvv: "",
+      name: "",
+    });
+  }
+
+  /* =========================================
+     CHECKOUT
+  ========================================= */
+
+  function openCheckout() {
+    if (
+      cart.length === 0
+    ) {
+      alert(
+        "Your cart is empty."
+      );
+      return;
+    }
+
+    setCartOpen(false);
+    setCheckoutOpen(true);
+    setOrderPlaced(false);
+  }
+
+  /* =========================================
+     PAYMENT VALIDATION
+  ========================================= */
+
+  function validatePayment() {
+    if (
+      paymentMethod ===
+      "UPI"
+    ) {
+      if (
+        !upiId.trim()
+      ) {
+        alert(
+          "Please enter your UPI ID."
+        );
+        return false;
+      }
+
+      if (
+        !/^[\w.-]+@[\w.-]+$/.test(
+          upiId.trim()
+        )
+      ) {
+        alert(
+          "Please enter a valid UPI ID."
+        );
+        return false;
+      }
+    }
+
+    if (
+      paymentMethod ===
+        "CREDIT_CARD" ||
+      paymentMethod ===
+        "DEBIT_CARD"
+    ) {
+      const cleanCard =
+        cardDetails.cardNumber.replace(
+          /\s/g,
+          ""
+        );
+
+      if (
+        cleanCard.length !==
+        16
+      ) {
+        alert(
+          "Please enter a valid 16-digit card number."
+        );
+        return false;
+      }
+
+      if (
+        !/^\d{2}\/\d{2}$/.test(
+          cardDetails.expiry
+        )
+      ) {
+        alert(
+          "Please enter a valid expiry date."
+        );
+        return false;
+      }
+
+      if (
+        cardDetails.cvv.length !==
+        3
+      ) {
+        alert(
+          "Please enter a valid CVV."
+        );
+        return false;
+      }
+
+      if (
+        !cardDetails.name.trim()
+      ) {
+        alert(
+          "Please enter cardholder name."
+        );
+        return false;
+      }
+    }
+
+    if (
+      paymentMethod ===
+      "NET_BANKING"
+    ) {
+      if (!selectedBank) {
+        alert(
+          "Please select your bank."
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /* =========================================
+     PLACE ORDER
+  ========================================= */
+
+  async function placeOrder(
+    event
+  ) {
+    event.preventDefault();
+
+    if (
+      orderLoading
+    ) {
+      return;
+    }
+
+    if (
+      cart.length ===
+      0
+    ) {
+      alert(
+        "Your cart is empty."
+      );
+      return;
+    }
+
+    if (
+      !customer.name.trim() ||
+      !customer.mobile.trim() ||
+      !customer.address.trim() ||
+      !customer.city.trim() ||
+      !customer.state.trim() ||
+      !customer.pincode.trim()
+    ) {
+      alert(
+        "Please fill all required delivery details."
+      );
+      return;
+    }
+
+    if (
+      !/^[A-Za-zÀ-ÿ\s.'-]{2,100}$/.test(
+        customer.name.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid name."
+      );
+      return;
+    }
+
+    if (
+      !/^[6-9]\d{9}$/.test(
+        customer.mobile.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid 10-digit mobile number."
+      );
+      return;
+    }
+
+    if (
+      customer.email.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+        customer.email.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid email address."
+      );
+      return;
+    }
+
+    if (
+      customer.address.trim()
+        .length < 5
+    ) {
+      alert(
+        "Please enter a complete delivery address."
+      );
+      return;
+    }
+
+    if (
+      !/^[A-Za-zÀ-ÿ\s.'-]{2,100}$/.test(
+        customer.city.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid city name."
+      );
+      return;
+    }
+
+    if (
+      !/^[A-Za-zÀ-ÿ\s.'-]{2,100}$/.test(
+        customer.state.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid state name."
+      );
+      return;
+    }
+
+    if (
+      !/^[1-9][0-9]{5}$/.test(
+        customer.pincode.trim()
+      )
+    ) {
+      alert(
+        "Please enter a valid 6-digit PIN code."
+      );
+      return;
+    }
+
+    if (
+      !validatePayment()
+    ) {
+      return;
+    }
+
+    try {
+      setOrderLoading(true);
+
+      const paymentData = {
+        method:
+          paymentMethod,
+
+        bank:
+          paymentMethod ===
+          "NET_BANKING"
+            ? selectedBank
+            : "",
+
+        upiId:
+          paymentMethod ===
+          "UPI"
+            ? upiId.trim()
+            : "",
+
+        card:
+          paymentMethod ===
+            "CREDIT_CARD" ||
+          paymentMethod ===
+            "DEBIT_CARD"
+            ? {
+                last4:
+                  cardDetails.cardNumber
+                    .replace(
+                      /\s/g,
+                      ""
+                    )
+                    .slice(
+                      -4
+                    ),
+
+                expiry:
+                  cardDetails.expiry,
+
+                cardholderName:
+                  cardDetails.name.trim(),
+              }
+            : null,
+      };
+
+      /* =====================================
+         ORDER DATA
+      ===================================== */
+
+      const orderData = {
+        customer: {
+          name:
+            customer.name.trim(),
+
+          phone:
+            customer.mobile.trim(),
+
+          email:
+            customer.email.trim(),
+
+          address:
+            customer.address.trim(),
+
+          city:
+            customer.city.trim(),
+
+          state:
+            customer.state.trim(),
+
+          pincode:
+            customer.pincode.trim(),
+        },
+
+        items:
+          cart.map(
+            (item) => ({
+              productId:
+                String(
+                  item.id
+                ),
+
+              name:
+                item.name,
+
+              category:
+                item.category,
+
+              price:
+                safeNumber(
+                  item.price,
+                  0
+                ),
+
+              quantity:
+                safeNumber(
+                  item.quantity,
+                  1
+                ),
+
+              color:
+                item.color ||
+                "Black",
+
+              image:
+                item.image ||
+                "",
+            })
+          ),
+
+        subtotal:
+          totalPrice,
+
+        deliveryCharge:
+          deliveryCharge,
+
+        total:
+          checkoutTotal,
+
+        totalItems:
+          totalItems,
+
+        payment:
+          paymentData,
+
+        paymentMethod:
+          paymentMethod ===
+          "COD"
+            ? "Cash on Delivery"
+            : paymentMethod,
+
+        paymentStatus:
+          "Pending",
+
+        notes: "",
+      };
+
+      console.log(
+        "ORDER SENT:",
+        orderData
+      );
+
+      /* =====================================
+         SEND ORDER
+      ===================================== */
+
+      const response =
+        await fetch(
+          `${API}/api/orders`,
+          {
+            method:
+              "POST",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                orderData
+              ),
+          }
+        );
+
+      let data =
+        null;
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        data =
+          null;
+      }
+
+      console.log(
+        "ORDER RESPONSE:",
+        data
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            `Order API error ${response.status}`
+        );
+      }
+
+      if (
+        data &&
+        data.success ===
+          false
+      ) {
+        throw new Error(
+          data.message ||
+            "Order could not be placed."
+        );
+      }
+
+      const reference =
+        data?.order
+          ?.orderNumber ||
+        data?.order
+          ?.orderId ||
+        data?.order?.id ||
+        data?.orderNumber ||
+        data?.id ||
+        `LUX${Date.now()
+          .toString()
+          .slice(-6)}`;
+
+      setOrderReference(
+        reference
+      );
+
+      setOrderPlaced(
+        true
+      );
+    } catch (error) {
+      console.error(
+        "PLACE ORDER ERROR:",
+        error
+      );
+
+      alert(
+        "Order place nahi hua.\n\n" +
+          (
+            error.message ||
+            "Unknown error"
+          )
+      );
+    } finally {
+      setOrderLoading(
+        false
+      );
+    }
+  }
+
+  /* =========================================
+     CATEGORY
+  ========================================= */
+
+  function selectCategory(
+    category
+  ) {
+    setSelectedCategory(
+      category
+    );
+
+    setTimeout(() => {
+      document
+        .getElementById(
+          "products"
+        )
+        ?.scrollIntoView({
+          behavior:
+            "smooth",
+        });
+    }, 100);
+  }
+
+  /* =========================================
+     IMAGE FALLBACK
+  ========================================= */
+
+  function handleImageError(
+    event
+  ) {
+    event.currentTarget.style.display =
+      "none";
+
+    const parent =
+      event.currentTarget
+        .parentElement;
+
+    if (
+      parent &&
+      !parent.querySelector(
+        ".photo-placeholder"
+      )
+    ) {
+      const fallback =
+        document.createElement(
+          "div"
+        );
+
+      fallback.className =
+        "photo-placeholder";
+
+      fallback.innerText =
+        "LUXORA";
+
+      parent.appendChild(
+        fallback
+      );
+    }
+  }
+
+  /* =========================================
+     RETURN UI
+  ========================================= */
+
+  return (
+    <div className="luxora">
+
+      {/* HEADER */}
+
+      <header className="header">
+
+        <div className="logo">
+          LUXORA
+          <span>
+            THE LUXURY STORE
+          </span>
+        </div>
+
+        <nav className="nav">
+          <a href="#home">
+            Home
+          </a>
+
+          <a href="#collections">
+            Bags
+          </a>
+
+          <a href="#products">
+            Collection
+          </a>
+
+          <a href="#sale">
+            Sale
+          </a>
+        </nav>
+
+        <div className="header-icons">
+
+          <button
+            type="button"
+            onClick={() =>
+              setSearchOpen(
+                (value) =>
+                  !value
+              )
+            }
+          >
+            Search
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              document
+                .getElementById(
+                  "products"
+                )
+                ?.scrollIntoView({
+                  behavior:
+                    "smooth",
+                })
+            }
+          >
+            Wishlist
+            {wishlist.length >
+            0
+              ? ` (${wishlist.length})`
+              : ""}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setCartOpen(
+                true
+              )
+            }
+          >
+            Cart ({totalItems})
+          </button>
+
+        </div>
+
+      </header>
+
+      {/* SEARCH */}
+
+      {searchOpen && (
+        <div className="search-panel">
+          <div className="search-inner">
+
+            <input
+              type="text"
+              value={
+                searchText
+              }
+              onChange={(event) =>
+                setSearchText(
+                  event.target.value
+                )
+              }
+              placeholder="Search bags..."
+              autoFocus
+            />
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearchText("");
+                setSearchOpen(false);
+              }}
+            >
+              Close
+            </button>
+
+          </div>
+        </div>
+      )}
+
+      {/* CATEGORY BAR */}
+
+      <div className="category-bar">
+
+        {categories.map(
+          (category) => (
+            <button
+              type="button"
+              key={category}
+              className={
+                selectedCategory ===
+                category
+                  ? "active"
+                  : ""
+              }
+              onClick={() =>
+                selectCategory(
+                  category
+                )
+              }
+            >
+              {category}
+            </button>
+          )
+        )}
+
+      </div>
+
+      {/* HERO */}
+
+      <section
+        className="hero"
+        id="home"
+      >
+
+        <div className="hero-content">
+
+          <p className="small-title">
+            LUXORA BAG COLLECTION
+          </p>
+
+          <h1>
+            Carry Your
+            <br />
+            <em>Style.</em>
+          </h1>
+
+          <p className="hero-text">
+            Discover premium handbags,
+            sling bags, backpacks,
+            totes and travel essentials
+            designed for modern luxury.
+          </p>
+
+          <div className="hero-buttons">
+
+            <a
+              href="#products"
+              className="btn-primary"
+            >
+              SHOP BAGS
+            </a>
+
+            <a
+              href="#collections"
+              className="btn-outline"
+            >
+              EXPLORE
+            </a>
+
+          </div>
+
+        </div>
+
+        <div className="hero-visual">
+
+          <div className="hero-card">
+            <span>
+              LUXORA
+            </span>
+
+            <strong>
+              BAGS
+            </strong>
+
+            <p>
+              PREMIUM COLLECTION
+            </p>
+          </div>
+
+        </div>
+
+      </section>
+
+      {/* COLLECTIONS */}
+
+      <section
+        className="collections"
+        id="collections"
+      >
+
+        <div className="section-title">
+
+          <p>
+            EXPLORE BAGS
+          </p>
+
+          <h2>
+            Shop By Style
+          </h2>
+
+        </div>
+
+        <div className="category-grid">
+
+          {categories
+            .filter(
+              (category) =>
+                ![
+                  "All Bags",
+                  "Bags",
+                  "Girls",
+                  "Boys",
+                  "Jewellery",
+                  "Rings",
+                  "Bracelets",
+                  "Accessories",
+                ].includes(
+                  category
+                )
+            )
+            .map(
+              (
+                category,
+                index
+              ) => (
+                <button
+                  type="button"
+                  className="category-card"
+                  key={category}
+                  onClick={() =>
+                    selectCategory(
+                      category
+                    )
+                  }
+                >
+
+                  <span>
+                    {String(
+                      index + 1
+                    ).padStart(
+                      2,
+                      "0"
+                    )}
+                  </span>
+
+                  <div>
+
+                    <h3>
+                      {category}
+                    </h3>
+
+                    <p>
+                      Shop Collection →
+                    </p>
+
+                  </div>
+
+                </button>
+              )
+            )}
+
+        </div>
+
+      </section>
+
+      {/* PRODUCTS */}
+
+      <section
+        className="products-section"
+        id="products"
+      >
+
+        <div className="section-title">
+
+          <p>
+            LUXORA COLLECTION
+          </p>
+
+          <h2>
+            {searchText
+              ? "Search Results"
+              : selectedCategory}
+          </h2>
+
+        </div>
+
+        {apiError && (
+          <div className="api-warning">
+
+            <strong>
+              ⚠ Backend Connection
+            </strong>
+
+            <p>
+              {apiError}
+            </p>
+
+            <small>
+              API: {API}/api/products
+            </small>
+
+          </div>
+        )}
+
+        {loadingProducts ? (
+          <div className="loading-box">
+
+            <div className="loader"></div>
+
+            <h3>
+              Loading Collection...
+            </h3>
+
+            <p>
+              Please wait
+            </p>
+
+          </div>
+        ) : filteredProducts.length ===
+          0 ? (
+          <div className="no-results">
+
+            <div className="empty-icon">
+              LUXORA
+            </div>
+
+            <h3>
+              No products found
+            </h3>
+
+            <p>
+              Try another category
+              or search.
+            </p>
+
+          </div>
+        ) : (
+          <div className="products-grid">
+
+            {filteredProducts.map(
+              (product) => {
+
+                const wishlisted =
+                  wishlist.includes(
+                    product.id
+                  );
+
+                const outOfStock =
+                  safeNumber(
+                    product.stock,
+                    0
+                  ) <= 0;
+
+                return (
+                  <div
+                    className="product-card"
+                    key={
+                      product.id
+                    }
+                  >
+
+                    <div
+                      className="product-image"
+                      onClick={() =>
+                        openProduct(
+                          product
+                        )
+                      }
+                    >
+
+                      {product.image ? (
+                        <img
+                          src={
+                            product.image
+                          }
+                          alt={
+                            product.name
+                          }
+                          onError={
+                            handleImageError
+                          }
+                        />
+                      ) : (
+                        <div className="photo-placeholder">
+                          LUXORA
+                        </div>
+                      )}
+
+                      {product.oldPrice >
+                        product.price && (
+                        <span className="sale-tag">
+                          SALE
+                        </span>
+                      )}
+
+                      {outOfStock && (
+                        <span className="sale-tag">
+                          OUT OF STOCK
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        className={
+                          wishlisted
+                            ? "heart heart-active"
+                            : "heart"
+                        }
+                        onClick={(
+                          event
+                        ) => {
+                          event.stopPropagation();
+
+                          toggleWishlist(
+                            product.id
+                          );
+                        }}
+                      >
+                        {wishlisted
+                          ? "♥"
+                          : "♡"}
+                      </button>
+
+                    </div>
+
+                    <div className="product-info">
+
+                      <p>
+                        {
+                          product.category
+                        }
+                      </p>
+
+                      <h3
+                        onClick={() =>
+                          openProduct(
+                            product
+                          )
+                        }
+                      >
+                        {
+                          product.name
+                        }
+                      </h3>
+
+                      <div className="product-rating">
+                        ★★★★★
+                        <span>
+                          {
+                            product.rating
+                          }
+                        </span>
+                      </div>
+
+                      <div className="price">
+
+                        <strong>
+                          ₹
+                          {product.price.toLocaleString(
+                            "en-IN"
+                          )}
+                        </strong>
+
+                        {product.oldPrice >
+                          product.price && (
+                          <del>
+                            ₹
+                            {product.oldPrice.toLocaleString(
+                              "en-IN"
+                            )}
+                          </del>
+                        )}
+
+                      </div>
+
+                      <button
+                        type="button"
+                        className="add-cart"
+                        disabled={
+                          outOfStock
+                        }
+                        onClick={() =>
+                          addToCart(
+                            product,
+                            1,
+                            product.colors?.[0] ||
+                              "Black"
+                          )
+                        }
+                      >
+                        {outOfStock
+                          ? "OUT OF STOCK"
+                          : "ADD TO BAG"}
+                      </button>
+
+                    </div>
+
+                  </div>
+                );
+              }
+            )}
+
+          </div>
+        )}
+
+      </section>
+
+      {/* SALE */}
+
+      <section
+        className="sale-banner"
+        id="sale"
+      >
+
+        <div>
+
+          <p>
+            LIMITED TIME OFFER
+          </p>
+
+          <h2>
+            Bag Sale.
+          </h2>
+
+          <span>
+            Up to 50% OFF selected
+            styles.
+          </span>
+
+        </div>
+
+        <a href="#products">
+          SHOP SALE →
+        </a>
+
+      </section>
+
+      {/* FEATURES */}
+
+      <section className="features">
+
+        <div>
+          <span>01</span>
+
+          <h3>
+            Premium Quality
+          </h3>
+
+          <p>
+            Carefully selected
+            products.
+          </p>
+        </div>
+
+        <div>
+          <span>02</span>
+
+          <h3>
+            Secure Shopping
+          </h3>
+
+          <p>
+            Safe and reliable
+            shopping.
+          </p>
+        </div>
+
+        <div>
+          <span>03</span>
+
+          <h3>
+            Easy Returns
+          </h3>
+
+          <p>
+            Simple return
+            experience.
+          </p>
+        </div>
+
+        <div>
+          <span>04</span>
+
+          <h3>
+            Fast Delivery
+          </h3>
+
+          <p>
+            Delivery across
+            India.
+          </p>
+        </div>
+
+      </section>
+
+      {/* FOOTER */}
+
+      <footer>
+
+        <div className="footer-logo">
+          LUXORA
+        </div>
+
+        <p>
+          Premium Bags • Fashion •
+          Jewellery • Accessories
+        </p>
+
+        <div className="footer-links">
+
+          <a href="#home">
+            Home
+          </a>
+
+          <a href="#products">
+            Shop
+          </a>
+
+          <a href="#sale">
+            Sale
+          </a>
+
+        </div>
+
+        <small>
+          © 2026 LUXORA. All Rights
+          Reserved.
+        </small>
+
+      </footer>
+
+      {/* =================================
+          PRODUCT MODAL
+      ================================= */}
+
+      {selectedProduct && (
+
+        <div
+          className="product-modal"
+          onClick={
+            closeProduct
+          }
+        >
+
+          <div
+            className="product-details"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+
+            <button
+              type="button"
+              className="product-close"
+              onClick={
+                closeProduct
+              }
+            >
+              ×
+            </button>
+
+            <div className="product-detail-image">
+
+              {selectedProduct.image ? (
+                <img
+                  src={
+                    selectedProduct.image
+                  }
+                  alt={
+                    selectedProduct.name
+                  }
+                  onError={
+                    handleImageError
+                  }
+                />
+              ) : (
+                <div className="detail-photo-placeholder">
+                  LUXORA
+                </div>
+              )}
+
+            </div>
+
+            <div className="product-detail-info">
+
+              <p className="product-category">
+                {
+                  selectedProduct.category
+                }
+              </p>
+
+              <h2>
+                {
+                  selectedProduct.name
+                }
+              </h2>
+
+              <div className="detail-rating">
+
+                ★★★★★
+
+                <span>
+                  {
+                    selectedProduct.rating
+                  }
+                </span>
+
+                <small>
+                  (
+                  {
+                    selectedProduct.reviews
+                  }{" "}
+                  reviews)
+                </small>
+
+              </div>
+
+              <div className="detail-price">
+
+                <strong>
+                  ₹
+                  {selectedProduct.price.toLocaleString(
+                    "en-IN"
+                  )}
+                </strong>
+
+                {selectedProduct.oldPrice >
+                  selectedProduct.price && (
+                  <del>
+                    ₹
+                    {selectedProduct.oldPrice.toLocaleString(
+                      "en-IN"
+                    )}
+                  </del>
+                )}
+
+              </div>
+
+              <p className="detail-description">
+                {
+                  selectedProduct.description
+                }
+              </p>
+
+              <div className="color-section">
+
+                <strong>
+                  Color:{" "}
+                  {selectedColor}
+                </strong>
+
+                <div className="color-options">
+
+                  {selectedProduct.colors?.map(
+                    (color) => (
+                      <button
+                        type="button"
+                        key={color}
+                        className={
+                          selectedColor ===
+                          color
+                            ? "color-active"
+                            : ""
+                        }
+                        onClick={() =>
+                          setSelectedColor(
+                            color
+                          )
+                        }
+                      >
+                        {color}
+                      </button>
+                    )
+                  )}
+
+                </div>
+
+              </div>
+
+              <div className="detail-quantity">
+
+                <strong>
+                  Quantity
+                </strong>
+
+                <div className="quantity-box">
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDetailQuantity(
+                        (value) =>
+                          Math.max(
+                            1,
+                            value - 1
+                          )
+                      )
+                    }
+                  >
+                    −
+                  </button>
+
+                  <span>
+                    {
+                      detailQuantity
+                    }
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDetailQuantity(
+                        (value) =>
+                          Math.min(
+                            safeNumber(
+                              selectedProduct.stock,
+                              1
+                            ),
+                            value + 1
+                          )
+                      )
+                    }
+                  >
+                    +
+                  </button>
+
+                </div>
+
+              </div>
+
+              <div className="detail-buttons">
+
+                <button
+                  type="button"
+                  className="detail-add"
+                  onClick={() => {
+                    addToCart(
+                      selectedProduct,
+                      detailQuantity,
+                      selectedColor
+                    );
+
+                    closeProduct();
+                  }}
+                >
+                  ADD TO BAG
+                </button>
+
+                <button
+                  type="button"
+                  className="detail-buy"
+                  onClick={() => {
+                    addToCart(
+                      selectedProduct,
+                      detailQuantity,
+                      selectedColor
+                    );
+
+                    closeProduct();
+
+                    setCartOpen(
+                      false
+                    );
+
+                    setCheckoutOpen(
+                      true
+                    );
+                  }}
+                >
+                  BUY NOW
+                </button>
+
+              </div>
+
+              <div className="product-benefits">
+
+                <p>
+                  ✓ Premium quality
+                </p>
+
+                <p>
+                  ✓ Secure shopping
+                </p>
+
+                <p>
+                  ✓ Easy returns
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =================================
+          CART
+      ================================= */}
+
+      {cartOpen && (
+
+        <div
+          className="cart-overlay"
+          onClick={() =>
+            setCartOpen(
+              false
+            )
+          }
+        >
+
+          <div
+            className="cart-drawer"
+            onClick={(event) =>
+              event.stopPropagation()
+            }
+          >
+
+            <div className="cart-header">
+
+              <h2>
+                Your Cart ({totalItems})
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setCartOpen(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
+
+            </div>
+
+            {cart.length ===
+            0 ? (
+
+              <div className="empty-cart">
+
+                <div className="empty-icon">
+                  🛒
+                </div>
+
+                <h3>
+                  Your cart is empty
+                </h3>
+
+                <p>
+                  Add something you
+                  love.
+                </p>
+
+              </div>
+
+            ) : (
+
+              <>
+
+                <div className="cart-items">
+
+                  {cart.map(
+                    (item) => (
+
+                      <div
+                        className="cart-item"
+                        key={`${item.id}-${item.color}`}
+                      >
+
+                        <div className="cart-item-image">
+
+                          {item.image ? (
+                            <img
+                              src={
+                                item.image
+                              }
+                              alt={
+                                item.name
+                              }
+                              onError={
+                                handleImageError
+                              }
+                            />
+                          ) : (
+                            <span>
+                              LUXORA
+                            </span>
+                          )}
+
+                        </div>
+
+                        <div className="cart-item-info">
+
+                          <h3>
+                            {
+                              item.name
+                            }
+                          </h3>
+
+                          <p>
+                            {
+                              item.category
+                            }
+                          </p>
+
+                          <p>
+                            Color:{" "}
+                            {
+                              item.color
+                            }
+                          </p>
+
+                          <strong>
+                            ₹
+                            {safeNumber(
+                              item.price,
+                              0
+                            ).toLocaleString(
+                              "en-IN"
+                            )}
+                          </strong>
+
+                          <div className="quantity">
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                decreaseQuantity(
+                                  item.id,
+                                  item.color
+                                )
+                              }
+                            >
+                              −
+                            </button>
+
+                            <span>
+                              {
+                                item.quantity
+                              }
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                increaseQuantity(
+                                  item.id,
+                                  item.color
+                                )
+                              }
+                            >
+                              +
+                            </button>
+
+                          </div>
+
+                          <button
+                            type="button"
+                            className="remove"
+                            onClick={() =>
+                              removeFromCart(
+                                item.id,
+                                item.color
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+
+                        </div>
+
+                      </div>
+                    )
+                  )}
+
+                </div>
+
+                <div className="cart-bottom">
+
+                  <div className="cart-total">
+
+                    <span>
+                      Total
+                    </span>
+
+                    <strong>
+                      ₹
+                      {totalPrice.toLocaleString(
+                        "en-IN"
+                      )}
+                    </strong>
+
+                  </div>
+
+                  <button
+                    type="button"
+                    className="checkout-button"
+                    onClick={
+                      openCheckout
+                    }
+                  >
+                    PROCEED TO CHECKOUT
+                  </button>
+
+                </div>
+
+              </>
+            )}
+
+          </div>
+
+        </div>
+      )}
+
+      {/* =================================
+          CHECKOUT
+      ================================= */}
+
+      {checkoutOpen && (
+
+        <div className="checkout-overlay">
+
+          <div className="checkout-container">
+
+            <div className="checkout-top">
+
+              <div>
+
+                <p className="checkout-label">
+                  LUXORA SECURE CHECKOUT
+                </p>
+
+                <h2>
+                  Complete Your Order
+                </h2>
+
+                <div className="checkout-steps">
+
+                  <span className="step-active">
+                    01 Details
+                  </span>
+
+                  <span>
+                    →
+                  </span>
+
+                  <span className="step-active">
+                    02 Payment
+                  </span>
+
+                  <span>
+                    →
+                  </span>
+
+                  <span>
+                    03 Confirmation
+                  </span>
+
+                </div>
+
+              </div>
+
+              <button
+                type="button"
+                className="checkout-close"
+                onClick={() =>
+                  setCheckoutOpen(
+                    false
+                  )
+                }
+              >
+                ×
+              </button>
+
+            </div>
+
+            {orderPlaced ? (
+
+              <div className="order-success">
+
+                <div className="success-icon">
+                  ✓
+                </div>
+
+                <p className="checkout-label">
+                  ORDER CONFIRMED
+                </p>
+
+                <h2>
+                  Thank You,{" "}
+                  {customer.name}
+                </h2>
+
+                <p>
+                  Your order has been
+                  received successfully.
+                </p>
+
+                <div className="order-number">
+
+                  <span>
+                    Order Reference
+                  </span>
+
+                  <strong>
+                    {
+                      orderReference
+                    }
+                  </strong>
+
+                </div>
+
+                <div className="success-payment">
+
+                  <span>
+                    Payment Method
+                  </span>
+
+                  <strong>
+                    {paymentMethod ===
+                      "UPI" &&
+                      "UPI"}
+
+                    {paymentMethod ===
+                      "CREDIT_CARD" &&
+                      "Credit Card"}
+
+                    {paymentMethod ===
+                      "DEBIT_CARD" &&
+                      "Debit Card"}
+
+                    {paymentMethod ===
+                      "NET_BANKING" &&
+                      "Net Banking"}
+
+                    {paymentMethod ===
+                      "COD" &&
+                      "Cash on Delivery"}
+                  </strong>
+
+                </div>
+
+                <button
+                  type="button"
+                  className="checkout-button"
+                  onClick={() => {
+
+                    setCart([]);
+
+                    setCheckoutOpen(
+                      false
+                    );
+
+                    setOrderPlaced(
+                      false
+                    );
+
+                    setOrderReference(
+                      ""
+                    );
+
+                  }}
+                >
+                  CONTINUE SHOPPING
+                </button>
+
+              </div>
+
+            ) : (
+
+              <div className="checkout-layout">
+
+                {/* LEFT */}
+
+                <form
+                  id="luxora-checkout-form"
+                  className="checkout-form"
+                  onSubmit={
+                    placeOrder
+                  }
+                >
+
+                  {/* CUSTOMER */}
+
+                  <div className="checkout-section">
+
+                    <p className="checkout-label">
+                      01 • CUSTOMER DETAILS
+                    </p>
+
+                    <h3>
+                      Contact Information
+                    </h3>
+
+                    <div className="form-grid">
+
+                      <div className="form-group full">
+
+                        <label>
+                          Full Name *
+                        </label>
+
+                        <input
+                          type="text"
+                          value={
+                            customer.name
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "name",
+                              event.target.value
+                            )
+                          }
+                          maxLength="100"
+                          placeholder="Enter your full name"
+                          required
+                        />
+
+                      </div>
+
+                      <div className="form-group">
+
+                        <label>
+                          Mobile Number *
+                        </label>
+
+                        <input
+                          type="tel"
+                          value={
+                            customer.mobile
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "mobile",
+                              event.target.value
+                            )
+                          }
+                          maxLength="10"
+                          inputMode="numeric"
+                          placeholder="10 digit mobile number"
+                          required
+                        />
+
+                      </div>
+
+                      <div className="form-group">
+
+                        <label>
+                          Email Address
+                        </label>
+
+                        <input
+                          type="email"
+                          value={
+                            customer.email
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "email",
+                              event.target.value
+                            )
+                          }
+                          maxLength="150"
+                          placeholder="you@example.com"
+                        />
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* DELIVERY */}
+
+                  <div className="checkout-section">
+
+                    <p className="checkout-label">
+                      02 • DELIVERY ADDRESS
+                    </p>
+
+                    <h3>
+                      Where should we deliver?
+                    </h3>
+
+                    <div className="form-grid">
+
+                      <div className="form-group full">
+
+                        <label>
+                          Full Address *
+                        </label>
+
+                        <textarea
+                          value={
+                            customer.address
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "address",
+                              event.target.value
+                            )
+                          }
+                          rows="4"
+                          maxLength="500"
+                          placeholder="House / Flat / Street / Area"
+                          required
+                        />
+
+                      </div>
+
+                      <div className="form-group">
+
+                        <label>
+                          City *
+                        </label>
+
+                        <input
+                          type="text"
+                          value={
+                            customer.city
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "city",
+                              event.target.value
+                            )
+                          }
+                          maxLength="100"
+                          placeholder="City"
+                          required
+                        />
+
+                      </div>
+
+                      <div className="form-group">
+
+                        <label>
+                          State *
+                        </label>
+
+                        <input
+                          type="text"
+                          value={
+                            customer.state
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "state",
+                              event.target.value
+                            )
+                          }
+                          maxLength="100"
+                          placeholder="State"
+                          required
+                        />
+
+                      </div>
+
+                      <div className="form-group">
+
+                        <label>
+                          PIN Code *
+                        </label>
+
+                        <input
+                          type="text"
+                          value={
+                            customer.pincode
+                          }
+                          onChange={(event) =>
+                            updateCustomer(
+                              "pincode",
+                              event.target.value
+                            )
+                          }
+                          maxLength="6"
+                          inputMode="numeric"
+                          placeholder="6 digit PIN"
+                          required
+                        />
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* PAYMENT */}
+
+                  <div className="checkout-section payment-section">
+
+                    <div className="payment-heading">
+
+                      <div>
+
+                        <p className="checkout-label">
+                          03 • PAYMENT METHOD
+                        </p>
+
+                        <h3>
+                          Choose how you'd like to pay
+                        </h3>
+
+                      </div>
+
+                      <div className="payment-secure">
+                        🔒 Secure
+                      </div>
+
+                    </div>
+
+                    {/* PAYMENT OPTIONS */}
+
+                    <div className="payment-methods">
+
+                      {[
+                        [
+                          "UPI",
+                          "UPI",
+                          "Google Pay • PhonePe • Paytm",
+                          "UPI",
+                        ],
+                        [
+                          "CREDIT_CARD",
+                          "Credit Card",
+                          "Visa • Mastercard • RuPay",
+                          "CARD",
+                        ],
+                        [
+                          "DEBIT_CARD",
+                          "Debit Card",
+                          "Visa • Mastercard • RuPay",
+                          "CARD",
+                        ],
+                        [
+                          "NET_BANKING",
+                          "Net Banking",
+                          "All major Indian banks",
+                          "BANK",
+                        ],
+                        [
+                          "COD",
+                          "Cash on Delivery",
+                          "Pay when your order arrives",
+                          "₹",
+                        ],
+                      ].map(
+                        (option) => (
+                          <button
+                            type="button"
+                            key={
+                              option[0]
+                            }
+                            className={
+                              paymentMethod ===
+                              option[0]
+                                ? "payment-option active"
+                                : "payment-option"
+                            }
+                            onClick={() =>
+                              changePaymentMethod(
+                                option[0]
+                              )
+                            }
+                          >
+
+                            <span className="payment-icon">
+                              {
+                                option[3]
+                              }
+                            </span>
+
+                            <span>
+
+                              <strong>
+                                {
+                                  option[1]
+                                }
+                              </strong>
+
+                              <small>
+                                {
+                                  option[2]
+                                }
+                              </small>
+
+                            </span>
+
+                            <i>
+                              {paymentMethod ===
+                              option[0]
+                                ? "✓"
+                                : ""}
+                            </i>
+
+                          </button>
+                        )
+                      )}
+
+                    </div>
+
+                    {/* UPI */}
+
+                    {paymentMethod ===
+                      "UPI" && (
+
+                      <div className="dynamic-payment-box">
+
+                        <div className="upi-layout">
+
+                          <div className="upi-form">
+
+                            <span className="mini-label">
+                              UPI PAYMENT
+                            </span>
+
+                            <h4>
+                              Pay securely using UPI
+                            </h4>
+
+                            <p>
+                              Enter your UPI ID and continue.
+                            </p>
+
+                            <label>
+                              UPI ID
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                upiId
+                              }
+                              onChange={(event) =>
+                                setUpiId(
+                                  event.target.value
+                                )
+                              }
+                              placeholder="example@upi"
+                              autoComplete="off"
+                            />
+
+                            <div className="upi-apps">
+
+                              <span>
+                                G
+                              </span>
+
+                              <span>
+                                P
+                              </span>
+
+                              <span>
+                                ₹
+                              </span>
+
+                              <small>
+                                Google Pay • PhonePe • Paytm
+                              </small>
+
+                            </div>
+
+                          </div>
+
+                          <div className="qr-box">
+
+                            <div className="fake-qr">
+
+                              <span>
+                                LUXORA
+                              </span>
+
+                              <div className="qr-pattern">
+                                ▦ ▦ ▦
+                                <br />
+                                ▦ ▦ ▦
+                                <br />
+                                ▦ ▦ ▦
+                              </div>
+
+                            </div>
+
+                            <small>
+                              Scan to pay
+                            </small>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* CARD */}
+
+                    {(paymentMethod ===
+                      "CREDIT_CARD" ||
+                      paymentMethod ===
+                        "DEBIT_CARD") && (
+
+                      <div className="dynamic-payment-box">
+
+                        <div className="card-preview">
+
+                          <div className="card-top">
+
+                            <span>
+                              LUXORA
+                            </span>
+
+                            <span>
+                              {paymentMethod ===
+                              "CREDIT_CARD"
+                                ? "CREDIT"
+                                : "DEBIT"}
+                            </span>
+
+                          </div>
+
+                          <div className="card-number-preview">
+
+                            {cardDetails.cardNumber ||
+                              "•••• •••• •••• ••••"}
+
+                          </div>
+
+                          <div className="card-bottom">
+
+                            <span>
+                              {cardDetails.name ||
+                                "CARDHOLDER NAME"}
+                            </span>
+
+                            <span>
+                              {cardDetails.expiry ||
+                                "MM/YY"}
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                        <div className="form-grid card-fields">
+
+                          <div className="form-group full">
+
+                            <label>
+                              Card Number *
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                cardDetails.cardNumber
+                              }
+                              onChange={(event) =>
+                                updateCard(
+                                  "cardNumber",
+                                  event.target.value
+                                )
+                              }
+                              inputMode="numeric"
+                              autoComplete="cc-number"
+                              placeholder="1234 5678 9012 3456"
+                              required
+                            />
+
+                          </div>
+
+                          <div className="form-group">
+
+                            <label>
+                              Expiry Date *
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                cardDetails.expiry
+                              }
+                              onChange={(event) =>
+                                updateCard(
+                                  "expiry",
+                                  event.target.value
+                                )
+                              }
+                              inputMode="numeric"
+                              placeholder="MM/YY"
+                              required
+                            />
+
+                          </div>
+
+                          <div className="form-group">
+
+                            <label>
+                              CVV *
+                            </label>
+
+                            <input
+                              type="password"
+                              value={
+                                cardDetails.cvv
+                              }
+                              onChange={(event) =>
+                                updateCard(
+                                  "cvv",
+                                  event.target.value
+                                )
+                              }
+                              inputMode="numeric"
+                              autoComplete="cc-csc"
+                              placeholder="•••"
+                              maxLength="3"
+                              required
+                            />
+
+                          </div>
+
+                          <div className="form-group full">
+
+                            <label>
+                              Cardholder Name *
+                            </label>
+
+                            <input
+                              type="text"
+                              value={
+                                cardDetails.name
+                              }
+                              onChange={(event) =>
+                                updateCard(
+                                  "name",
+                                  event.target.value
+                                )
+                              }
+                              autoComplete="cc-name"
+                              placeholder="Name as shown on card"
+                              required
+                            />
+
+                          </div>
+
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* NET BANKING */}
+
+                    {paymentMethod ===
+                      "NET_BANKING" && (
+
+                      <div className="dynamic-payment-box">
+
+                        <span className="mini-label">
+                          NET BANKING
+                        </span>
+
+                        <h4>
+                          Select your bank
+                        </h4>
+
+                        <div className="bank-grid">
+
+                          {[
+                            "HDFC Bank",
+                            "ICICI Bank",
+                            "State Bank of India",
+                            "Axis Bank",
+                            "Kotak Mahindra Bank",
+                            "Bank of Baroda",
+                            "Punjab National Bank",
+                            "Other Banks",
+                          ].map(
+                            (bank) => (
+                              <button
+                                type="button"
+                                key={bank}
+                                className={
+                                  selectedBank ===
+                                  bank
+                                    ? "bank-option active"
+                                    : "bank-option"
+                                }
+                                onClick={() =>
+                                  setSelectedBank(
+                                    bank
+                                  )
+                                }
+                              >
+
+                                <span className="bank-logo">
+                                  {bank
+                                    .split(
+                                      " "
+                                    )
+                                    .map(
+                                      (word) =>
+                                        word[0]
+                                    )
+                                    .slice(
+                                      0,
+                                      2
+                                    )
+                                    .join("")}
+                                </span>
+
+                                <span>
+                                  {
+                                    bank
+                                  }
+                                </span>
+
+                                {selectedBank ===
+                                  bank && (
+                                  <b>
+                                    ✓
+                                  </b>
+                                )}
+
+                              </button>
+                            )
+                          )}
+
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* COD */}
+
+                    {paymentMethod ===
+                      "COD" && (
+
+                      <div className="dynamic-payment-box cod-box">
+
+                        <div className="cod-icon-large">
+                          ₹
+                        </div>
+
+                        <div>
+
+                          <span className="mini-label">
+                            CASH ON DELIVERY
+                          </span>
+
+                          <h4>
+                            Pay when your order arrives
+                          </h4>
+
+                          <p>
+                            Pay the delivery partner
+                            when your LUXORA order
+                            reaches your doorstep.
+                          </p>
+
+                          <div className="cod-points">
+
+                            <span>
+                              ✓ No online payment required
+                            </span>
+
+                            <span>
+                              ✓ Order confirmation instantly
+                            </span>
+
+                          </div>
+
+                        </div>
+
+                      </div>
+                    )}
+
+                    {/* SECURITY */}
+
+                    <div className="payment-trust">
+
+                      <div>
+                        🔒
+                        <span>
+                          <strong>
+                            Secure Checkout
+                          </strong>
+
+                          <small>
+                            Your information is encrypted
+                          </small>
+                        </span>
+                      </div>
+
+                      <div>
+                        ✓
+                        <span>
+                          <strong>
+                            Trusted Payment
+                          </strong>
+
+                          <small>
+                            Safe & reliable payment options
+                          </small>
+                        </span>
+                      </div>
+
+                      <div>
+                        ↩
+                        <span>
+                          <strong>
+                            Easy Returns
+                          </strong>
+
+                          <small>
+                            Hassle-free return experience
+                          </small>
+                        </span>
+                      </div>
+
+                    </div>
+
+                  </div>
+
+                  {/* MOBILE BUTTON */}
+
+                  <button
+                    type="submit"
+                    className="place-order-button mobile-place-order"
+                    disabled={
+                      orderLoading
+                    }
+                  >
+                    {orderLoading
+                      ? "PROCESSING..."
+                      : `PLACE ORDER • ₹${checkoutTotal.toLocaleString(
+                          "en-IN"
+                        )}`}
+                  </button>
+
+                </form>
+
+                {/* RIGHT SUMMARY */}
+
+                <aside className="order-summary">
+
+                  <div className="summary-header">
+
+                    <div>
+
+                      <p className="checkout-label">
+                        YOUR BAG
+                      </p>
+
+                      <h3>
+                        Order Summary
+                      </h3>
+
+                    </div>
+
+                    <span className="summary-count">
+                      {totalItems} Items
+                    </span>
+
+                  </div>
+
+                  <div className="summary-products">
+
+                    {cart.map(
+                      (item) => (
+
+                        <div
+                          className="summary-item"
+                          key={`${item.id}-${item.color}`}
+                        >
+
+                          <div className="summary-product-image">
+
+                            {item.image ? (
+                              <img
+                                src={
+                                  item.image
+                                }
+                                alt={
+                                  item.name
+                                }
+                                onError={
+                                  handleImageError
+                                }
+                              />
+                            ) : (
+                              <span>
+                                LUXORA
+                              </span>
+                            )}
+
+                            <b>
+                              {
+                                item.quantity
+                              }
+                            </b>
+
+                          </div>
+
+                          <div className="summary-product-info">
+
+                            <strong>
+                              {
+                                item.name
+                              }
+                            </strong>
+
+                            <span>
+                              {
+                                item.category
+                              }
+                            </span>
+
+                            <span>
+                              Color:{" "}
+                              {
+                                item.color
+                              }
+                            </span>
+
+                          </div>
+
+                          <b className="summary-product-price">
+                            ₹
+                            {(
+                              safeNumber(
+                                item.price,
+                                0
+                              ) *
+                              safeNumber(
+                                item.quantity,
+                                0
+                              )
+                            ).toLocaleString(
+                              "en-IN"
+                            )}
+                          </b>
+
+                        </div>
+                      )
+                    )}
+
+                  </div>
+
+                  <div className="summary-offer">
+
+                    <span>
+                      ✦
+                    </span>
+
+                    <div>
+
+                      <strong>
+                        Free Delivery
+                      </strong>
+
+                      <small>
+                        Orders above ₹1,999
+                      </small>
+
+                    </div>
+
+                  </div>
+
+                  <div className="summary-calculation">
+
+                    <div>
+
+                      <span>
+                        Subtotal
+                      </span>
+
+                      <strong>
+                        ₹
+                        {totalPrice.toLocaleString(
+                          "en-IN"
+                        )}
+                      </strong>
+
+                    </div>
+
+                    <div>
+
+                      <span>
+                        Delivery
+                      </span>
+
+                      <strong>
+                        {deliveryCharge ===
+                        0
+                          ? "FREE"
+                          : `₹${deliveryCharge}`}
+                      </strong>
+
+                    </div>
+
+                  </div>
+
+                  <div className="summary-total">
+
+                    <span>
+                      Total Amount
+                    </span>
+
+                    <strong>
+                      ₹
+                      {checkoutTotal.toLocaleString(
+                        "en-IN"
+                      )}
+                    </strong>
+
+                  </div>
+
+                  <button
+                    type="submit"
+                    form="luxora-checkout-form"
+                    className="place-order-button desktop-place-order"
+                    disabled={
+                      orderLoading
+                    }
+                  >
+                    {orderLoading
+                      ? "PROCESSING..."
+                      : "PLACE ORDER"}
+                  </button>
+
+                  <div className="secure-summary">
+
+                    <span>
+                      🔒
+                    </span>
+
+                    <div>
+
+                      <strong>
+                        100% Secure Payment
+                      </strong>
+
+                      <small>
+                        Your payment details are protected.
+                      </small>
+
+                    </div>
+
+                  </div>
+
+                  <div className="accepted-payments">
+
+                    <small>
+                      WE ACCEPT
+                    </small>
+
+                    <div>
+
+                      <span>
+                        UPI
+                      </span>
+
+                      <span>
+                        VISA
+                      </span>
+
+                      <span>
+                        MC
+                      </span>
+
+                      <span>
+                        RuPay
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                </aside>
+
+              </div>
+            )}
+
+          </div>
+
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+export default App;

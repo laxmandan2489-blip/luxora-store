@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1788081708834,
+    "name": "test bag",
+    "category": "Bags",
+    "price": 2999,
+    "oldPrice": 4499,
+    "stock": 10,
+    "description": "1254654+8",
+    "image": "",
+    "createdAt": "2026-08-30T09:21:48.834Z"
+  },
+  {
+    "id": 1788083510574,
+    "name": "test bags",
+    "category": "Handbags",
+    "price": 2999,
+    "oldPrice": 44999,
+    "stock": 10,
+    "description": "10",
+    "image": "",
+    "createdAt": "2026-08-30T09:51:50.574Z"
+  },
+  {
+    "id": 1788084940602,
+    "name": "test bag",
+    "category": "Bags",
+    "price": 2999,
+    "oldPrice": 44999,
+    "stock": 8,
+    "description": "sjfn",
+    "image": "/uploads/1788084940586-9wwxvg.webp",
+    "createdAt": "2026-08-30T10:15:40.602Z"
+  }
+]
