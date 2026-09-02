@@ -493,286 +493,233 @@ function App() {
   ========================================================= */
 
   async function placeOrder(e) {
-    e.preventDefault();
+  e.preventDefault();
 
-    if (orderLoading) return;
+  if (orderLoading) return;
 
-    if (cart.length === 0) {
-      alert("Your shopping bag is empty.");
-      return;
+  if (!cart.length) {
+    alert("Your cart is empty.");
+    return;
+  }
+
+  if (
+    !customer.name ||
+    !customer.mobile ||
+    !customer.email ||
+    !customer.address ||
+    !customer.city ||
+    !customer.state ||
+    !customer.pincode
+  ) {
+    alert("Please fill all customer details.");
+    return;
+  }
+
+  setOrderLoading(true);
+
+  try {
+    // Load Razorpay Checkout
+    const razorpayLoaded = await new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+
+      document.body.appendChild(script);
+    });
+
+    if (!razorpayLoaded) {
+      throw new Error("Razorpay checkout failed to load.");
     }
 
-    const name =
-      customer.name.trim();
+    const reference = `LX${Date.now().toString().slice(-8)}`;
 
-    const mobile =
-      customer.mobile.trim();
+    // Create Razorpay order on backend
+    const createResponse = await fetch(`${API}/api/create-order`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: Math.round(checkoutTotal * 100),
+      }),
+    });
 
-    const email =
-      customer.email.trim();
+    const createData = await createResponse.json();
 
-    const address =
-      customer.address.trim();
-
-    const city =
-      customer.city.trim();
-
-    const state =
-      customer.state.trim();
-
-    const pincode =
-      customer.pincode.trim();
-
-    /* -----------------------------------------
-       REQUIRED DETAILS
-    ----------------------------------------- */
-
-    if (
-      !name ||
-      !mobile ||
-      !address ||
-      !city ||
-      !state ||
-      !pincode
-    ) {
-      alert(
-        "Please fill all required customer details."
+    if (!createResponse.ok || !createData.success) {
+      throw new Error(
+        createData.message || "Unable to create payment order."
       );
-
-      return;
     }
 
-    /* -----------------------------------------
-       MOBILE VALIDATION
-    ----------------------------------------- */
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
 
-    if (!/^\d{10}$/.test(mobile)) {
-      alert(
-        "Please enter a valid 10 digit mobile number."
-      );
+      amount: createData.amount,
+      currency: createData.currency || "INR",
 
-      return;
-    }
+      name: "LUXORA",
+      description: `LUXORA Order ${reference}`,
 
-    /* -----------------------------------------
-       PINCODE VALIDATION
-    ----------------------------------------- */
+      order_id: createData.order_id,
 
-    if (!/^\d{6}$/.test(pincode)) {
-      alert(
-        "Please enter a valid 6 digit pincode."
-      );
+      prefill: {
+        name: customer.name,
+        email: customer.email,
+        contact: customer.mobile,
+      },
 
-      return;
-    }
+      notes: {
+        order_reference: reference,
+      },
 
-    /* -----------------------------------------
-       EMAIL VALIDATION
-    ----------------------------------------- */
+      theme: {
+        color: "#111111",
+      },
 
-    if (
-      email &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
-      alert(
-        "Please enter a valid email address."
-      );
+      handler: async function (paymentResponse) {
+        try {
+          // Verify payment on backend
+          const verifyResponse = await fetch(
+            `${API}/api/verify-payment`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                razorpay_order_id:
+                  paymentResponse.razorpay_order_id,
 
-      return;
-    }
+                razorpay_payment_id:
+                  paymentResponse.razorpay_payment_id,
 
-    try {
-      setOrderLoading(true);
+                razorpay_signature:
+                  paymentResponse.razorpay_signature,
+              }),
+            }
+          );
 
-      /* ---------------------------------------
-         CREATE UNIQUE ORDER REFERENCE
-      --------------------------------------- */
+          const verifyData = await verifyResponse.json();
 
-      const reference =
-        `LX${Date.now()
-          .toString()
-          .slice(-8)}`;
+          if (!verifyResponse.ok || !verifyData.success) {
+            throw new Error(
+              verifyData.message || "Payment verification failed."
+            );
+          }
 
-      /* ---------------------------------------
-         PREPARE ORDER ITEMS
-      --------------------------------------- */
+          const orderItems = cart.map((item) => ({
+            id: item.id,
+            name: item.name,
+            price: Number(item.price || 0),
+            quantity: Number(item.quantity || 0),
+            selectedColor: item.selectedColor || "",
+            image: item.image || "",
+          }));
 
-      const orderItems = cart.map((item) => {
-        const productImages =
-          getProductImages(item);
-
-        return {
-          id: item.id,
-
-          name:
-            item.name || "LUXORA Product",
-
-          category:
-            item.category || "Bags",
-
-          price:
-            Number(item.price) || 0,
-
-          quantity:
-            Number(item.quantity) || 1,
-
-          image:
-            productImages.length > 0
-              ? productImages[0]
-              : "",
-        };
-      });
-
-      /* ---------------------------------------
-         COMPLETE ORDER OBJECT
-      --------------------------------------- */
-
-      const orderData = {
-        id: reference,
-
-        orderId: reference,
-
-        orderReference:
-          reference,
-
-        reference:
-          reference,
-
-        customer: {
-          name: name,
-
-          mobile: mobile,
-
-          email: email,
-
-          address: address,
-
-          city: city,
-
-          state: state,
-
-          pincode: pincode,
-        },
-
-        items: orderItems,
-
-        subtotal:
-          Number(totalPrice) || 0,
-
-        deliveryCharge:
-          Number(deliveryCharge) || 0,
-
-        totalAmount:
-          Number(checkoutTotal) || 0,
-
-        status: "Pending",
-
-        createdAt:
-          new Date().toISOString(),
-      };
-
-      console.log(
-        "===================================="
-      );
-
-      console.log(
-        "LUXORA ORDER BEING SENT:"
-      );
-
-      console.log(
-        orderData
-      );
-
-      console.log(
-        "===================================="
-      );
-
-      /* ---------------------------------------
-         SEND ORDER TO BACKEND
-      --------------------------------------- */
-
-      const response =
-        await fetch(
-          `${API}/api/orders`,
-          {
-            method: "POST",
-
-            headers: {
-              "Content-Type":
-                "application/json",
+          const orderData = {
+            reference,
+            customer: {
+              name: customer.name,
+              mobile: customer.mobile,
+              email: customer.email,
+              address: customer.address,
+              city: customer.city,
+              state: customer.state,
+              pincode: customer.pincode,
             },
 
-            body:
-              JSON.stringify(
-                orderData
-              ),
+            items: orderItems,
+
+            subtotal: totalPrice,
+            delivery: deliveryCharge,
+            total: checkoutTotal,
+
+            payment: {
+              method: "Razorpay",
+              status: "Paid",
+              razorpayOrderId:
+                paymentResponse.razorpay_order_id,
+              razorpayPaymentId:
+                paymentResponse.razorpay_payment_id,
+              razorpaySignature:
+                paymentResponse.razorpay_signature,
+            },
+
+            status: "Paid",
+          };
+
+          // Save order after successful payment
+          const orderResponse = await fetch(`${API}/api/orders`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(orderData),
+          });
+
+          const savedOrder = await orderResponse.json();
+
+          if (!orderResponse.ok || !savedOrder.success) {
+            throw new Error(
+              savedOrder.message || "Order could not be saved."
+            );
           }
-        );
 
-      /* ---------------------------------------
-         READ SERVER RESPONSE
-      --------------------------------------- */
+          setOrderReference(reference);
+          setOrderPlaced(true);
+          setCart([]);
+          setCheckoutOpen(true);
+        } catch (error) {
+          console.error("Payment verification/order error:", error);
+          alert(
+            error.message ||
+              "Payment successful, but order processing failed. Please contact support."
+          );
+        } finally {
+          setOrderLoading(false);
+        }
+      },
 
-      let data;
+      modal: {
+        ondismiss: function () {
+          setOrderLoading(false);
+        },
+      },
+    };
 
-      try {
-        data =
-          await response.json();
-      } catch {
-        data = {};
-      }
+    const razorpay = new window.Razorpay(options);
 
-      console.log(
-        "LUXORA ORDER SERVER RESPONSE:",
-        data
-      );
-
-      /* ---------------------------------------
-         CHECK SERVER RESULT
-      --------------------------------------- */
-
-      if (
-        !response.ok ||
-        !data.success
-      ) {
-        throw new Error(
-          data.message ||
-          "Unable to save your order."
-        );
-      }
-
-      /* ---------------------------------------
-         ORDER SAVED SUCCESSFULLY
-      --------------------------------------- */
-
-      const savedReference =
-        data.reference ||
-        data.orderId ||
-        data.order?.orderReference ||
-        data.order?.orderId ||
-        reference;
-
-      setOrderReference(
-        savedReference
-      );
-
-      setOrderPlaced(true);
-
-    } catch (error) {
-      console.error(
-        "PLACE ORDER ERROR:",
-        error
-      );
+    razorpay.on("payment.failed", function (response) {
+      console.error("Razorpay payment failed:", response);
 
       alert(
-        error.message ||
-        "Unable to place order. Please try again."
+        response.error?.description ||
+          "Payment failed. Please try again."
       );
 
-    } finally {
       setOrderLoading(false);
-    }
+    });
+
+    razorpay.open();
+  } catch (error) {
+    console.error("Checkout error:", error);
+
+    alert(
+      error.message ||
+        "Something went wrong while starting payment."
+    );
+
+    setOrderLoading(false);
   }
+}
 
   /* =========================================================
      ESCAPE KEY
