@@ -308,7 +308,7 @@ function App() {
   const deliveryCharge =
     totalPrice === 0 || totalPrice >= 1999
       ? 0
-      : 99;
+      : 0;
 
   const checkoutTotal =
     totalPrice + deliveryCharge;
