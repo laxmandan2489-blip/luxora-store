@@ -186,9 +186,13 @@ function App() {
       images.unshift(product.image);
     }
 
-    return images
-      .filter(Boolean)
-      .map(getImageUrl);
+    return Array.from(
+      new Set(
+        images
+          .filter(Boolean)
+          .map(getImageUrl)
+      )
+    );
   }
 
   /* =========================================================
@@ -315,7 +319,6 @@ function App() {
 
   /* =========================================================
      ADD TO CART
-     NO COLOR
   ========================================================= */
 
   function addToCart(product, quantity = 1) {
@@ -379,29 +382,28 @@ function App() {
 
   function updateCartQuantity(index, amount) {
     setCart((previousCart) =>
-      previousCart
-        .map((item, itemIndex) => {
-          if (itemIndex !== index) {
-            return item;
-          }
+      previousCart.map((item, itemIndex) => {
+        if (itemIndex !== index) {
+          return item;
+        }
 
-          const currentQuantity =
-            Number(item.quantity || 1);
+        const currentQuantity =
+          Number(item.quantity || 1);
 
-          const maxStock =
-            Number(item.stock || 99);
+        const maxStock =
+          Number(item.stock || 99);
 
-          const nextQuantity =
-            currentQuantity + amount;
+        const nextQuantity =
+          currentQuantity + amount;
 
-          return {
-            ...item,
-            quantity: Math.min(
-              Math.max(1, nextQuantity),
-              maxStock
-            ),
-          };
-        })
+        return {
+          ...item,
+          quantity: Math.min(
+            Math.max(1, nextQuantity),
+            maxStock
+          ),
+        };
+      })
     );
   }
 
@@ -421,15 +423,29 @@ function App() {
   function buyNow() {
     if (!selectedProduct) return;
 
-    if (Number(selectedProduct.stock || 0) <= 0) {
+    const stock = Number(
+      selectedProduct.stock || 0
+    );
+
+    if (stock <= 0) {
       alert("This product is currently sold out.");
       return;
     }
 
-    addToCart(
-      selectedProduct,
-      detailQuantity
+    const quantity = Math.min(
+      Math.max(
+        1,
+        Number(detailQuantity || 1)
+      ),
+      stock
     );
+
+    setCart([
+      {
+        ...selectedProduct,
+        quantity,
+      },
+    ]);
 
     closeProduct();
 
@@ -462,8 +478,6 @@ function App() {
 
   /* =========================================================
      CUSTOMER INPUT
-     MOBILE = ONLY 10 DIGITS
-     PINCODE = ONLY 6 DIGITS
   ========================================================= */
 
   function handleCustomerChange(field, value) {
@@ -489,237 +503,417 @@ function App() {
 
   /* =========================================================
      PLACE ORDER
-     SAVE ORDER TO BACKEND
+     SECURE SERVER-SIDE CART CALCULATION
   ========================================================= */
 
   async function placeOrder(e) {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (orderLoading) return;
+    if (orderLoading) return;
 
-  if (!cart.length) {
-    alert("Your cart is empty.");
-    return;
-  }
-
-  if (
-    !customer.name ||
-    !customer.mobile ||
-    !customer.email ||
-    !customer.address ||
-    !customer.city ||
-    !customer.state ||
-    !customer.pincode
-  ) {
-    alert("Please fill all customer details.");
-    return;
-  }
-
-  setOrderLoading(true);
-
-  try {
-    // Load Razorpay Checkout
-    const razorpayLoaded = await new Promise((resolve) => {
-      if (window.Razorpay) {
-        resolve(true);
-        return;
-      }
-
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-
-      document.body.appendChild(script);
-    });
-
-    if (!razorpayLoaded) {
-      throw new Error("Razorpay checkout failed to load.");
+    if (!cart.length) {
+      alert("Your cart is empty.");
+      return;
     }
 
-    const reference = `LX${Date.now().toString().slice(-8)}`;
-
-    // Create Razorpay order on backend
-    const createResponse = await fetch(`${API}/api/create-order`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        amount: Math.round(checkoutTotal * 100),
-      }),
-    });
-
-    const createData = await createResponse.json();
-
-    if (!createResponse.ok || !createData.success) {
-      throw new Error(
-        createData.message || "Unable to create payment order."
-      );
-    }
-
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-
-      amount: createData.amount,
-      currency: createData.currency || "INR",
-
-      name: "LUXORA",
-      description: `LUXORA Order ${reference}`,
-
-      order_id: createData.order_id,
-
-      prefill: {
-        name: customer.name,
-        email: customer.email,
-        contact: customer.mobile,
-      },
-
-      notes: {
-        order_reference: reference,
-      },
-
-      theme: {
-        color: "#111111",
-      },
-
-      handler: async function (paymentResponse) {
-        try {
-          // Verify payment on backend
-          const verifyResponse = await fetch(
-            `${API}/api/verify-payment`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                razorpay_order_id:
-                  paymentResponse.razorpay_order_id,
-
-                razorpay_payment_id:
-                  paymentResponse.razorpay_payment_id,
-
-                razorpay_signature:
-                  paymentResponse.razorpay_signature,
-              }),
-            }
-          );
-
-          const verifyData = await verifyResponse.json();
-
-          if (!verifyResponse.ok || !verifyData.success) {
-            throw new Error(
-              verifyData.message || "Payment verification failed."
-            );
-          }
-
-          const orderItems = cart.map((item) => ({
-            id: item.id,
-            name: item.name,
-            price: Number(item.price || 0),
-            quantity: Number(item.quantity || 0),
-            selectedColor: item.selectedColor || "",
-            image: item.image || "",
-          }));
-
-          const orderData = {
-            reference,
-            customer: {
-              name: customer.name,
-              mobile: customer.mobile,
-              email: customer.email,
-              address: customer.address,
-              city: customer.city,
-              state: customer.state,
-              pincode: customer.pincode,
-            },
-
-            items: orderItems,
-
-            subtotal: totalPrice,
-            delivery: deliveryCharge,
-            total: checkoutTotal,
-
-            payment: {
-              method: "Razorpay",
-              status: "Paid",
-              razorpayOrderId:
-                paymentResponse.razorpay_order_id,
-              razorpayPaymentId:
-                paymentResponse.razorpay_payment_id,
-              razorpaySignature:
-                paymentResponse.razorpay_signature,
-            },
-
-            status: "Paid",
-          };
-
-          // Save order after successful payment
-          const orderResponse = await fetch(`${API}/api/orders`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(orderData),
-          });
-
-          const savedOrder = await orderResponse.json();
-
-          if (!orderResponse.ok || !savedOrder.success) {
-            throw new Error(
-              savedOrder.message || "Order could not be saved."
-            );
-          }
-
-          setOrderReference(reference);
-          setOrderPlaced(true);
-          setCart([]);
-          setCheckoutOpen(true);
-        } catch (error) {
-          console.error("Payment verification/order error:", error);
-          alert(
-            error.message ||
-              "Payment successful, but order processing failed. Please contact support."
-          );
-        } finally {
-          setOrderLoading(false);
-        }
-      },
-
-      modal: {
-        ondismiss: function () {
-          setOrderLoading(false);
-        },
-      },
+    const customerData = {
+      name: customer.name.trim(),
+      mobile: customer.mobile.trim(),
+      email: customer.email.trim(),
+      address: customer.address.trim(),
+      city: customer.city.trim(),
+      state: customer.state.trim(),
+      pincode: customer.pincode.trim(),
     };
 
-    const razorpay = new window.Razorpay(options);
+    if (
+      !customerData.name ||
+      !customerData.mobile ||
+      !customerData.email ||
+      !customerData.address ||
+      !customerData.city ||
+      !customerData.state ||
+      !customerData.pincode
+    ) {
+      alert("Please fill all customer details.");
+      return;
+    }
 
-    razorpay.on("payment.failed", function (response) {
-      console.error("Razorpay payment failed:", response);
+    if (!/^[0-9]{10}$/.test(customerData.mobile)) {
+      alert("Please enter a valid 10 digit mobile number.");
+      return;
+    }
+
+    if (!/^[0-9]{6}$/.test(customerData.pincode)) {
+      alert("Please enter a valid 6 digit pincode.");
+      return;
+    }
+
+    setOrderLoading(true);
+
+    try {
+      /* =====================================================
+         LOAD RAZORPAY
+      ===================================================== */
+
+      const razorpayLoaded = await new Promise(
+        (resolve) => {
+          if (window.Razorpay) {
+            resolve(true);
+            return;
+          }
+
+          const existingScript =
+            document.querySelector(
+              'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+            );
+
+          if (existingScript) {
+            existingScript.addEventListener(
+              "load",
+              () => resolve(true),
+              { once: true }
+            );
+
+            existingScript.addEventListener(
+              "error",
+              () => resolve(false),
+              { once: true }
+            );
+
+            return;
+          }
+
+          const script =
+            document.createElement("script");
+
+          script.src =
+            "https://checkout.razorpay.com/v1/checkout.js";
+
+          script.async = true;
+
+          script.onload = () => resolve(true);
+
+          script.onerror = () => resolve(false);
+
+          document.body.appendChild(script);
+        }
+      );
+
+      if (
+        !razorpayLoaded ||
+        !window.Razorpay
+      ) {
+        throw new Error(
+          "Razorpay checkout failed to load."
+        );
+      }
+
+      /* =====================================================
+         SECURE CART
+         ONLY PRODUCT ID + QUANTITY
+         NO CLIENT PRICE
+      ===================================================== */
+
+      const secureItems = cart.map(
+        (item) => ({
+          id: Number(item.id),
+          quantity: Number(
+            item.quantity || 0
+          ),
+        })
+      );
+
+      if (
+        secureItems.some(
+          (item) =>
+            !Number.isFinite(item.id) ||
+            item.id <= 0 ||
+            !Number.isFinite(
+              item.quantity
+            ) ||
+            item.quantity <= 0
+        )
+      ) {
+        throw new Error(
+          "One or more cart items are invalid."
+        );
+      }
+
+      /* =====================================================
+         CREATE RAZORPAY ORDER
+         BACKEND CALCULATES REAL PRICE
+
+         IMPORTANT:
+         DO NOT SEND amount HERE.
+      ===================================================== */
+
+      const createResponse =
+        await fetch(
+          `${API}/api/create-order`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+            body: JSON.stringify({
+              items: secureItems,
+            }),
+          }
+        );
+
+      const createData =
+        await createResponse.json();
+
+      if (
+        !createResponse.ok ||
+        !createData.success
+      ) {
+        throw new Error(
+          createData.message ||
+            "Unable to create payment order."
+        );
+      }
+
+      if (!createData.order_id) {
+        throw new Error(
+          "Razorpay order ID was not returned."
+        );
+      }
+
+      if (!createData.amount) {
+        throw new Error(
+          "Invalid payment amount received from server."
+        );
+      }
+
+      /* =====================================================
+         RAZORPAY OPTIONS
+      ===================================================== */
+
+      const razorpayOptions = {
+        key:
+          import.meta.env
+            .VITE_RAZORPAY_KEY_ID,
+
+        amount: createData.amount,
+
+        currency:
+          createData.currency ||
+          "INR",
+
+        name: "LUXORA",
+
+        description:
+          "LUXORA Premium Collection",
+
+        order_id:
+          createData.order_id,
+
+        prefill: {
+          name: customerData.name,
+          email: customerData.email,
+          contact:
+            customerData.mobile,
+        },
+
+        notes: {
+          customer_name:
+            customerData.name,
+        },
+
+        theme: {
+          color: "#111111",
+        },
+
+        handler:
+          async function (
+            paymentResponse
+          ) {
+            try {
+              /* =============================================
+                 VERIFY PAYMENT
+              ============================================= */
+
+              const verifyResponse =
+                await fetch(
+                  `${API}/api/verify-payment`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type":
+                        "application/json",
+                    },
+                    body: JSON.stringify({
+                      razorpay_order_id:
+                        paymentResponse.razorpay_order_id,
+
+                      razorpay_payment_id:
+                        paymentResponse.razorpay_payment_id,
+
+                      razorpay_signature:
+                        paymentResponse.razorpay_signature,
+                    }),
+                  }
+                );
+
+              const verifyData =
+                await verifyResponse.json();
+
+              if (
+                !verifyResponse.ok ||
+                !verifyData.success
+              ) {
+                throw new Error(
+                  verifyData.message ||
+                    "Payment verification failed."
+                );
+              }
+
+              /* =============================================
+                 SAVE ORDER
+                 ONLY ID + QUANTITY
+              ============================================= */
+
+              const orderResponse =
+                await fetch(
+                  `${API}/api/orders`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type":
+                        "application/json",
+                    },
+                    body: JSON.stringify({
+                      customer:
+                        customerData,
+
+                      items:
+                        secureItems,
+
+                      payment: {
+                        method:
+                          "Razorpay",
+
+                        razorpayOrderId:
+                          paymentResponse.razorpay_order_id,
+
+                        razorpayPaymentId:
+                          paymentResponse.razorpay_payment_id,
+
+                        razorpaySignature:
+                          paymentResponse.razorpay_signature,
+
+                        status:
+                          "Paid",
+                      },
+                    }),
+                  }
+                );
+
+              const savedOrder =
+                await orderResponse.json();
+
+              if (
+                !orderResponse.ok ||
+                !savedOrder.success
+              ) {
+                throw new Error(
+                  savedOrder.message ||
+                    "Order could not be saved."
+                );
+              }
+
+              /* =============================================
+                 GET REAL ORDER REFERENCE
+              ============================================= */
+
+              const finalReference =
+                savedOrder.order
+                  ?.orderReference ||
+                savedOrder.order
+                  ?.orderNumber ||
+                savedOrder.order
+                  ?.orderId ||
+                savedOrder.order
+                  ?.reference ||
+                "";
+
+              setOrderReference(
+                finalReference
+              );
+
+              setOrderPlaced(true);
+
+              setCart([]);
+
+              setCheckoutOpen(true);
+            } catch (error) {
+              console.error(
+                "Payment verification/order error:",
+                error
+              );
+
+              alert(
+                error.message ||
+                  "Payment was received, but order processing failed. Please contact support."
+              );
+            } finally {
+              setOrderLoading(false);
+            }
+          },
+
+        modal: {
+          ondismiss:
+            function () {
+              setOrderLoading(false);
+            },
+        },
+      };
+
+      /* =====================================================
+         OPEN RAZORPAY
+      ===================================================== */
+
+      const razorpay =
+        new window.Razorpay(
+          razorpayOptions
+        );
+
+      razorpay.on(
+        "payment.failed",
+        function (response) {
+          console.error(
+            "Razorpay payment failed:",
+            response
+          );
+
+          alert(
+            response.error
+              ?.description ||
+              "Payment failed. Please try again."
+          );
+
+          setOrderLoading(false);
+        }
+      );
+
+      razorpay.open();
+    } catch (error) {
+      console.error(
+        "Checkout error:",
+        error
+      );
 
       alert(
-        response.error?.description ||
-          "Payment failed. Please try again."
+        error.message ||
+          "Something went wrong while starting payment."
       );
 
       setOrderLoading(false);
-    });
-
-    razorpay.open();
-  } catch (error) {
-    console.error("Checkout error:", error);
-
-    alert(
-      error.message ||
-        "Something went wrong while starting payment."
-    );
-
-    setOrderLoading(false);
+    }
   }
-}
 
   /* =========================================================
      ESCAPE KEY
@@ -765,9 +959,7 @@ function App() {
   return (
     <div className="luxora-app">
 
-      {/* =====================================================
-          ANNOUNCEMENT BAR
-      ===================================================== */}
+      {/* ANNOUNCEMENT BAR */}
 
       <div className="lux-announcement">
 
@@ -785,10 +977,7 @@ function App() {
 
       </div>
 
-
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* HEADER */}
 
       <header className="lux-header">
 
@@ -887,7 +1076,6 @@ function App() {
 
         </div>
 
-
         {searchOpen && (
 
           <div className="lux-search-bar">
@@ -925,10 +1113,7 @@ function App() {
 
       </header>
 
-
-      {/* =====================================================
-          HERO
-      ===================================================== */}
+      {/* HERO */}
 
       <section className="lux-hero">
 
@@ -959,7 +1144,6 @@ function App() {
           <div className="lux-hero-image-shade" />
 
         </div>
-
 
         <div className="lux-hero-content">
 
@@ -999,7 +1183,6 @@ function App() {
 
         </div>
 
-
         <div className="lux-hero-bottom">
 
           <span>
@@ -1014,10 +1197,7 @@ function App() {
 
       </section>
 
-
-      {/* =====================================================
-          EDITORIAL STRIP
-      ===================================================== */}
+      {/* EDITORIAL STRIP */}
 
       <section className="lux-editorial-strip">
 
@@ -1047,10 +1227,7 @@ function App() {
 
       </section>
 
-
-      {/* =====================================================
-          COLLECTION HEADER
-      ===================================================== */}
+      {/* COLLECTION HEADER */}
 
       <section
         className="lux-collection-header"
@@ -1088,10 +1265,7 @@ function App() {
 
       </section>
 
-
-      {/* =====================================================
-          API ERROR
-      ===================================================== */}
+      {/* API ERROR */}
 
       {apiError && (
         <div className="lux-api-error">
@@ -1099,10 +1273,7 @@ function App() {
         </div>
       )}
 
-
-      {/* =====================================================
-          LOADING / PRODUCTS
-      ===================================================== */}
+      {/* PRODUCTS */}
 
       {loadingProducts ? (
 
@@ -1193,20 +1364,17 @@ function App() {
 
                     )}
 
-
                     {hasDiscount && (
                       <div className="lux-card-badge">
                         SALE
                       </div>
                     )}
 
-
                     {isSoldOut && (
                       <div className="lux-card-sold">
                         SOLD OUT
                       </div>
                     )}
-
 
                     <div
                       className="lux-card-overlay"
@@ -1245,7 +1413,6 @@ function App() {
                     </div>
 
                   </div>
-
 
                   <div className="lux-card-info">
 
@@ -1294,10 +1461,7 @@ function App() {
 
       )}
 
-
-      {/* =====================================================
-          BRAND STORY
-      ===================================================== */}
+      {/* BRAND STORY */}
 
       <section className="lux-brand-story">
 
@@ -1354,10 +1518,7 @@ function App() {
 
       </section>
 
-
-      {/* =====================================================
-          REVIEWS
-      ===================================================== */}
+      {/* REVIEWS */}
 
       <section className="lux-reviews">
 
@@ -1397,185 +1558,90 @@ function App() {
 
         </div>
 
-
         <div className="lux-review-list">
 
-          <article className="lux-review">
+          {[
+            [
+              "Pooja Sharma",
+              "★★★★★",
+              "Beautiful and elegant",
+              "The bag looks beautiful and the overall finish feels very premium.",
+            ],
+            [
+              "Jasmin Mehta",
+              "★★★★★",
+              "Really loved it",
+              "Very classy design and comfortable to carry.",
+            ],
+            [
+              "Neha Joshi",
+              "★★★★★",
+              "Looks premium",
+              "The quality and overall look are beautiful.",
+            ],
+            [
+              "Shreya Singh",
+              "★★★★☆",
+              "Very stylish",
+              "Loved the shape and clean finishing.",
+            ],
+            [
+              "Nancy Kapoor",
+              "★★★★★",
+              "Worth the price",
+              "Nice quality, elegant look and beautiful presentation.",
+            ],
+            [
+              "Riya Verma",
+              "★★★★★",
+              "So pretty",
+              "The design is simple but looks very luxurious.",
+            ],
+          ].map(
+            (
+              [name, stars, title, text],
+              index
+            ) => (
 
-            <div className="lux-review-top">
-              <strong>
-                Pooja Sharma
-              </strong>
+              <article
+                className="lux-review"
+                key={index}
+              >
 
-              <span>
-                ★★★★★
-              </span>
-            </div>
+                <div className="lux-review-top">
 
-            <h3>
-              Beautiful and elegant
-            </h3>
+                  <strong>
+                    {name}
+                  </strong>
 
-            <p>
-              The bag looks beautiful and
-              the overall finish feels very
-              premium.
-            </p>
+                  <span>
+                    {stars}
+                  </span>
 
-            <small>
-              Sample Review
-            </small>
+                </div>
 
-          </article>
+                <h3>
+                  {title}
+                </h3>
 
+                <p>
+                  {text}
+                </p>
 
-          <article className="lux-review">
+                <small>
+                  Sample Review
+                </small>
 
-            <div className="lux-review-top">
-              <strong>
-                Jasmin Mehta
-              </strong>
+              </article>
 
-              <span>
-                ★★★★★
-              </span>
-            </div>
-
-            <h3>
-              Really loved it
-            </h3>
-
-            <p>
-              Very classy design and
-              comfortable to carry.
-            </p>
-
-            <small>
-              Sample Review
-            </small>
-
-          </article>
-
-
-          <article className="lux-review">
-
-            <div className="lux-review-top">
-              <strong>
-                Neha Joshi
-              </strong>
-
-              <span>
-                ★★★★★
-              </span>
-            </div>
-
-            <h3>
-              Looks premium
-            </h3>
-
-            <p>
-              The quality and overall look
-              are beautiful.
-            </p>
-
-            <small>
-              Sample Review
-            </small>
-
-          </article>
-
-
-          <article className="lux-review">
-
-            <div className="lux-review-top">
-              <strong>
-                Shreya Singh
-              </strong>
-
-              <span>
-                ★★★★☆
-              </span>
-            </div>
-
-            <h3>
-              Very stylish
-            </h3>
-
-            <p>
-              Loved the shape and clean
-              finishing.
-            </p>
-
-            <small>
-              Sample Review
-            </small>
-
-          </article>
-
-
-          <article className="lux-review">
-
-            <div className="lux-review-top">
-              <strong>
-                Nancy Kapoor
-              </strong>
-
-              <span>
-                ★★★★★
-              </span>
-            </div>
-
-            <h3>
-              Worth the price
-            </h3>
-
-            <p>
-              Nice quality, elegant look
-              and beautiful presentation.
-            </p>
-
-            <small>
-              Sample Review
-            </small>
-
-          </article>
-
-
-          <article className="lux-review">
-
-            <div className="lux-review-top">
-              <strong>
-                Riya Verma
-              </strong>
-
-              <span>
-                ★★★★★
-              </span>
-            </div>
-
-            <h3>
-              So pretty
-            </h3>
-
-            <p>
-              The design is simple but
-              looks very luxurious.
-            </p>
-
-            <small>
-              Sample Review
-            </small>
-
-          </article>
+            )
+          )}
 
         </div>
 
       </section>
 
-
-      {/* =====================================================
-          FOOTER
-      ===================================================== */}
+      {/* FOOTER */}
 
       <footer className="lux-footer">
 
@@ -1597,7 +1663,6 @@ function App() {
             </span>
 
           </div>
-
 
           <div className="lux-footer-links">
 
@@ -1647,7 +1712,6 @@ function App() {
 
             </div>
 
-
             <div>
 
               <strong>
@@ -1671,7 +1735,6 @@ function App() {
               </span>
 
             </div>
-
 
             <div>
 
@@ -1701,7 +1764,6 @@ function App() {
 
         </div>
 
-
         <div className="lux-footer-bottom">
 
           <span>
@@ -1716,10 +1778,7 @@ function App() {
 
       </footer>
 
-
-      {/* =====================================================
-          PRODUCT DETAIL
-      ===================================================== */}
+      {/* PRODUCT DETAIL */}
 
       {selectedProduct && (
 
@@ -1745,11 +1804,6 @@ function App() {
             >
               ×
             </button>
-
-
-            {/* =================================================
-                PRODUCT IMAGE GALLERY
-            ================================================= */}
 
             <section className="lux-gallery">
 
@@ -1793,7 +1847,6 @@ function App() {
 
                         </div>
 
-
                         {images.length > 1 && (
 
                           <>
@@ -1812,7 +1865,6 @@ function App() {
                                 ‹
                               </span>
                             </button>
-
 
                             <button
                               type="button"
@@ -1833,7 +1885,6 @@ function App() {
 
                         )}
 
-
                         <div className="lux-gallery-counter">
 
                           {String(
@@ -1849,7 +1900,6 @@ function App() {
                           ).padStart(2, "0")}
 
                         </div>
-
 
                         {images.length > 1 && (
 
@@ -1887,11 +1937,9 @@ function App() {
 
                         )}
 
-
                         <div className="lux-gallery-brand">
                           LUXORA
                         </div>
-
 
                         <div className="lux-gallery-swipe-label">
                           SWIPE TO EXPLORE
@@ -1919,11 +1967,6 @@ function App() {
 
             </section>
 
-
-            {/* =================================================
-                PRODUCT INFORMATION
-            ================================================= */}
-
             <section className="lux-product-info">
 
               <div className="lux-product-eyebrow">
@@ -1933,13 +1976,11 @@ function App() {
 
               </div>
 
-
               <h1 className="lux-product-title">
 
                 {selectedProduct.name}
 
               </h1>
-
 
               <div className="lux-rating-row">
 
@@ -1957,7 +1998,6 @@ function App() {
 
               </div>
 
-
               <div className="lux-price-row">
 
                 <span className="lux-current-price">
@@ -1968,7 +2008,6 @@ function App() {
                   )}
 
                 </span>
-
 
                 {selectedProduct.oldPrice >
                   selectedProduct.price && (
@@ -1983,7 +2022,6 @@ function App() {
                   </del>
 
                 )}
-
 
                 {selectedProduct.oldPrice >
                   selectedProduct.price && (
@@ -2007,7 +2045,6 @@ function App() {
 
               </div>
 
-
               <p className="lux-price-note">
 
                 Tax included · Free delivery
@@ -2015,9 +2052,7 @@ function App() {
 
               </p>
 
-
               <div className="lux-divider" />
-
 
               {selectedProduct.description && (
 
@@ -2030,11 +2065,6 @@ function App() {
                 </div>
 
               )}
-
-
-              {/* =================================================
-                  QUANTITY ONLY
-              ================================================= */}
 
               <div className="lux-quantity-section">
 
@@ -2085,18 +2115,15 @@ function App() {
 
               </div>
 
-
-              {/* =================================================
-                  PRODUCT BUTTONS
-              ================================================= */}
-
               <div className="lux-product-actions">
 
                 <button
                   type="button"
                   className="lux-add-button"
                   disabled={
-                    selectedProduct.stock <= 0
+                    Number(
+                      selectedProduct.stock || 0
+                    ) <= 0
                   }
                   onClick={() => {
 
@@ -2116,12 +2143,13 @@ function App() {
                   </span>
                 </button>
 
-
                 <button
                   type="button"
                   className="lux-buy-button"
                   disabled={
-                    selectedProduct.stock <= 0
+                    Number(
+                      selectedProduct.stock || 0
+                    ) <= 0
                   }
                   onClick={buyNow}
                 >
@@ -2129,11 +2157,6 @@ function App() {
                 </button>
 
               </div>
-
-
-              {/* =================================================
-                  SERVICES
-              ================================================= */}
 
               <div className="lux-service-list">
 
@@ -2158,7 +2181,6 @@ function App() {
 
                 </div>
 
-
                 <div className="lux-service-item">
 
                   <span>
@@ -2178,7 +2200,6 @@ function App() {
                   </div>
 
                 </div>
-
 
                 <div className="lux-service-item">
 
@@ -2201,11 +2222,6 @@ function App() {
                 </div>
 
               </div>
-
-
-              {/* =================================================
-                  DETAILS
-              ================================================= */}
 
               <div className="lux-details">
 
@@ -2240,7 +2256,6 @@ function App() {
 
                       </div>
 
-
                       <div>
 
                         <span>
@@ -2255,7 +2270,6 @@ function App() {
                         </strong>
 
                       </div>
-
 
                       <div>
 
@@ -2274,7 +2288,6 @@ function App() {
                   </div>
 
                 </details>
-
 
                 <details>
 
@@ -2301,7 +2314,6 @@ function App() {
 
                 </details>
 
-
                 <details>
 
                   <summary>
@@ -2325,11 +2337,6 @@ function App() {
 
               </div>
 
-
-              {/* =================================================
-                  PRODUCT REVIEWS
-              ================================================= */}
-
               <div className="lux-product-reviews">
 
                 <div className="lux-product-reviews-head">
@@ -2352,10 +2359,10 @@ function App() {
 
                 </div>
 
-
                 <div className="lux-product-review-card">
 
                   <div>
+
                     <strong>
                       Pooja Sharma
                     </strong>
@@ -2363,6 +2370,7 @@ function App() {
                     <span>
                       ★★★★★
                     </span>
+
                   </div>
 
                   <h3>
@@ -2390,10 +2398,7 @@ function App() {
 
       )}
 
-
-      {/* =====================================================
-          CART DRAWER
-      ===================================================== */}
+      {/* CART DRAWER */}
 
       {cartOpen && (
 
@@ -2439,7 +2444,6 @@ function App() {
               </button>
 
             </div>
-
 
             {cart.length === 0 ? (
 
@@ -2503,7 +2507,6 @@ function App() {
 
                           </div>
 
-
                           <div className="lux-cart-item-info">
 
                             <span>
@@ -2524,7 +2527,6 @@ function App() {
                                 "en-IN"
                               )}
                             </strong>
-
 
                             <div className="lux-cart-controls">
 
@@ -2581,7 +2583,6 @@ function App() {
 
                 </div>
 
-
                 <div className="lux-cart-summary">
 
                   <div>
@@ -2599,7 +2600,6 @@ function App() {
 
                   </div>
 
-
                   <div>
 
                     <span>
@@ -2613,7 +2613,6 @@ function App() {
                     </strong>
 
                   </div>
-
 
                   <div className="lux-total">
 
@@ -2629,7 +2628,6 @@ function App() {
                     </strong>
 
                   </div>
-
 
                   <button
                     type="button"
@@ -2654,10 +2652,7 @@ function App() {
 
       )}
 
-
-      {/* =====================================================
-          CHECKOUT
-      ===================================================== */}
+      {/* CHECKOUT */}
 
       {checkoutOpen && (
 
@@ -2684,7 +2679,6 @@ function App() {
               </button>
 
             </div>
-
 
             {orderPlaced ? (
 
@@ -2789,7 +2783,6 @@ function App() {
 
                 </div>
 
-
                 <div className="lux-checkout-progress">
 
                   <div className="active">
@@ -2830,15 +2823,10 @@ function App() {
 
                 </div>
 
-
                 <form
                   onSubmit={placeOrder}
                   className="lux-checkout-grid"
                 >
-
-                  {/* =================================================
-                      CUSTOMER FORM
-                  ================================================= */}
 
                   <div className="lux-customer-form">
 
@@ -2853,7 +2841,6 @@ function App() {
                       </h2>
 
                     </div>
-
 
                     <label>
 
@@ -2873,7 +2860,6 @@ function App() {
                       />
 
                     </label>
-
 
                     <div className="lux-form-row">
 
@@ -2906,12 +2892,12 @@ function App() {
 
                       </label>
 
-
                       <label>
 
                         EMAIL ADDRESS
 
                         <input
+                          required
                           type="email"
                           value={
                             customer.email
@@ -2929,7 +2915,6 @@ function App() {
                       </label>
 
                     </div>
-
 
                     <label>
 
@@ -2951,7 +2936,6 @@ function App() {
                       />
 
                     </label>
-
 
                     <div className="lux-form-row three">
 
@@ -2976,7 +2960,6 @@ function App() {
 
                       </label>
 
-
                       <label>
 
                         STATE
@@ -2997,7 +2980,6 @@ function App() {
                         />
 
                       </label>
-
 
                       <label>
 
@@ -3030,7 +3012,6 @@ function App() {
 
                     </div>
 
-
                     <div className="lux-checkout-note">
 
                       <span>
@@ -3047,11 +3028,6 @@ function App() {
 
                   </div>
 
-
-                  {/* =================================================
-                      ORDER SUMMARY
-                  ================================================= */}
-
                   <aside className="lux-order-summary">
 
                     <div className="lux-summary-heading">
@@ -3065,7 +3041,6 @@ function App() {
                       </h2>
 
                     </div>
-
 
                     <div className="lux-summary-products">
 
@@ -3101,7 +3076,6 @@ function App() {
 
                               </div>
 
-
                               <section>
 
                                 <span>
@@ -3114,7 +3088,6 @@ function App() {
                                 </h3>
 
                               </section>
-
 
                               <strong>
                                 ₹
@@ -3135,7 +3108,6 @@ function App() {
 
                     </div>
 
-
                     <div className="lux-summary-lines">
 
                       <div>
@@ -3153,7 +3125,6 @@ function App() {
 
                       </div>
 
-
                       <div>
 
                         <span>
@@ -3167,7 +3138,6 @@ function App() {
                         </strong>
 
                       </div>
-
 
                       <div className="lux-summary-grand">
 
@@ -3186,7 +3156,6 @@ function App() {
 
                     </div>
 
-
                     <button
                       type="submit"
                       className="lux-place-order"
@@ -3204,7 +3173,6 @@ function App() {
                       )}
 
                     </button>
-
 
                     <div className="lux-payment-trust">
 
@@ -3228,7 +3196,6 @@ function App() {
 
                     </div>
 
-
                     <div className="lux-accepted">
 
                       <span>
@@ -3236,6 +3203,7 @@ function App() {
                       </span>
 
                       <div>
+
                         <b>
                           UPI
                         </b>
@@ -3251,6 +3219,7 @@ function App() {
                         <b>
                           MC
                         </b>
+
                       </div>
 
                     </div>
