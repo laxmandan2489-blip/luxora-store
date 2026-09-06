@@ -10,6 +10,175 @@ const { createClient } = require("@supabase/supabase-js");
 
 dotenv.config();
 
+/* =====================================================
+   ADMIN AUTHENTICATION
+   ===================================================== */
+
+const ADMIN_EMAIL =
+  process.env.ADMIN_EMAIL;
+
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD;
+
+const ADMIN_JWT_SECRET =
+  process.env.ADMIN_JWT_SECRET;
+
+function createAdminToken() {
+  const payload = {
+    role: "admin",
+    email: ADMIN_EMAIL,
+    exp:
+      Date.now() +
+      8 * 60 * 60 * 1000
+  };
+
+  const encodedPayload =
+    Buffer.from(
+      JSON.stringify(payload)
+    ).toString("base64url");
+
+  const signature =
+    crypto
+      .createHmac(
+        "sha256",
+        ADMIN_JWT_SECRET
+      )
+      .update(
+        encodedPayload
+      )
+      .digest("base64url");
+
+  return (
+    encodedPayload +
+    "." +
+    signature
+  );
+}
+
+function verifyAdminToken(
+  token
+) {
+  try {
+    if (!token) {
+      return false;
+    }
+
+    const parts =
+      token.split(".");
+
+    if (
+      parts.length !== 2
+    ) {
+      return false;
+    }
+
+    const [
+      encodedPayload,
+      signature
+    ] = parts;
+
+    const expectedSignature =
+      crypto
+        .createHmac(
+          "sha256",
+          ADMIN_JWT_SECRET
+        )
+        .update(
+          encodedPayload
+        )
+        .digest("base64url");
+
+    if (
+      signature.length !==
+      expectedSignature.length
+    ) {
+      return false;
+    }
+
+    if (
+      !crypto.timingSafeEqual(
+        Buffer.from(
+          signature
+        ),
+        Buffer.from(
+          expectedSignature
+        )
+      )
+    ) {
+      return false;
+    }
+
+    const payload =
+      JSON.parse(
+        Buffer.from(
+          encodedPayload,
+          "base64url"
+        ).toString("utf8")
+      );
+
+    if (
+      payload.role !==
+      "admin"
+    ) {
+      return false;
+    }
+
+    if (
+      !payload.exp ||
+      payload.exp <
+        Date.now()
+    ) {
+      return false;
+    }
+
+    return payload;
+  } catch {
+    return false;
+  }
+}
+
+function requireAdmin(
+  req,
+  res,
+  next
+) {
+  const authHeader =
+    req.headers.authorization ||
+    "";
+
+  if (
+    !authHeader.startsWith(
+      "Bearer "
+    )
+  ) {
+    return res.status(401).json({
+      success: false,
+      message:
+        "Admin authentication required."
+    });
+  }
+
+  const token =
+    authHeader.slice(7);
+
+  const admin =
+    verifyAdminToken(
+      token
+    );
+
+  if (!admin) {
+    return res.status(401).json({
+      success: false,
+      message:
+        "Invalid or expired admin token."
+    });
+  }
+
+  req.admin = admin;
+
+  next();
+}
+
 const app = express();
 
 /* =====================================================
@@ -955,6 +1124,70 @@ app.get(
 );
 
 /* =====================================================
+   ADMIN LOGIN
+   ===================================================== */
+
+app.post(
+  "/api/admin/login",
+  (req, res) => {
+    try {
+      const {
+        email,
+        password
+      } = req.body || {};
+
+      if (
+        !ADMIN_EMAIL ||
+        !ADMIN_PASSWORD ||
+        !ADMIN_JWT_SECRET
+      ) {
+        return res.status(500).json({
+          success: false,
+          message:
+            "Admin authentication is not configured."
+        });
+      }
+
+      if (
+        email !== ADMIN_EMAIL ||
+        password !== ADMIN_PASSWORD
+      ) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Invalid admin email or password."
+        });
+      }
+
+      const token =
+        createAdminToken();
+
+      return res.json({
+        success: true,
+        token,
+        admin: {
+          email:
+            ADMIN_EMAIL,
+          role:
+            "admin"
+        }
+      });
+    } catch (error) {
+      console.error(
+        "Admin login error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Admin login failed."
+      });
+    }
+  }
+);
+
+/* =====================================================
    DATABASE HEALTH CHECK
    ===================================================== */
 
@@ -1133,8 +1366,16 @@ app.get(
    ADD PRODUCT
    ===================================================== */
 
+/*
+ * 🔐 ADMIN PROTECTED
+ *
+ * requireAdmin was added here.
+ * Everything else remains the same.
+ */
+
 app.post(
   "/api/products",
+  requireAdmin,
   upload.any(),
   async function (
     req,
@@ -1634,14 +1875,24 @@ async function updateProduct(
   }
 }
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.put(
   "/api/products/:id",
+  requireAdmin,
   upload.any(),
   updateProduct
 );
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.patch(
   "/api/products/:id",
+  requireAdmin,
   upload.any(),
   updateProduct
 );
@@ -1650,8 +1901,13 @@ app.patch(
    DELETE PRODUCT
    ===================================================== */
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.delete(
   "/api/products/:id",
+  requireAdmin,
   async function (
     req,
     res
@@ -1711,7 +1967,10 @@ app.delete(
             updated_at:
               new Date().toISOString()
           })
-          .eq("id", id);
+          .eq(
+            "id",
+            id
+          );
 
       if (error) {
         throw error;
@@ -2163,7 +2422,7 @@ app.post(
 
         if (
           a.length !==
-          b.length ||
+            b.length ||
           !crypto.timingSafeEqual(
             a,
             b
@@ -2749,8 +3008,13 @@ app.post(
    GET ALL ORDERS
    ===================================================== */
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.get(
   "/api/orders",
+  requireAdmin,
   async function (
     req,
     res
@@ -2924,8 +3188,13 @@ app.get(
    GET SINGLE ORDER
    ===================================================== */
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.get(
   "/api/orders/:id",
+  requireAdmin,
   async function (
     req,
     res
@@ -3289,23 +3558,51 @@ async function updateOrder(
   }
 }
 
+/* =====================================================
+   UPDATE ORDER STATUS
+   ===================================================== */
+
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.put(
   "/api/orders/:id/status",
+  requireAdmin,
   updateOrder
 );
+
+/*
+ * 🔐 ADMIN PROTECTED
+ */
 
 app.patch(
   "/api/orders/:id/status",
+  requireAdmin,
   updateOrder
 );
+
+/* =====================================================
+   UPDATE ORDER
+   ===================================================== */
+
+/*
+ * 🔐 ADMIN PROTECTED
+ */
 
 app.put(
   "/api/orders/:id",
+  requireAdmin,
   updateOrder
 );
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.patch(
   "/api/orders/:id",
+  requireAdmin,
   updateOrder
 );
 
@@ -3313,8 +3610,13 @@ app.patch(
    DELETE ORDER
    ===================================================== */
 
+/*
+ * 🔐 ADMIN PROTECTED
+ */
+
 app.delete(
   "/api/orders/:id",
+  requireAdmin,
   async function (
     req,
     res
