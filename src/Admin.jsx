@@ -1,4 +1,3 @@
-jsx
 import { useEffect, useState } from "react";
 
 const API = "https://luxora-store-mkva.onrender.com";
