@@ -821,16 +821,25 @@ app.post("/api/orders", async function (req, res) {
       .single();
     if (orderError) throw orderError;
 
+    /*
+     * IMPORTANT: this must match the ACTUAL columns in the
+     * Supabase "order_items" table, which are:
+     *   id, order_id, product_id, product_name, product_image,
+     *   price, quantity, color, created_at
+     * (there is no "product_price" / "selected_color" /
+     * "line_total" column - using those names caused every order
+     * to fail to save with a "column does not exist" error.
+     * line_total is calculated on read instead, from price * quantity.)
+     */
     const orderItems = cart.items.map(function (item) {
       return {
         order_id: order.id,
         product_id: item.productId,
         product_name: item.name,
-        product_price: item.price,
+        price: item.price,
         quantity: item.quantity,
-        selected_color: item.selectedColor,
-        product_image: item.image,
-        line_total: item.lineTotal
+        color: item.selectedColor,
+        product_image: item.image
       };
     });
 
@@ -939,7 +948,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
     for (const item of orderItems) {
       const key = String(item.order_id);
       if (!itemsByOrder.has(key)) itemsByOrder.set(key, []);
-      const price = safeNumber(item.product_price);
+      const price = safeNumber(item.price);
       const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
       const lineTotal = safeNumber(item.line_total, price * quantity);
       itemsByOrder.get(key).push({
@@ -947,7 +956,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
         name: item.product_name || "Product",
         price,
         quantity,
-        selectedColor: item.selected_color || "",
+        selectedColor: item.color || "",
         image: item.product_image || "",
         lineTotal
       });
@@ -1035,14 +1044,14 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
     if (itemsError) throw itemsError;
 
     const formattedItems = (Array.isArray(items) ? items : []).map(function (item) {
-      const price = safeNumber(item.product_price);
+      const price = safeNumber(item.price);
       const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
       return {
         id: item.product_id,
         name: item.product_name || "Product",
         price,
         quantity,
-        selectedColor: item.selected_color || "",
+        selectedColor: item.color || "",
         image: item.product_image || "",
         lineTotal: safeNumber(item.line_total, price * quantity)
       };
