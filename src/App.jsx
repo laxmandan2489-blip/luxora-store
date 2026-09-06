@@ -12,7 +12,7 @@ const API = "https://luxora-store-mkva.onrender.com";
  * the wa.me link for the floating WhatsApp button.
  */
 const SUPPORT_EMAIL = "getluxorastore@gmail.com";
-const WHATSAPP_NUMBER = "911234567890"; // TODO: replace with your real WhatsApp business number
+const WHATSAPP_NUMBER = "9461515979"; // TODO: replace with your real WhatsApp business number
 
 /*
  * TRUST / INFO PAGES
