@@ -1,24 +1,4 @@
-﻿
-/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-Server · JS
-const express = require("express");
+﻿const express = require("express");
 const cors = require("cors");
 const Razorpay = require("razorpay");
 const crypto = require("crypto");
@@ -27,20 +7,20 @@ const path = require("path");
 const fs = require("fs");
 const dotenv = require("dotenv");
 const { createClient } = require("@supabase/supabase-js");
- 
+
 dotenv.config();
- 
+
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 const ADMIN_JWT_SECRET = process.env.ADMIN_JWT_SECRET;
- 
+
 function createAdminToken() {
   const payload = { role: "admin", email: ADMIN_EMAIL, exp: Date.now() + 8 * 60 * 60 * 1000 };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const signature = crypto.createHmac("sha256", ADMIN_JWT_SECRET).update(encodedPayload).digest("base64url");
   return encodedPayload + "." + signature;
 }
- 
+
 function verifyAdminToken(token) {
   try {
     if (!token) return false;
@@ -58,7 +38,7 @@ function verifyAdminToken(token) {
     return false;
   }
 }
- 
+
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization || "";
   if (!authHeader.startsWith("Bearer ")) {
@@ -72,46 +52,46 @@ function requireAdmin(req, res, next) {
   req.admin = admin;
   next();
 }
- 
+
 const app = express();
- 
+
 const PORT = process.env.PORT || 5000;
 const HOST = "0.0.0.0";
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
 const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
- 
+
 const requiredEnv = [
   ["SUPABASE_URL", SUPABASE_URL],
   ["SUPABASE_SECRET_KEY", SUPABASE_SECRET_KEY],
   ["RAZORPAY_KEY_ID", RAZORPAY_KEY_ID],
   ["RAZORPAY_KEY_SECRET", RAZORPAY_KEY_SECRET]
 ];
- 
+
 const missingEnv = requiredEnv.filter(([, value]) => !value).map(([name]) => name);
 if (missingEnv.length > 0) {
   console.error("❌ Missing environment variables:", missingEnv.join(", "));
 }
- 
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
   auth: { autoRefreshToken: false, persistSession: false }
 });
- 
+
 const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
   ? new Razorpay({ key_id: RAZORPAY_KEY_ID, key_secret: RAZORPAY_KEY_SECRET })
   : null;
- 
+
 const ORDER_STATUSES = ["Received", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
 const PAYMENT_STATUSES = ["Pending", "Paid", "Failed", "Refunded"];
 const PAYMENT_METHODS = ["Razorpay", "COD"];
 const STORAGE_BUCKET = "product-images";
- 
+
 const allowedOrigins = [
   "https://luxora-store-phi.vercel.app",
   "https://luxora-store-mkva.onrender.com"
 ];
- 
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -125,15 +105,15 @@ app.use(
     credentials: true
   })
 );
- 
+
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
- 
+
 const DATA_DIR = path.join(__dirname, "data");
 const UPLOADS_DIR = path.join(__dirname, "uploads");
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
- 
+
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
@@ -143,23 +123,23 @@ const upload = multer({
     else cb(new Error("Only image files are allowed."));
   }
 });
- 
+
 function safeNumber(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
 }
- 
+
 function uniqueImages(images) {
   if (!Array.isArray(images)) return [];
   return [...new Set(images.filter(Boolean))];
 }
- 
+
 function normalizeColors(colors) {
   if (Array.isArray(colors)) return colors.map((color) => String(color).trim()).filter(Boolean);
   if (typeof colors === "string") return colors.split(",").map((color) => color.trim()).filter(Boolean);
   return [];
 }
- 
+
 function normalizeImages(images) {
   if (Array.isArray(images)) return uniqueImages(images);
   if (typeof images === "string" && images.trim()) {
@@ -172,7 +152,7 @@ function normalizeImages(images) {
   }
   return [];
 }
- 
+
 function getStoragePathFromUrl(imageUrl) {
   if (!imageUrl || typeof imageUrl !== "string") return null;
   const marker = `/storage/v1/object/public/${STORAGE_BUCKET}/`;
@@ -180,31 +160,31 @@ function getStoragePathFromUrl(imageUrl) {
   if (index === -1) return null;
   return imageUrl.slice(index + marker.length).split("?")[0];
 }
- 
+
 async function uploadImage(file) {
   const extension = path.extname(file.originalname || "") || ".jpg";
   const originalName = path.basename(file.originalname || "product", extension);
   const safeName = originalName.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
   const filename = `${Date.now()}-${Math.round(Math.random() * 1000000)}-${safeName || "product"}${extension}`;
   const storagePath = `products/${filename}`;
- 
+
   const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file.buffer, {
     contentType: file.mimetype,
     upsert: true
   });
   if (error) throw error;
- 
+
   const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
   return data.publicUrl;
 }
- 
+
 async function deleteStorageImages(images) {
   const paths = uniqueImages(images).map(getStoragePathFromUrl).filter(Boolean);
   if (!paths.length) return;
   const { error } = await supabase.storage.from(STORAGE_BUCKET).remove(paths);
   if (error) console.error("STORAGE DELETE ERROR:", error);
 }
- 
+
 function formatProduct(product) {
   if (!product) return null;
   const images = normalizeImages(product.images);
@@ -225,10 +205,10 @@ function formatProduct(product) {
     active: product.active !== false
   };
 }
- 
+
 function formatOrder(order) {
   if (!order) return null;
- 
+
   let customer = order.customer || null;
   if (typeof customer === "string") {
     try {
@@ -237,7 +217,7 @@ function formatOrder(order) {
       customer = null;
     }
   }
- 
+
   return {
     id: order.id,
     orderId: order.order_id || order.orderId || "",
@@ -259,7 +239,7 @@ function formatOrder(order) {
     updatedAt: order.updated_at || order.updatedAt || null
   };
 }
- 
+
 function validateCustomer(customer) {
   if (!customer || typeof customer !== "object") return "Customer details are required.";
   const required = ["name", "mobile", "email", "address", "city", "state", "pincode"];
@@ -272,48 +252,48 @@ function validateCustomer(customer) {
   if (!/^[0-9]{6}$/.test(pincode)) return "Please enter a valid 6 digit pincode.";
   return null;
 }
- 
+
 async function calculateCart(items) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Cart is empty.");
- 
+
   const normalizedItems = items.map(function (item) {
     return { id: Number(item.id), quantity: Math.floor(Number(item.quantity)) };
   });
- 
+
   for (const item of normalizedItems) {
     if (!Number.isFinite(item.id) || item.id <= 0) throw new Error("Invalid product ID.");
     if (!Number.isFinite(item.quantity) || item.quantity <= 0) throw new Error("Invalid product quantity.");
   }
- 
+
   const productIds = [...new Set(normalizedItems.map((item) => item.id))];
- 
+
   const { data: products, error } = await supabase.from("products").select("*").in("id", productIds);
   if (error) throw error;
   if (!Array.isArray(products)) throw new Error("Unable to load products.");
- 
+
   const productMap = new Map(products.map((product) => [String(product.id), product]));
- 
+
   const cartItems = [];
   let subtotal = 0;
- 
+
   for (const requestedItem of normalizedItems) {
     const product = productMap.get(String(requestedItem.id));
     if (!product) throw new Error(`Product ${requestedItem.id} not found.`);
     if (product.active === false) throw new Error(`${product.name} is no longer available.`);
- 
+
     const stock = Math.max(0, Math.floor(safeNumber(product.stock)));
     if (stock < requestedItem.quantity) {
       throw new Error(`${product.name} has only ${stock} item(s) left in stock.`);
     }
- 
+
     const price = safeNumber(product.price);
     if (price <= 0) throw new Error(`${product.name} has an invalid price.`);
- 
+
     const lineTotal = price * requestedItem.quantity;
     subtotal += lineTotal;
- 
+
     const images = normalizeImages(product.images);
- 
+
     cartItems.push({
       productId: product.id,
       name: product.name,
@@ -324,16 +304,16 @@ async function calculateCart(items) {
       lineTotal
     });
   }
- 
+
   const discount = 0;
   const delivery = 0;
   const total = subtotal + delivery - discount;
- 
+
   if (!Number.isFinite(total) || total <= 0) throw new Error("Order total must be greater than zero.");
- 
+
   return { items: cartItems, subtotal, delivery, discount, total };
 }
- 
+
 app.get("/", function (req, res) {
   res.json({
     success: true,
@@ -344,7 +324,7 @@ app.get("/", function (req, res) {
     port: PORT
   });
 });
- 
+
 app.post("/api/admin/login", (req, res) => {
   try {
     const { email, password } = req.body || {};
@@ -361,7 +341,7 @@ app.post("/api/admin/login", (req, res) => {
     return res.status(500).json({ success: false, message: "Admin login failed." });
   }
 });
- 
+
 app.get("/api/health", async function (req, res) {
   try {
     const { error } = await supabase.from("products").select("id").limit(1);
@@ -377,7 +357,7 @@ app.get("/api/health", async function (req, res) {
     return res.status(500).json({ success: false, message: "Database connection failed." });
   }
 });
- 
+
 app.get("/api/products", async function (req, res) {
   try {
     const { data, error } = await supabase
@@ -392,7 +372,7 @@ app.get("/api/products", async function (req, res) {
     return res.status(500).json({ success: false, message: "Unable to load products." });
   }
 });
- 
+
 app.get("/api/products/:id", async function (req, res) {
   try {
     const id = Number(req.params.id);
@@ -408,7 +388,7 @@ app.get("/api/products/:id", async function (req, res) {
     return res.status(500).json({ success: false, message: "Unable to load product." });
   }
 });
- 
+
 app.post("/api/products", requireAdmin, upload.any(), async function (req, res) {
   const uploadedUrls = [];
   try {
@@ -420,24 +400,24 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     const stock = Math.max(0, Math.floor(safeNumber(body.stock)));
     const description = String(body.description || "");
     const colors = normalizeColors(body.colors);
- 
+
     if (!name) return res.status(400).json({ success: false, message: "Product name is required." });
     if (!Number.isFinite(price) || price <= 0) {
       return res.status(400).json({ success: false, message: "Valid product price is required." });
     }
- 
+
     const files = Array.isArray(req.files) ? req.files : [];
     if (files.length === 0) {
       return res.status(400).json({ success: false, message: "Please upload at least one product image." });
     }
- 
+
     for (const file of files) {
       const url = await uploadImage(file);
       uploadedUrls.push(url);
     }
- 
+
     const productId = Date.now();
- 
+
     const { data, error } = await supabase
       .from("products")
       .insert({
@@ -454,9 +434,9 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       })
       .select()
       .single();
- 
+
     if (error) throw error;
- 
+
     return res.status(201).json({ success: true, message: "Product added successfully.", product: formatProduct(data) });
   } catch (error) {
     console.error("ADD PRODUCT ERROR:", error);
@@ -464,7 +444,7 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     return res.status(500).json({ success: false, message: error.message || "Unable to add product." });
   }
 });
- 
+
 async function updateProduct(req, res) {
   const newUploadedUrls = [];
   try {
@@ -472,7 +452,7 @@ async function updateProduct(req, res) {
     if (!Number.isFinite(id)) {
       return res.status(400).json({ success: false, message: "Invalid product ID." });
     }
- 
+
     const { data: existing, error: existingError } = await supabase
       .from("products")
       .select("*")
@@ -480,18 +460,18 @@ async function updateProduct(req, res) {
       .maybeSingle();
     if (existingError) throw existingError;
     if (!existing) return res.status(404).json({ success: false, message: "Product not found." });
- 
+
     const body = req.body || {};
     const updateData = {};
- 
+
     if (body.name !== undefined) {
       const name = String(body.name).trim();
       if (!name) return res.status(400).json({ success: false, message: "Product name cannot be empty." });
       updateData.name = name;
     }
- 
+
     if (body.category !== undefined) updateData.category = String(body.category).trim();
- 
+
     if (body.price !== undefined) {
       const price = safeNumber(body.price);
       if (price <= 0) {
@@ -499,19 +479,19 @@ async function updateProduct(req, res) {
       }
       updateData.price = price;
     }
- 
+
     if (body.oldPrice !== undefined || body.old_price !== undefined) {
       updateData.old_price = safeNumber(body.oldPrice ?? body.old_price);
     }
- 
+
     if (body.stock !== undefined) {
       updateData.stock = Math.max(0, Math.floor(safeNumber(body.stock)));
     }
- 
+
     if (body.description !== undefined) updateData.description = String(body.description);
- 
+
     if (body.colors !== undefined) updateData.colors = normalizeColors(body.colors);
- 
+
     if (body.active !== undefined) {
       if (typeof body.active === "string") {
         updateData.active = body.active.toLowerCase() === "true";
@@ -519,10 +499,10 @@ async function updateProduct(req, res) {
         updateData.active = Boolean(body.active);
       }
     }
- 
+
     const files = Array.isArray(req.files) ? req.files : [];
     let oldImages = [];
- 
+
     if (files.length > 0) {
       oldImages = normalizeImages(existing.images);
       for (const file of files) {
@@ -531,9 +511,9 @@ async function updateProduct(req, res) {
       }
       updateData.images = uniqueImages(newUploadedUrls);
     }
- 
+
     updateData.updated_at = new Date().toISOString();
- 
+
     const { data, error } = await supabase
       .from("products")
       .update(updateData)
@@ -541,11 +521,11 @@ async function updateProduct(req, res) {
       .select()
       .single();
     if (error) throw error;
- 
+
     if (files.length > 0 && oldImages.length) {
       await deleteStorageImages(oldImages);
     }
- 
+
     return res.json({ success: true, message: "Product updated successfully.", product: formatProduct(data) });
   } catch (error) {
     console.error("UPDATE PRODUCT ERROR:", error);
@@ -553,17 +533,17 @@ async function updateProduct(req, res) {
     return res.status(500).json({ success: false, message: error.message || "Unable to update product." });
   }
 }
- 
+
 app.put("/api/products/:id", requireAdmin, upload.any(), updateProduct);
 app.patch("/api/products/:id", requireAdmin, upload.any(), updateProduct);
- 
+
 app.delete("/api/products/:id", requireAdmin, async function (req, res) {
   try {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
       return res.status(400).json({ success: false, message: "Invalid product ID." });
     }
- 
+
     const { data: product, error: productError } = await supabase
       .from("products")
       .select("*")
@@ -571,36 +551,36 @@ app.delete("/api/products/:id", requireAdmin, async function (req, res) {
       .maybeSingle();
     if (productError) throw productError;
     if (!product) return res.status(404).json({ success: false, message: "Product not found." });
- 
+
     const { error } = await supabase
       .from("products")
       .update({ active: false, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw error;
- 
+
     return res.json({ success: true, message: "Product deleted successfully." });
   } catch (error) {
     console.error("DELETE PRODUCT ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to delete product." });
   }
 });
- 
+
 app.post("/api/create-order", async function (req, res) {
   try {
     if (!razorpay) {
       return res.status(500).json({ success: false, message: "Razorpay is not configured on the server." });
     }
- 
+
     const items = req.body?.items;
     const cart = await calculateCart(items);
     const amountPaise = Math.round(cart.total * 100);
- 
+
     if (!Number.isInteger(amountPaise) || amountPaise < 100) {
       return res.status(400).json({ success: false, message: "Order amount must be at least ₹1." });
     }
- 
+
     const receipt = `LUXORA_${Date.now()}`;
- 
+
     console.log("RAZORPAY CREATE:", {
       subtotal: cart.subtotal,
       delivery: cart.delivery,
@@ -608,9 +588,9 @@ app.post("/api/create-order", async function (req, res) {
       total: cart.total,
       amountPaise
     });
- 
+
     const razorpayOrder = await razorpay.orders.create({ amount: amountPaise, currency: "INR", receipt });
- 
+
     return res.json({
       success: true,
       order_id: razorpayOrder.id,
@@ -629,26 +609,26 @@ app.post("/api/create-order", async function (req, res) {
     });
   }
 });
- 
+
 app.post("/api/verify-payment", async function (req, res) {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
- 
+
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
       return res.status(400).json({ success: false, message: "Missing payment verification fields." });
     }
- 
+
     if (!RAZORPAY_KEY_SECRET) {
       return res.status(500).json({ success: false, message: "Razorpay secret key is not configured on the server." });
     }
- 
+
     const { data: existingPayment, error: existingPaymentError } = await supabase
       .from("payments")
       .select("id")
       .eq("payment_id", razorpay_payment_id)
       .maybeSingle();
     if (existingPaymentError) console.error("PAYMENT LOOKUP ERROR:", existingPaymentError);
- 
+
     if (existingPayment) {
       return res.json({
         success: true,
@@ -658,26 +638,26 @@ app.post("/api/verify-payment", async function (req, res) {
         alreadyVerified: true
       });
     }
- 
+
     const generatedSignature = crypto
       .createHmac("sha256", RAZORPAY_KEY_SECRET)
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
- 
+
     const expectedBuffer = Buffer.from(generatedSignature, "utf8");
     const receivedBuffer = Buffer.from(razorpay_signature, "utf8");
- 
+
     if (expectedBuffer.length !== receivedBuffer.length) {
       return res.status(400).json({ success: false, message: "Payment signature verification failed." });
     }
- 
+
     const valid = crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
     if (!valid) {
       return res.status(400).json({ success: false, message: "Payment signature verification failed." });
     }
- 
+
     console.log("RAZORPAY PAYMENT VERIFIED:", razorpay_payment_id);
- 
+
     return res.json({
       success: true,
       message: "Payment verified successfully.",
@@ -689,62 +669,62 @@ app.post("/api/verify-payment", async function (req, res) {
     return res.status(500).json({ success: false, message: "Unable to verify payment." });
   }
 });
- 
+
 app.post("/api/orders", async function (req, res) {
   try {
     const body = req.body || {};
     const customer = body.customer;
     const customerError = validateCustomer(customer);
     if (customerError) return res.status(400).json({ success: false, message: customerError });
- 
+
     const items = body.items;
     const payment = body.payment || {};
     const paymentMethod = payment.method || "Razorpay";
- 
+
     if (!PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ success: false, message: "Invalid payment method." });
     }
- 
+
     const cart = await calculateCart(items);
     let paymentStatus = "Pending";
- 
+
     if (paymentMethod === "Razorpay") {
       const razorpayOrderId = payment.razorpayOrderId || payment.razorpay_order_id;
       const razorpayPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id;
       const razorpaySignature = payment.razorpaySignature || payment.razorpay_signature;
- 
+
       if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
         return res.status(400).json({ success: false, message: "Razorpay payment details are required." });
       }
- 
+
       const generatedSignature = crypto
         .createHmac("sha256", RAZORPAY_KEY_SECRET)
         .update(`${razorpayOrderId}|${razorpayPaymentId}`)
         .digest("hex");
- 
+
       const a = Buffer.from(generatedSignature, "utf8");
       const b = Buffer.from(razorpaySignature, "utf8");
- 
+
       if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
         return res.status(400).json({ success: false, message: "Payment verification failed." });
       }
- 
+
       const { data: duplicatePayment, error: duplicatePaymentError } = await supabase
         .from("payments")
         .select("id, order_id")
         .eq("payment_id", razorpayPaymentId)
         .maybeSingle();
       if (duplicatePaymentError) throw duplicatePaymentError;
- 
+
       if (duplicatePayment) {
         return res.status(409).json({ success: false, message: "This payment has already been used for an order." });
       }
- 
+
       paymentStatus = "Paid";
     }
- 
+
     if (paymentMethod === "COD") paymentStatus = "Pending";
- 
+
     const cleanCustomer = {
       name: String(customer.name).trim(),
       mobile: String(customer.mobile).replace(/\D/g, ""),
@@ -754,16 +734,16 @@ app.post("/api/orders", async function (req, res) {
       state: String(customer.state).trim(),
       pincode: String(customer.pincode).replace(/\D/g, "")
     };
- 
+
     let customerRecord = null;
- 
+
     const { data: existingCustomer, error: customerLookupError } = await supabase
       .from("customers")
       .select("*")
       .eq("email", cleanCustomer.email)
       .maybeSingle();
     if (customerLookupError) throw customerLookupError;
- 
+
     if (existingCustomer) {
       const { data: updatedCustomer, error: updateCustomerError } = await supabase
         .from("customers")
@@ -798,9 +778,9 @@ app.post("/api/orders", async function (req, res) {
       if (createCustomerError) throw createCustomerError;
       customerRecord = newCustomer;
     }
- 
+
     const orderReference = `LUX-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
- 
+
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
@@ -820,7 +800,7 @@ app.post("/api/orders", async function (req, res) {
       .select()
       .single();
     if (orderError) throw orderError;
- 
+
     const orderItems = cart.items.map(function (item) {
       return {
         order_id: order.id,
@@ -833,20 +813,20 @@ app.post("/api/orders", async function (req, res) {
         line_total: item.lineTotal
       };
     });
- 
+
     const { error: orderItemsError } = await supabase.from("order_items").insert(orderItems);
     if (orderItemsError) throw orderItemsError;
- 
+
     const razorpayOrderId = payment.razorpayOrderId || payment.razorpay_order_id || null;
     const razorpayPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id || null;
- 
+
     /*
      * IMPORTANT: this must match the ACTUAL columns in the
      * Supabase "payments" table, which are:
      *   order_id, provider, payment_id, order_id_external,
      *   amount, currency, status, method
      * (there is no razorpay_order_id / razorpay_payment_id /
-     * razorpay_signature column — using those names caused
+     * razorpay_signature column - using those names caused
      * every order to fail to save with a "column does not
      * exist" error.)
      */
@@ -861,7 +841,7 @@ app.post("/api/orders", async function (req, res) {
       order_id_external: razorpayOrderId
     });
     if (paymentError) throw paymentError;
- 
+
     for (const item of cart.items) {
       const { data: currentProduct, error: stockReadError } = await supabase
         .from("products")
@@ -870,12 +850,12 @@ app.post("/api/orders", async function (req, res) {
         .maybeSingle();
       if (stockReadError) throw stockReadError;
       if (!currentProduct) throw new Error(`Product ${item.productId} no longer exists.`);
- 
+
       const currentStock = Math.floor(safeNumber(currentProduct.stock));
       if (currentStock < item.quantity) {
         throw new Error(`${currentProduct.name} is no longer available in the requested quantity.`);
       }
- 
+
       const { error: stockUpdateError } = await supabase
         .from("products")
         .update({ stock: currentStock - item.quantity, updated_at: new Date().toISOString() })
@@ -883,12 +863,12 @@ app.post("/api/orders", async function (req, res) {
         .eq("stock", currentStock);
       if (stockUpdateError) throw stockUpdateError;
     }
- 
+
     const { error: historyError } = await supabase
       .from("order_status_history")
       .insert({ order_id: order.id, status: "Received" });
     if (historyError) console.error("STATUS HISTORY ERROR:", historyError);
- 
+
     return res.status(201).json({
       success: true,
       message: "Order placed successfully.",
@@ -913,7 +893,7 @@ app.post("/api/orders", async function (req, res) {
     return res.status(500).json({ success: false, message: error.message || "Unable to create order." });
   }
 });
- 
+
 app.get("/api/orders", requireAdmin, async function (req, res) {
   try {
     const { data: orders, error } = await supabase
@@ -921,14 +901,14 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) throw error;
- 
+
     if (!Array.isArray(orders) || orders.length === 0) {
       return res.json({ success: true, orders: [] });
     }
- 
+
     const orderIds = orders.map((order) => order.id);
     let orderItems = [];
- 
+
     if (orderIds.length) {
       const { data: items, error: itemsError } = await supabase
         .from("order_items")
@@ -937,7 +917,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
       if (itemsError) throw itemsError;
       orderItems = Array.isArray(items) ? items : [];
     }
- 
+
     const itemsByOrder = new Map();
     for (const item of orderItems) {
       const key = String(item.order_id);
@@ -955,7 +935,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
         lineTotal
       });
     }
- 
+
     /*
      * Fallback: load customers by customer_id, in case order.customer
      * is missing on some older rows.
@@ -963,7 +943,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
     const customerIds = [
       ...new Set(orders.map((order) => order.customer_id).filter(Boolean).map((id) => String(id)))
     ];
- 
+
     let customersById = new Map();
     if (customerIds.length) {
       const { data: customerData, error: customerError } = await supabase
@@ -975,10 +955,10 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
         customersById.set(String(customer.id), customer);
       }
     }
- 
+
     const formatted = orders.map(function (order) {
       const items = itemsByOrder.get(String(order.id)) || [];
- 
+
       let customer = order.customer;
       if (typeof customer === "string") {
         try {
@@ -987,19 +967,19 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
           customer = null;
         }
       }
- 
+
       const customerFromDb = customersById.get(String(order.customer_id)) || null;
       if (customerFromDb) {
         customer = { ...customerFromDb, ...(customer || {}) };
       }
- 
+
       const calculatedTotal = items.reduce((sum, item) => sum + safeNumber(item.lineTotal), 0);
       const storedTotal = safeNumber(order.total);
       const finalTotal = storedTotal > 0 ? storedTotal : calculatedTotal;
- 
+
       const storedSubtotal = safeNumber(order.subtotal);
       const finalSubtotal = storedSubtotal > 0 ? storedSubtotal : calculatedTotal;
- 
+
       return formatOrder({
         ...order,
         customer: customer || null,
@@ -1008,35 +988,35 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
         total: finalTotal
       });
     });
- 
+
     return res.json({ success: true, orders: formatted });
   } catch (error) {
     console.error("GET ORDERS ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to load orders." });
   }
 });
- 
+
 app.get("/api/orders/:id", requireAdmin, async function (req, res) {
   try {
     const identifier = String(req.params.id);
     let query = supabase.from("orders").select("*");
- 
+
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
       query = query.eq("order_reference", identifier);
     }
- 
+
     const { data: order, error } = await query.maybeSingle();
     if (error) throw error;
     if (!order) return res.status(404).json({ success: false, message: "Order not found." });
- 
+
     const { data: items, error: itemsError } = await supabase
       .from("order_items")
       .select("*")
       .eq("order_id", order.id);
     if (itemsError) throw itemsError;
- 
+
     const formattedItems = (Array.isArray(items) ? items : []).map(function (item) {
       const price = safeNumber(item.product_price);
       const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
@@ -1050,7 +1030,7 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
         lineTotal: safeNumber(item.line_total, price * quantity)
       };
     });
- 
+
     /*
      * Fallback: merge customer from the customers table
      * in case order.customer is missing.
@@ -1063,7 +1043,7 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
         customer = null;
       }
     }
- 
+
     if (order.customer_id) {
       const { data: customerData, error: customerError } = await supabase
         .from("customers")
@@ -1075,13 +1055,13 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
         customer = { ...customerData, ...(customer || {}) };
       }
     }
- 
+
     const calculatedTotal = formattedItems.reduce((sum, item) => sum + safeNumber(item.lineTotal), 0);
     const storedTotal = safeNumber(order.total);
     const finalTotal = storedTotal > 0 ? storedTotal : calculatedTotal;
     const storedSubtotal = safeNumber(order.subtotal);
     const finalSubtotal = storedSubtotal > 0 ? storedSubtotal : calculatedTotal;
- 
+
     return res.json({
       success: true,
       order: formatOrder({
@@ -1097,40 +1077,40 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
     return res.status(500).json({ success: false, message: error.message || "Unable to load order." });
   }
 });
- 
+
 async function updateOrder(req, res) {
   try {
     const identifier = String(req.params.id);
     const body = req.body || {};
     const status = body.status || body.orderStatus;
     const paymentStatus = body.paymentStatus;
- 
+
     if (status && !ORDER_STATUSES.includes(String(status))) {
       return res.status(400).json({ success: false, message: "Invalid order status." });
     }
- 
+
     if (paymentStatus && !PAYMENT_STATUSES.includes(String(paymentStatus))) {
       return res.status(400).json({ success: false, message: "Invalid payment status." });
     }
- 
+
     let query = supabase.from("orders").select("*");
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
       query = query.eq("order_reference", identifier);
     }
- 
+
     const { data: existing, error: findError } = await query.maybeSingle();
     if (findError) throw findError;
     if (!existing) return res.status(404).json({ success: false, message: "Order not found." });
- 
+
     const updateData = { updated_at: new Date().toISOString() };
     if (status) updateData.status = String(status);
     if (paymentStatus) updateData.payment_status = String(paymentStatus);
     if (body.courierName !== undefined) updateData.courier_name = String(body.courierName);
     if (body.trackingNumber !== undefined) updateData.tracking_number = String(body.trackingNumber);
     if (body.trackingUrl !== undefined) updateData.tracking_url = String(body.trackingUrl);
- 
+
     const { data: updated, error } = await supabase
       .from("orders")
       .update(updateData)
@@ -1138,72 +1118,72 @@ async function updateOrder(req, res) {
       .select()
       .single();
     if (error) throw error;
- 
+
     if (status) {
       const { error: historyError } = await supabase
         .from("order_status_history")
         .insert({ order_id: existing.id, status: String(status) });
       if (historyError) console.error("STATUS HISTORY ERROR:", historyError);
     }
- 
+
     return res.json({ success: true, message: "Order updated successfully.", order: formatOrder(updated) });
   } catch (error) {
     console.error("UPDATE ORDER ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to update order." });
   }
 }
- 
+
 app.put("/api/orders/:id/status", requireAdmin, updateOrder);
 app.patch("/api/orders/:id/status", requireAdmin, updateOrder);
 app.put("/api/orders/:id", requireAdmin, updateOrder);
 app.patch("/api/orders/:id", requireAdmin, updateOrder);
- 
+
 app.delete("/api/orders/:id", requireAdmin, async function (req, res) {
   try {
     const identifier = String(req.params.id);
     let query = supabase.from("orders").select("id");
- 
+
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
       query = query.eq("order_reference", identifier);
     }
- 
+
     const { data: order, error: findError } = await query.maybeSingle();
     if (findError) throw findError;
     if (!order) return res.status(404).json({ success: false, message: "Order not found." });
- 
+
     const { error } = await supabase
       .from("orders")
       .update({ status: "Cancelled", updated_at: new Date().toISOString() })
       .eq("id", order.id);
     if (error) throw error;
- 
+
     return res.json({ success: true, message: "Order cancelled successfully." });
   } catch (error) {
     console.error("DELETE ORDER ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to cancel order." });
   }
 });
- 
+
 app.use(function (error, req, res, next) {
   console.error("SERVER ERROR:", error);
- 
+
   if (error instanceof multer.MulterError) {
     return res.status(400).json({ success: false, message: "Upload error: " + error.message });
   }
- 
+
   if (error) {
     return res.status(400).json({ success: false, message: error.message || "Server error." });
   }
- 
+
   next();
 });
- 
+
 app.use(function (req, res) {
   res.status(404).json({ success: false, message: "API route not found.", path: req.originalUrl });
 });
- 
+
 app.listen(PORT, HOST, async function () {
   console.log("");
   console.log("========================================");
@@ -1220,7 +1200,7 @@ app.listen(PORT, HOST, async function () {
   console.log("Health: /api/health");
   console.log("========================================");
   console.log("");
- 
+
   try {
     const { error } = await supabase.from("products").select("id").limit(1);
     if (error) {
@@ -1231,7 +1211,7 @@ app.listen(PORT, HOST, async function () {
   } catch (error) {
     console.error("❌ SUPABASE TEST ERROR:", error.message);
   }
- 
+
   try {
     const { data, error } = await supabase.storage.listBuckets();
     if (error) {
@@ -1243,10 +1223,6 @@ app.listen(PORT, HOST, async function () {
   } catch (error) {
     console.error("❌ STORAGE TEST ERROR:", error.message);
   }
- 
+
   console.log("");
 });
- 
-
-
-
