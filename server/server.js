@@ -220,16 +220,16 @@ function formatOrder(order) {
 
   return {
     id: order.id,
-    orderId: order.order_id || order.orderId || "",
-    orderReference: order.order_reference || order.orderReference || order.reference || "",
-    reference: order.reference || order.order_reference || order.orderReference || "",
+    orderId: order.order_number || order.orderId || "",
+    orderReference: order.order_number || order.orderReference || order.reference || "",
+    reference: order.order_number || order.reference || order.orderReference || "",
     status: order.status || "Received",
     paymentStatus: order.payment_status || order.paymentStatus || "Pending",
     paymentMethod: order.payment_method || order.paymentMethod || "",
     subtotal: safeNumber(order.subtotal),
-    delivery: safeNumber(order.delivery),
+    delivery: safeNumber(order.delivery_charge ?? order.delivery),
     discount: safeNumber(order.discount),
-    total: safeNumber(order.total),
+    total: safeNumber(order.total_amount ?? order.total),
     customer,
     items: Array.isArray(order.items) ? order.items : [],
     courierName: order.courier_name || order.courierName || "",
@@ -688,10 +688,14 @@ app.post("/api/orders", async function (req, res) {
     const cart = await calculateCart(items);
     let paymentStatus = "Pending";
 
+    let razorpayOrderId = null;
+    let razorpayPaymentId = null;
+    let razorpaySignature = null;
+
     if (paymentMethod === "Razorpay") {
-      const razorpayOrderId = payment.razorpayOrderId || payment.razorpay_order_id;
-      const razorpayPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id;
-      const razorpaySignature = payment.razorpaySignature || payment.razorpay_signature;
+      razorpayOrderId = payment.razorpayOrderId || payment.razorpay_order_id;
+      razorpayPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id;
+      razorpaySignature = payment.razorpaySignature || payment.razorpay_signature;
 
       if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
         return res.status(400).json({ success: false, message: "Razorpay payment details are required." });
@@ -781,20 +785,36 @@ app.post("/api/orders", async function (req, res) {
 
     const orderReference = `LUX-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
+    /*
+     * IMPORTANT: this must match the ACTUAL columns in the
+     * Supabase "orders" table, which are:
+     *   id, order_number, customer_id, status, payment_method,
+     *   payment_status, subtotal, delivery_charge, discount,
+     *   total_amount, coupon_code, razorpay_order_id,
+     *   razorpay_payment_id, razorpay_signature, courier_name,
+     *   tracking_number, tracking_url, notes, created_at, updated_at
+     * (there is no "customer" JSON column and no "order_reference"
+     * / "reference" / "total" / "delivery" column - using those
+     * names caused every order to fail to save with a
+     * "Could not find the column ... in the schema cache" error.
+     * Customer details are stored only in the separate "customers"
+     * table, linked via customer_id.)
+     */
     const { data: order, error: orderError } = await supabase
       .from("orders")
       .insert({
         customer_id: customerRecord.id,
-        order_reference: orderReference,
-        reference: orderReference,
+        order_number: orderReference,
         status: "Received",
         payment_status: paymentStatus,
         payment_method: paymentMethod,
         subtotal: cart.subtotal,
-        delivery: cart.delivery,
+        delivery_charge: cart.delivery,
         discount: cart.discount,
-        total: cart.total,
-        customer: cleanCustomer,
+        total_amount: cart.total,
+        razorpay_order_id: razorpayOrderId,
+        razorpay_payment_id: razorpayPaymentId,
+        razorpay_signature: razorpaySignature,
         updated_at: new Date().toISOString()
       })
       .select()
@@ -816,9 +836,6 @@ app.post("/api/orders", async function (req, res) {
 
     const { error: orderItemsError } = await supabase.from("order_items").insert(orderItems);
     if (orderItemsError) throw orderItemsError;
-
-    const razorpayOrderId = payment.razorpayOrderId || payment.razorpay_order_id || null;
-    const razorpayPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id || null;
 
     /*
      * IMPORTANT: this must match the ACTUAL columns in the
@@ -974,7 +991,7 @@ app.get("/api/orders", requireAdmin, async function (req, res) {
       }
 
       const calculatedTotal = items.reduce((sum, item) => sum + safeNumber(item.lineTotal), 0);
-      const storedTotal = safeNumber(order.total);
+      const storedTotal = safeNumber(order.total_amount);
       const finalTotal = storedTotal > 0 ? storedTotal : calculatedTotal;
 
       const storedSubtotal = safeNumber(order.subtotal);
@@ -1004,7 +1021,7 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
-      query = query.eq("order_reference", identifier);
+      query = query.eq("order_number", identifier);
     }
 
     const { data: order, error } = await query.maybeSingle();
@@ -1057,7 +1074,7 @@ app.get("/api/orders/:id", requireAdmin, async function (req, res) {
     }
 
     const calculatedTotal = formattedItems.reduce((sum, item) => sum + safeNumber(item.lineTotal), 0);
-    const storedTotal = safeNumber(order.total);
+    const storedTotal = safeNumber(order.total_amount);
     const finalTotal = storedTotal > 0 ? storedTotal : calculatedTotal;
     const storedSubtotal = safeNumber(order.subtotal);
     const finalSubtotal = storedSubtotal > 0 ? storedSubtotal : calculatedTotal;
@@ -1097,7 +1114,7 @@ async function updateOrder(req, res) {
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
-      query = query.eq("order_reference", identifier);
+      query = query.eq("order_number", identifier);
     }
 
     const { data: existing, error: findError } = await query.maybeSingle();
@@ -1146,7 +1163,7 @@ app.delete("/api/orders/:id", requireAdmin, async function (req, res) {
     if (/^\d+$/.test(identifier)) {
       query = query.eq("id", Number(identifier));
     } else {
-      query = query.eq("order_reference", identifier);
+      query = query.eq("order_number", identifier);
     }
 
     const { data: order, error: findError } = await query.maybeSingle();
