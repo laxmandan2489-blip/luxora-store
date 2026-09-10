@@ -559,6 +559,17 @@ function App() {
     }
   }
 
+  /*
+   * Every time the URL changes (home <-> a category page, or between
+   * two categories), jump to the top of the new page. A single-page
+   * app doesn't do this automatically the way a real multi-page site
+   * does, and without it a category "page" felt like it was just
+   * scrolling down inside the homepage instead of opening its own page.
+   */
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [location.pathname]);
+
   /* =========================================================
      FILTER PRODUCTS
   ========================================================= */
@@ -1336,11 +1347,6 @@ function App() {
             onClick={() => {
               goToCategory("All");
               setSearchText("");
-
-              window.scrollTo({
-                top: 0,
-                behavior: "smooth",
-              });
             }}
           >
             <span>SHRIMOH</span>
@@ -1353,13 +1359,7 @@ function App() {
                 key={category}
                 type="button"
                 className={selectedCategory === category ? "active" : ""}
-                onClick={() => {
-                  goToCategory(category);
-
-                  document.getElementById("lux-products")?.scrollIntoView({
-                    behavior: "smooth",
-                  });
-                }}
+                onClick={() => goToCategory(category)}
               >
                 {category === "All" ? "SHOP ALL" : category}
               </button>
@@ -1415,6 +1415,17 @@ function App() {
         )}
       </header>
 
+      {/*
+        HOMEPAGE-ONLY SECTIONS
+        Hero, editorial/values strips, bestsellers and new-arrivals only
+        belong on the homepage. When a category is open (a real
+        /category/:slug page), we skip straight to that category's own
+        collection header + grid below, instead of stacking the whole
+        homepage above it. This is what makes a category feel like its
+        own page instead of a scroll-down section of the homepage.
+      */}
+      {selectedCategory === "All" && (
+        <>
       {/* HERO */}
       <section className="lux-hero">
         <div className="lux-hero-image">
@@ -1651,8 +1662,21 @@ function App() {
           </div>
         </>
       )}
+        </>
+      )}
 
-      {/* COLLECTION HEADER */}
+      {/* CATEGORY PAGE BREADCRUMB - only shown when a category page is open */}
+      {selectedCategory !== "All" && (
+        <nav className="lux-breadcrumb" aria-label="Breadcrumb">
+          <button type="button" onClick={() => goToCategory("All")}>
+            Home
+          </button>
+          <span>/</span>
+          <span>{selectedCategory}</span>
+        </nav>
+      )}
+
+      {/* COLLECTION HEADER (doubles as the category page's own header) */}
       <section className="lux-collection-header" id="lux-products">
         <div>
           <span>THE SHRIMOH EDIT</span>
@@ -1805,7 +1829,7 @@ function App() {
         </div>
 
         <div className="lux-brand-story-mark">
-          <span>L</span>
+          <span>S</span>
           <small>
             SHRIMOH
             <br />
@@ -1826,30 +1850,10 @@ function App() {
           <div className="lux-footer-links">
             <div>
               <strong>SHOP</strong>
-              <button
-                onClick={() => {
-                  goToCategory("All");
-
-                  window.scrollTo({
-                    top: 0,
-                    behavior: "smooth",
-                  });
-                }}
-              >
-                All Products
-              </button>
+              <button onClick={() => goToCategory("All")}>All Products</button>
 
               {categories.slice(1, 5).map((category) => (
-                <button
-                  key={category}
-                  onClick={() => {
-                    goToCategory(category);
-
-                    document.getElementById("lux-products")?.scrollIntoView({
-                      behavior: "smooth",
-                    });
-                  }}
-                >
+                <button key={category} onClick={() => goToCategory(category)}>
                   {category}
                 </button>
               ))}
@@ -2473,10 +2477,6 @@ function App() {
                   onClick={() => {
                     goToCategory(category);
                     closeMobileMenu();
-
-                    document.getElementById("lux-products")?.scrollIntoView({
-                      behavior: "smooth",
-                    });
                   }}
                 >
                   {category === "All" ? "SHOP ALL" : category}
