@@ -177,14 +177,15 @@ a {
 .lux-logo {
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   user-select: none;
 }
 
 .lux-logo-mark {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -192,6 +193,7 @@ a {
 .lux-logo-text {
   display: flex;
   flex-direction: column;
+  align-items: center;
 }
 
 .lux-logo span {
