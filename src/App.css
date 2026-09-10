@@ -17,9 +17,16 @@
   --lux-light: #a19070;
   --lux-dark: #1c150d;
   --lux-dark-2: #271e13;
-  --lux-accent: #7a2b34;
-  --lux-accent-soft: #f3e3e0;
-  --lux-pine: #2c463f;
+  /*
+   * Premium neutral palette. The two accent colors below used to be
+   * a wine/maroon and a pine green (off-brief for a cream/brown/
+   * black/gold "quiet luxury" look) - they're now a near-black and
+   * a warm antique gold instead, matching the rest of the site
+   * (hero kicker, brand-story circle, pill nav active state).
+   */
+  --lux-accent: #1c150d;
+  --lux-accent-soft: #f2e9d6;
+  --lux-pine: #96772a;
 }
 
 /* =========================================================
@@ -1105,6 +1112,160 @@ a {
   height: 100%;
   border-radius: 50%;
   object-fit: cover;
+}
+
+/* =========================================================
+   GUARANTEE / TRUST STRIP
+========================================================= */
+
+.lux-guarantee-strip {
+  width: min(1400px, 90vw);
+  margin: 70px auto 0;
+  padding: 45px 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 25px;
+}
+
+.lux-guarantee-strip div {
+  text-align: center;
+  padding: 0 10px;
+}
+
+.lux-guarantee-icon {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 22px;
+  color: var(--lux-pine);
+}
+
+.lux-guarantee-strip strong {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: var(--lux-text);
+}
+
+.lux-guarantee-strip p {
+  margin: 8px 0 0;
+  color: var(--lux-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* =========================================================
+   NEWSLETTER SIGNUP
+========================================================= */
+
+.lux-newsletter {
+  margin-top: 40px;
+  padding: 90px 9vw;
+  background: var(--lux-dark);
+  color: #fff;
+  text-align: center;
+}
+
+.lux-newsletter-inner {
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.lux-newsletter-kicker {
+  display: block;
+  margin-bottom: 18px;
+  color: var(--lux-pine);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+}
+
+.lux-newsletter h2 {
+  margin: 0 0 16px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(30px, 4vw, 44px);
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.lux-newsletter p {
+  margin: 0 0 34px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.lux-newsletter-form {
+  display: flex;
+  gap: 12px;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.lux-newsletter-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 15px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 13px;
+  outline: none;
+}
+
+.lux-newsletter-form input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.lux-newsletter-form input:focus {
+  border-color: var(--lux-pine);
+}
+
+.lux-newsletter-form button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--lux-pine);
+  color: var(--lux-dark);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.lux-newsletter-form button:hover {
+  opacity: 0.85;
+}
+
+.lux-newsletter-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lux-newsletter-message {
+  margin: 18px 0 0;
+  color: #d9c9a0;
+  font-size: 12px;
+}
+
+.lux-newsletter-message.error {
+  color: #e39a8f;
+}
+
+@media (max-width: 640px) {
+  .lux-newsletter-form {
+    flex-direction: column;
+  }
+
+  .lux-newsletter-form button {
+    padding: 15px 22px;
+    justify-content: center;
+  }
 }
 
 /* =========================================================
@@ -3731,6 +3892,16 @@ a {
   .lux-values-strip {
     grid-template-columns: 1fr 1fr;
     width: 92vw;
+  }
+
+  .lux-guarantee-strip {
+    grid-template-columns: 1fr 1fr;
+    width: 92vw;
+    gap: 30px 15px;
+  }
+
+  .lux-newsletter {
+    padding: 70px 8vw;
   }
 
   .lux-reviews {

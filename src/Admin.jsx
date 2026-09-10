@@ -12,11 +12,6 @@ const categories = [
   "Travel Bags",
   "Clutches",
   "Wallets",
-  "Girls",
-  "Boys",
-  "Jewellery",
-  "Rings",
-  "Bracelets",
   "Accessories",
 ];
 
@@ -57,6 +52,39 @@ function getProductImages(product) {
 
 function formatMoney(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
+}
+
+/* =====================================================
+   MEESHO / SUPPLIER IMPORTER helpers
+   ===================================================== */
+const IMPORT_DESCRIPTION_TEMPLATE = `Highlights:
+-
+
+Material:
+-
+
+Size:
+-
+
+What's Included:
+-
+
+Shipping & Returns:
+- Ships in 5-9 days. Easy 7-day returns.`;
+
+function calcSellingPrice(costPrice, margin, marginType) {
+  const cost = Number(costPrice) || 0;
+  const marginValue = Number(margin) || 0;
+  if (marginType === "percent") {
+    return Math.round(cost * (1 + marginValue / 100));
+  }
+  return Math.round(cost + marginValue);
+}
+
+function getStatusLabel(status) {
+  if (status === "draft") return "Draft";
+  if (status === "review") return "In Review";
+  return "Published";
 }
 
 function formatDate(value) {
@@ -366,6 +394,24 @@ function Admin() {
   const [savingSiteContent, setSavingSiteContent] = useState(false);
   const [siteContentMessage, setSiteContentMessage] = useState("");
 
+  /* =====================================================
+     MEESHO / SUPPLIER IMPORT (new "Import Product" tab)
+     Nothing here goes live automatically - every import lands
+     as a "draft" until you deliberately publish it.
+     ===================================================== */
+  const [importSourceUrl, setImportSourceUrl] = useState("");
+  const [importImages, setImportImages] = useState([]);
+  const [importName, setImportName] = useState("");
+  const [importCategory, setImportCategory] = useState(categories[0]);
+  const [importCostPrice, setImportCostPrice] = useState("");
+  const [importMarginType, setImportMarginType] = useState("fixed");
+  const [importMargin, setImportMargin] = useState("");
+  const [importColors, setImportColors] = useState("Black");
+  const [importStock, setImportStock] = useState("");
+  const [importDescription, setImportDescription] = useState(IMPORT_DESCRIPTION_TEMPLATE);
+  const [importingProduct, setImportingProduct] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
     try {
@@ -427,6 +473,99 @@ function Admin() {
       setSiteContentMessage(error.message || "Unable to update site images.");
     } finally {
       setSavingSiteContent(false);
+    }
+  }
+
+  function handleImportImagesChange(event) {
+    setImportImages(Array.from(event.target.files || []));
+  }
+
+  function resetImportForm() {
+    setImportSourceUrl("");
+    setImportImages([]);
+    setImportName("");
+    setImportCategory(categories[0]);
+    setImportCostPrice("");
+    setImportMarginType("fixed");
+    setImportMargin("");
+    setImportColors("Black");
+    setImportStock("");
+    setImportDescription(IMPORT_DESCRIPTION_TEMPLATE);
+  }
+
+  async function submitImportProduct(targetStatus) {
+    if (!adminLoggedIn) {
+      alert("Please login as admin first.");
+      return;
+    }
+    if (!importName.trim()) {
+      alert("Product name required.");
+      return;
+    }
+    if (importImages.length === 0) {
+      alert("Please select at least one product image.");
+      return;
+    }
+    const cost = Number(importCostPrice);
+    if (!cost || cost <= 0) {
+      alert("Valid cost price is required.");
+      return;
+    }
+
+    try {
+      setImportingProduct(true);
+      setImportMessage("");
+
+      const formData = new FormData();
+      formData.append("name", importName.trim());
+      formData.append("category", importCategory);
+      formData.append("costPrice", importCostPrice);
+      formData.append("margin", importMargin || 0);
+      formData.append("marginType", importMarginType);
+      formData.append("sourceUrl", importSourceUrl);
+      formData.append("stock", importStock || 0);
+      formData.append("description", importDescription);
+      formData.append("colors", importColors);
+      formData.append("status", targetStatus);
+      importImages.forEach((file) => formData.append("images", file));
+
+      const response = await adminFetch(`${API}/api/admin/products/import`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+
+      setImportMessage(
+        targetStatus === "published"
+          ? "Imported and published — it's live on the site now."
+          : "Saved as a draft. Review it in the Products tab, then publish whenever you're ready."
+      );
+      resetImportForm();
+      loadProducts();
+    } catch (error) {
+      setImportMessage(error.message || "Import failed.");
+    } finally {
+      setImportingProduct(false);
+    }
+  }
+
+  async function updateProductStatus(product, status) {
+    try {
+      const response = await adminFetch(`${API}/api/admin/products/${product.id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+      loadProducts();
+    } catch (error) {
+      alert(error.message || "Could not update product status.");
     }
   }
 
@@ -2023,12 +2162,62 @@ function Admin() {
           letter-spacing: 0.5px;
         }
         /* =================================================
+           IMPORT STATUS BADGE (draft / review / published)
+           ================================================= */
+        .status-badge {
+          display: inline-block;
+          margin: 4px 0 2px;
+          padding: 3px 9px;
+          border-radius: 999px;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          text-transform: uppercase;
+        }
+        .status-draft {
+          background: #f3f4f6;
+          color: #4b5563;
+        }
+        .status-review {
+          background: #dbeafe;
+          color: #1e40af;
+        }
+        .status-published {
+          background: #dcfce7;
+          color: #166534;
+        }
+        .status-action-button {
+          flex: 1;
+          border: 0;
+          border-radius: 8px;
+          padding: 10px 12px;
+          cursor: pointer;
+          font-size: 11px;
+          font-weight: 800;
+          background: #eef2ff;
+          color: #3730a3;
+        }
+        .status-action-button:hover {
+          background: #e0e7ff;
+        }
+        .status-action-button.publish {
+          background: #dcfce7;
+          color: #166534;
+        }
+        .status-action-button.publish:hover {
+          background: #bbf7d0;
+        }
+        /* =================================================
            PRODUCT EDIT / DELETE BUTTONS
            ================================================= */
         .product-actions {
           display: flex;
+          flex-wrap: wrap;
           gap: 9px;
           padding: 0 15px 15px;
+        }
+        .product-actions .status-action-button {
+          flex-basis: calc(50% - 5px);
         }
         .edit-product-button,
         .delete-product-button {
@@ -2386,6 +2575,16 @@ function Admin() {
             onClick={() => setActiveTab("content")}
           >
             Site Content
+          </button>
+          <button
+            className={
+              activeTab === "import"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("import")}
+          >
+            Import Product
           </button>
         </div>
 
@@ -2940,6 +3139,181 @@ function Admin() {
           </div>
         )}
 
+        {activeTab === "import" && (
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Import Product (Meesho / any supplier)</h2>
+            </div>
+
+            <p className="customer-info" style={{ marginBottom: 20 }}>
+              Paste the details from a Meesho (or any other) listing here manually — this
+              does not scrape Meesho automatically. Fill this in once, and it works out
+              your selling price and a ready-made description template for you. Nothing
+              goes live on its own: every import is saved as a <strong>Draft</strong> first
+              so you can review photos, price and wording — go to the Products tab and hit
+              "Publish" whenever you're happy with it.
+            </p>
+
+            <div className="product-form-grid">
+              <div className="form-group full">
+                <label className="form-label">Meesho / Supplier Product URL (internal reference only, never shown to customers)</label>
+                <input
+                  className="form-input"
+                  value={importSourceUrl}
+                  onChange={(event) => setImportSourceUrl(event.target.value)}
+                  placeholder="https://www.meesho.com/..."
+                />
+              </div>
+
+              <div className="form-group full">
+                <label className="form-label">Product Title (how it'll show on SHRIMOH)</label>
+                <input
+                  className="form-input"
+                  value={importName}
+                  onChange={(event) => setImportName(event.target.value)}
+                  placeholder="e.g. Premium Women's Everyday Shoulder Bag"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Category</label>
+                <select
+                  className="form-input"
+                  value={importCategory}
+                  onChange={(event) => setImportCategory(event.target.value)}
+                >
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Stock</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  value={importStock}
+                  onChange={(event) => setImportStock(event.target.value)}
+                  placeholder="10"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Colors (comma separated)</label>
+                <input
+                  className="form-input"
+                  value={importColors}
+                  onChange={(event) => setImportColors(event.target.value)}
+                  placeholder="Black, Tan"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Cost Price (₹) — what you pay the supplier</label>
+                <input
+                  className="form-input"
+                  type="number"
+                  min="0"
+                  value={importCostPrice}
+                  onChange={(event) => setImportCostPrice(event.target.value)}
+                  placeholder="399"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Margin</label>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <select
+                    className="form-input"
+                    style={{ maxWidth: 110 }}
+                    value={importMarginType}
+                    onChange={(event) => setImportMarginType(event.target.value)}
+                  >
+                    <option value="fixed">₹ Fixed</option>
+                    <option value="percent">% Percent</option>
+                  </select>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min="0"
+                    value={importMargin}
+                    onChange={(event) => setImportMargin(event.target.value)}
+                    placeholder={importMarginType === "percent" ? "40" : "220"}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group full">
+                <div className="supplier-info-box" style={{ fontSize: 14 }}>
+                  <strong>Selling price (auto-calculated)</strong>
+                  <div style={{ fontSize: 20, marginTop: 6 }}>
+                    {formatMoney(calcSellingPrice(importCostPrice, importMargin, importMarginType))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-group full">
+                <label className="form-label">Description</label>
+                <textarea
+                  className="form-input"
+                  rows={9}
+                  value={importDescription}
+                  onChange={(event) => setImportDescription(event.target.value)}
+                />
+              </div>
+
+              <div className="form-group full">
+                <label className="form-label">Product Images *</label>
+                <input
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImportImagesChange}
+                />
+                {importImages.length > 0 && (
+                  <div className="image-preview">
+                    {importImages.map((file, index) => (
+                      <div className="image-preview-card" key={`${file.name}-${index}`}>
+                        <img src={URL.createObjectURL(file)} alt={file.name} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {importMessage && (
+              <p className="customer-info" style={{ marginTop: 16 }}>
+                {importMessage}
+              </p>
+            )}
+
+            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
+              <button
+                type="button"
+                className="cancel-product-button"
+                disabled={importingProduct}
+                onClick={() => submitImportProduct("draft")}
+              >
+                {importingProduct ? "SAVING..." : "SAVE AS DRAFT"}
+              </button>
+              <button
+                type="button"
+                className="save-product-button"
+                disabled={importingProduct}
+                onClick={() => submitImportProduct("published")}
+              >
+                {importingProduct ? "PUBLISHING..." : "PUBLISH NOW"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {activeTab === "products" && (
           <>
             <div className="panel">
@@ -3242,6 +3616,11 @@ function Admin() {
                             <h3>
                               {product.name}
                             </h3>
+                            <span
+                              className={`status-badge status-${product.status || "published"}`}
+                            >
+                              {getStatusLabel(product.status)}
+                            </span>
                             <div className="product-category">
                               {
                                 product.category
@@ -3275,6 +3654,39 @@ function Admin() {
                             )}
                           </div>
                           <div className="product-actions">
+                            {product.status !== "published" && (
+                              <button
+                                type="button"
+                                className="status-action-button publish"
+                                onClick={() =>
+                                  updateProductStatus(product, "published")
+                                }
+                              >
+                                ✅ PUBLISH
+                              </button>
+                            )}
+                            {product.status === "draft" && (
+                              <button
+                                type="button"
+                                className="status-action-button"
+                                onClick={() =>
+                                  updateProductStatus(product, "review")
+                                }
+                              >
+                                👀 MOVE TO REVIEW
+                              </button>
+                            )}
+                            {product.status === "published" && (
+                              <button
+                                type="button"
+                                className="status-action-button"
+                                onClick={() =>
+                                  updateProductStatus(product, "draft")
+                                }
+                              >
+                                ⏸️ UNPUBLISH
+                              </button>
+                            )}
                             <button
                               type="button"
                               className="edit-product-button"

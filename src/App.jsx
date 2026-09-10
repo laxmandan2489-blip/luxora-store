@@ -42,11 +42,6 @@ const PRODUCT_CATEGORIES = [
   "Travel Bags",
   "Clutches",
   "Wallets",
-  "Girls",
-  "Boys",
-  "Jewellery",
-  "Rings",
-  "Bracelets",
   "Accessories",
 ];
 
@@ -568,6 +563,39 @@ function App() {
 
     loadSiteSettings();
   }, []);
+
+  /* =========================================================
+     NEWSLETTER SIGNUP (homepage, above the footer)
+  ========================================================= */
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterStatus, setNewsletterStatus] = useState("idle"); // idle | loading | done | error
+  const [newsletterMessage, setNewsletterMessage] = useState("");
+
+  async function submitNewsletter(event) {
+    event.preventDefault();
+    const email = newsletterEmail.trim();
+    if (!email) return;
+
+    setNewsletterStatus("loading");
+    setNewsletterMessage("");
+    try {
+      const response = await fetch(`${API}/api/newsletter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.message || "Could not subscribe right now.");
+      }
+      setNewsletterStatus("done");
+      setNewsletterMessage("You're on the list — welcome to SHRIMOH.");
+      setNewsletterEmail("");
+    } catch (error) {
+      setNewsletterStatus("error");
+      setNewsletterMessage(error.message || "Could not subscribe right now.");
+    }
+  }
 
   const newArrivals = useMemo(() => products.slice(0, 8), [products]);
 
@@ -1981,6 +2009,72 @@ function App() {
                 EST. 2026
               </small>
             </>
+          )}
+        </div>
+      </section>
+
+      {/* GUARANTEE / TRUST STRIP */}
+      <section className="lux-guarantee-strip">
+        <div>
+          <span className="lux-guarantee-icon">🔒</span>
+          <strong>SECURE PAYMENTS</strong>
+          <p>100% safe checkout via Razorpay.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">↺</span>
+          <strong>EASY 7-DAY RETURNS</strong>
+          <p>Not the right fit? Send it back, hassle-free.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">✦</span>
+          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
+          <p>Every piece checked before it ships.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">📦</span>
+          <strong>PAN-INDIA SHIPPING</strong>
+          <p>Delivered safely, wherever you are.</p>
+        </div>
+      </section>
+
+      {/* NEWSLETTER SIGNUP */}
+      <section className="lux-newsletter">
+        <div className="lux-newsletter-inner">
+          <span className="lux-newsletter-kicker">STAY IN THE LOOP</span>
+          <h2>Get 15% off your first order.</h2>
+          <p>
+            Join the SHRIMOH list for early access to new arrivals, private offers and
+            styling notes — no spam, unsubscribe anytime.
+          </p>
+
+          <form className="lux-newsletter-form" onSubmit={submitNewsletter}>
+            <input
+              type="email"
+              required
+              placeholder="Your email address"
+              value={newsletterEmail}
+              onChange={(event) => setNewsletterEmail(event.target.value)}
+              disabled={newsletterStatus === "loading"}
+            />
+            <button type="submit" disabled={newsletterStatus === "loading"}>
+              {newsletterStatus === "loading" ? "SUBSCRIBING..." : "SUBSCRIBE"}
+              <span>→</span>
+            </button>
+          </form>
+
+          {newsletterMessage && (
+            <p
+              className={
+                newsletterStatus === "error"
+                  ? "lux-newsletter-message error"
+                  : "lux-newsletter-message"
+              }
+            >
+              {newsletterMessage}
+            </p>
           )}
         </div>
       </section>
