@@ -232,14 +232,14 @@ function Admin() {
     useState(
       () =>
         localStorage.getItem(
-          "luxora_admin_token"
+          "shrimoh_admin_token"
         ) || ""
     );
   const [adminLoggedIn, setAdminLoggedIn] =
     useState(
       () =>
         !!localStorage.getItem(
-          "luxora_admin_token"
+          "shrimoh_admin_token"
         )
     );
   const [loginEmail, setLoginEmail] =
@@ -389,7 +389,7 @@ function Admin() {
      ===================================================== */
   function logoutAdmin() {
     localStorage.removeItem(
-      "luxora_admin_token"
+      "shrimoh_admin_token"
     );
     setAdminToken("");
     setAdminLoggedIn(false);
@@ -445,7 +445,7 @@ function Admin() {
         );
       }
       localStorage.setItem(
-        "luxora_admin_token",
+        "shrimoh_admin_token",
         data.token
       );
       setAdminToken(data.token);
@@ -472,7 +472,7 @@ function Admin() {
   ) {
     const token =
       localStorage.getItem(
-        "luxora_admin_token"
+        "shrimoh_admin_token"
       );
     if (!token) {
       logoutAdmin();
@@ -1496,7 +1496,7 @@ function Admin() {
             LX
           </div>
           <h1 className="login-title">
-            LUXORA
+            SHRIMOH
           </h1>
           <p className="login-subtitle">
             SECURE ADMIN PANEL
@@ -2168,7 +2168,7 @@ function Admin() {
       <header className="admin-header">
         <div>
           <h1 className="brand-title">
-            LUXORA ADMIN
+            SHRIMOH ADMIN
           </h1>
           <p className="brand-subtitle">
             THE LUXURY STORE • ADMIN PANEL

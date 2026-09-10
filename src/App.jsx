@@ -1,5 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
+
+/*
+ * CATEGORY URL SLUGS
+ * Turns a category name like "Ladies Bags" into a URL-safe
+ * slug like "ladies-bags", so every category gets its own
+ * real, shareable page at /category/ladies-bags instead of
+ * everything living on one page behind a client-side filter.
+ */
+function slugifyCategory(name) {
+  return String(name || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-+|-+$)/g, "");
+}
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -24,11 +40,11 @@ const WHATSAPP_NUMBER = "9461515979"; // TODO: replace with your real WhatsApp b
 const INFO_PAGES = {
   about: {
     eyebrow: "OUR STORY",
-    title: "About LUXORA",
+    title: "About SHRIMOH",
     body: (
       <>
         <p>
-          LUXORA was created with a simple idea: luxury doesn't need to shout. We design and
+          SHRIMOH was created with a simple idea: luxury doesn't need to shout. We design and
           curate pieces that quietly become part of your everyday life - thoughtful in
           construction, refined in detail, and made to last well beyond the first impression.
         </p>
@@ -209,7 +225,7 @@ const INFO_PAGES = {
     body: (
       <>
         <p>
-          By using the LUXORA website and placing an order, you agree to the following terms.
+          By using the SHRIMOH website and placing an order, you agree to the following terms.
           We make every effort to display product information, images, and pricing accurately,
           but errors may occasionally occur - in such cases we reserve the right to correct
           pricing or cancel an affected order, with a full refund.
@@ -223,8 +239,8 @@ const INFO_PAGES = {
           payment partner, Razorpay.
         </p>
         <p>
-          All content on this website - including the LUXORA name, logo, product photography, and
-          descriptions - is the property of LUXORA and may not be reproduced without permission.
+          All content on this website - including the SHRIMOH name, logo, product photography, and
+          descriptions - is the property of SHRIMOH and may not be reproduced without permission.
         </p>
         <p>
           These terms are governed by the laws of India. For any queries regarding these terms,
@@ -271,7 +287,20 @@ function App() {
      NAVIGATION
   ========================================================= */
 
-  const [selectedCategory, setSelectedCategory] = useState("All");
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /*
+   * The selected category now lives in the URL (/category/:slug)
+   * instead of only in memory, so every category is a real,
+   * shareable, back/forward-friendly page. "goToCategory" is the
+   * single place that changes it - everywhere in this file that
+   * used to call setSelectedCategory(...) now calls this instead.
+   */
+  const categorySlugFromUrl = location.pathname.startsWith("/category/")
+    ? decodeURIComponent(location.pathname.replace("/category/", "").split("/")[0])
+    : null;
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
 
@@ -328,13 +357,13 @@ function App() {
      WISHLIST
      Client-side only (no customer login exists in this app),
      so the wishlist is stored as an array of product IDs in
-     localStorage under "luxora_wishlist". It survives page
+     localStorage under "shrimoh_wishlist". It survives page
      refreshes on the same device/browser.
   ========================================================= */
 
   const [wishlist, setWishlist] = useState(() => {
     try {
-      const stored = window.localStorage.getItem("luxora_wishlist");
+      const stored = window.localStorage.getItem("shrimoh_wishlist");
       const parsed = stored ? JSON.parse(stored) : [];
       return Array.isArray(parsed) ? parsed.map(Number) : [];
     } catch {
@@ -346,7 +375,7 @@ function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem("luxora_wishlist", JSON.stringify(wishlist));
+      window.localStorage.setItem("shrimoh_wishlist", JSON.stringify(wishlist));
     } catch {
       /* ignore storage errors (private browsing, quota, etc.) */
     }
@@ -511,6 +540,24 @@ function App() {
 
     return ["All", ...Array.from(new Set(values))];
   }, [products]);
+
+  const selectedCategory = useMemo(() => {
+    if (!categorySlugFromUrl) return "All";
+
+    const match = categories.find(
+      (category) => slugifyCategory(category) === categorySlugFromUrl
+    );
+
+    return match || "All";
+  }, [categorySlugFromUrl, categories]);
+
+  function goToCategory(category) {
+    if (!category || category === "All") {
+      navigate("/");
+    } else {
+      navigate(`/category/${slugifyCategory(category)}`);
+    }
+  }
 
   /* =========================================================
      FILTER PRODUCTS
@@ -1070,9 +1117,9 @@ function App() {
 
         currency: createData.currency || "INR",
 
-        name: "LUXORA",
+        name: "SHRIMOH",
 
-        description: "LUXORA Premium Collection",
+        description: "SHRIMOH Premium Collection",
 
         order_id: createData.order_id,
 
@@ -1253,7 +1300,7 @@ function App() {
   ========================================================= */
 
   return (
-    <div className="luxora-app">
+    <div className="shrimoh-app">
       {/* ANNOUNCEMENT BAR */}
       <div className="lux-announcement">
         <div>✦ FREE DELIVERY ON ORDERS ABOVE ₹1,999</div>
@@ -1287,7 +1334,7 @@ function App() {
           <div
             className="lux-logo"
             onClick={() => {
-              setSelectedCategory("All");
+              goToCategory("All");
               setSearchText("");
 
               window.scrollTo({
@@ -1296,7 +1343,7 @@ function App() {
               });
             }}
           >
-            <span>LUXORA</span>
+            <span>SHRIMOH</span>
             <small>THE LUXURY STORE</small>
           </div>
 
@@ -1307,7 +1354,7 @@ function App() {
                 type="button"
                 className={selectedCategory === category ? "active" : ""}
                 onClick={() => {
-                  setSelectedCategory(category);
+                  goToCategory(category);
 
                   document.getElementById("lux-products")?.scrollIntoView({
                     behavior: "smooth",
@@ -1372,9 +1419,9 @@ function App() {
       <section className="lux-hero">
         <div className="lux-hero-image">
           {filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
-            <img src={getProductImages(filteredProducts[0])[0]} alt="LUXORA collection" />
+            <img src={getProductImages(filteredProducts[0])[0]} alt="SHRIMOH collection" />
           ) : (
-            <div className="lux-hero-placeholder">LUXORA</div>
+            <div className="lux-hero-placeholder">SHRIMOH</div>
           )}
           <div className="lux-hero-image-shade" />
         </div>
@@ -1410,7 +1457,7 @@ function App() {
         </div>
 
         <div className="lux-hero-bottom">
-          <span>LUXORA / 2026</span>
+          <span>SHRIMOH / 2026</span>
           <span>DISCOVER YOUR SIGNATURE</span>
         </div>
       </section>
@@ -1492,7 +1539,7 @@ function App() {
                     {image ? (
                       <img src={image} alt={product.name} loading="lazy" />
                     ) : (
-                      <div className="lux-card-placeholder">LUXORA</div>
+                      <div className="lux-card-placeholder">SHRIMOH</div>
                     )}
 
                     <div className="lux-card-badge lux-badge-best">BESTSELLER</div>
@@ -1562,7 +1609,7 @@ function App() {
                     {image ? (
                       <img src={image} alt={product.name} loading="lazy" />
                     ) : (
-                      <div className="lux-card-placeholder">LUXORA</div>
+                      <div className="lux-card-placeholder">SHRIMOH</div>
                     )}
 
                     {hasDiscount && <div className="lux-card-badge">SALE</div>}
@@ -1608,7 +1655,7 @@ function App() {
       {/* COLLECTION HEADER */}
       <section className="lux-collection-header" id="lux-products">
         <div>
-          <span>THE LUXORA EDIT</span>
+          <span>THE SHRIMOH EDIT</span>
           <h2>{selectedCategory === "All" ? "Curated Collection" : selectedCategory}</h2>
         </div>
 
@@ -1645,7 +1692,7 @@ function App() {
           <button
             type="button"
             onClick={() => {
-              setSelectedCategory("All");
+              goToCategory("All");
               setSearchText("");
             }}
           >
@@ -1673,7 +1720,7 @@ function App() {
                       loading={index < 4 ? "eager" : "lazy"}
                     />
                   ) : (
-                    <div className="lux-card-placeholder">LUXORA</div>
+                    <div className="lux-card-placeholder">SHRIMOH</div>
                   )}
 
                   {hasDiscount && <div className="lux-card-badge">SALE</div>}
@@ -1730,7 +1777,7 @@ function App() {
       {/* BRAND STORY */}
       <section className="lux-brand-story">
         <div className="lux-brand-story-copy">
-          <span>THE LUXORA PHILOSOPHY</span>
+          <span>THE SHRIMOH PHILOSOPHY</span>
 
           <h2>
             Luxury doesn't
@@ -1752,7 +1799,7 @@ function App() {
               })
             }
           >
-            EXPLORE LUXORA
+            EXPLORE SHRIMOH
             <span>→</span>
           </button>
         </div>
@@ -1760,7 +1807,7 @@ function App() {
         <div className="lux-brand-story-mark">
           <span>L</span>
           <small>
-            LUXORA
+            SHRIMOH
             <br />
             EST. 2026
           </small>
@@ -1771,7 +1818,7 @@ function App() {
       <footer className="lux-footer">
         <div className="lux-footer-top">
           <div className="lux-footer-brand">
-            <div className="lux-footer-logo">LUXORA</div>
+            <div className="lux-footer-logo">SHRIMOH</div>
             <p>THE LUXURY STORE</p>
             <span>Timeless pieces for modern distinction.</span>
           </div>
@@ -1781,7 +1828,7 @@ function App() {
               <strong>SHOP</strong>
               <button
                 onClick={() => {
-                  setSelectedCategory("All");
+                  goToCategory("All");
 
                   window.scrollTo({
                     top: 0,
@@ -1796,7 +1843,7 @@ function App() {
                 <button
                   key={category}
                   onClick={() => {
-                    setSelectedCategory(category);
+                    goToCategory(category);
 
                     document.getElementById("lux-products")?.scrollIntoView({
                       behavior: "smooth",
@@ -1834,7 +1881,7 @@ function App() {
         </div>
 
         <div className="lux-footer-bottom">
-          <span>© 2026 LUXORA. ALL RIGHTS RESERVED.</span>
+          <span>© 2026 SHRIMOH. ALL RIGHTS RESERVED.</span>
 
           <div className="lux-footer-legal">
             <button type="button" onClick={() => openInfoPage("privacy")}>
@@ -1961,12 +2008,12 @@ function App() {
                           </div>
                         )}
 
-                        <div className="lux-gallery-brand">LUXORA</div>
+                        <div className="lux-gallery-brand">SHRIMOH</div>
                         <div className="lux-gallery-swipe-label">SWIPE TO EXPLORE</div>
                       </>
                     ) : (
                       <div className="lux-image-empty">
-                        <span>LUXORA</span>
+                        <span>SHRIMOH</span>
                       </div>
                     )}
                   </div>
@@ -1976,7 +2023,7 @@ function App() {
 
             <section className="lux-product-info">
               <div className="lux-product-eyebrow">
-                {selectedProduct.category || "LUXORA COLLECTION"}
+                {selectedProduct.category || "SHRIMOH COLLECTION"}
               </div>
 
               <h1 className="lux-product-title">{selectedProduct.name}</h1>
@@ -2103,7 +2150,7 @@ function App() {
                   <div className="lux-details-content">
                     <p>
                       {selectedProduct.description ||
-                        "A refined LUXORA piece designed for everyday elegance."}
+                        "A refined SHRIMOH piece designed for everyday elegance."}
                     </p>
 
                     <div className="lux-specs">
@@ -2408,7 +2455,7 @@ function App() {
           <aside className="lux-mobile-nav">
             <div className="lux-mobile-nav-header">
               <div className="lux-logo">
-                <span>LUXORA</span>
+                <span>SHRIMOH</span>
                 <small>THE LUXURY STORE</small>
               </div>
 
@@ -2424,7 +2471,7 @@ function App() {
                   type="button"
                   className={selectedCategory === category ? "active" : ""}
                   onClick={() => {
-                    setSelectedCategory(category);
+                    goToCategory(category);
                     closeMobileMenu();
 
                     document.getElementById("lux-products")?.scrollIntoView({
@@ -2469,7 +2516,7 @@ function App() {
         <div className="lux-checkout-overlay">
           <div className="lux-checkout">
             <div className="lux-checkout-topbar">
-              <div className="lux-checkout-logo">LUXORA</div>
+              <div className="lux-checkout-logo">SHRIMOH</div>
               <div>SECURE CHECKOUT</div>
               <button type="button" className="lux-checkout-close" onClick={closeCheckout}>
                 ×
@@ -2486,7 +2533,7 @@ function App() {
 
                 <h1>Thank you.</h1>
 
-                <p>Your LUXORA order has been received successfully.</p>
+                <p>Your SHRIMOH order has been received successfully.</p>
 
                 {orderReference && (
                   <div className="lux-order-reference">
@@ -2516,7 +2563,7 @@ function App() {
                   <div>
                     <span>01 · DELIVERY</span>
                     <h1>Complete your order</h1>
-                    <p>Where should we send your LUXORA selection?</p>
+                    <p>Where should we send your SHRIMOH selection?</p>
                   </div>
 
                   <div className="lux-checkout-secure">
