@@ -198,40 +198,34 @@ a {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 26px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
+/* Pill-style category chips (Featured / HandBags / Wallets / ...) */
 .lux-nav button {
   position: relative;
-  padding: 8px 0;
-  border: 0;
-  background: transparent;
+  padding: 9px 20px;
+  border: 1px solid var(--lux-line);
+  border-radius: 999px;
+  background: var(--lux-paper);
   color: #63563f;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 1.5px;
-  transition: color 0.25s ease;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 1.3px;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
 }
 
-.lux-nav button::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: 2px;
-  width: 0;
-  height: 1px;
-  background: var(--lux-text);
-  transition: width 0.25s ease;
-}
-
-.lux-nav button:hover,
-.lux-nav button.active {
+.lux-nav button:hover {
+  border-color: var(--lux-light);
   color: #171310;
 }
 
-.lux-nav button:hover::after,
-.lux-nav button.active::after {
-  width: 100%;
+.lux-nav button.active {
+  background: var(--lux-dark);
+  border-color: var(--lux-dark);
+  color: #fbf7ee;
 }
 
 /* =========================================================
@@ -1590,6 +1584,111 @@ a {
 
 .lux-whatsapp-float:hover {
   transform: scale(1.06);
+}
+
+/* =========================================================
+   NEW CUSTOMER WELCOME OFFER POPUP
+========================================================= */
+
+@keyframes lux-welcome-offer-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lux-welcome-offer {
+  position: fixed;
+  left: 22px;
+  bottom: 22px;
+  z-index: 15000;
+  width: min(320px, calc(100vw - 44px));
+  background: var(--lux-dark);
+  color: #fbf7ee;
+  border-radius: 14px;
+  padding: 22px 22px 20px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.3);
+  animation: lux-welcome-offer-in 0.35s ease;
+}
+
+.lux-welcome-offer-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: none;
+  border: 0;
+  color: #cbbfa4;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.lux-welcome-offer-close:hover {
+  color: #fff;
+}
+
+.lux-welcome-offer-kicker {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  color: var(--lux-light);
+  margin-bottom: 8px;
+}
+
+.lux-welcome-offer h3 {
+  margin: 0 0 8px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.2;
+  color: #fff;
+}
+
+.lux-welcome-offer p {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #ddd2bd;
+}
+
+.lux-welcome-offer p strong {
+  color: #fff;
+  letter-spacing: 1px;
+}
+
+.lux-welcome-offer-cta {
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  border-radius: 999px;
+  background: #fbf7ee;
+  color: var(--lux-dark);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.lux-welcome-offer-cta:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .lux-welcome-offer {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    padding: 20px 20px calc(20px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* =========================================================

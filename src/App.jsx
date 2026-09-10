@@ -31,6 +31,19 @@ const SUPPORT_EMAIL = "getluxorastore@gmail.com";
 const WHATSAPP_NUMBER = "9461515979"; // TODO: replace with your real WhatsApp business number
 
 /*
+ * NEW CUSTOMER WELCOME POPUP
+ * Shown once (per browser) to first-time visitors, offering a
+ * discount code. Change the code/percentage text below to match
+ * whatever coupon you actually create in Admin -> Coupons - this
+ * popup is just the announcement, the real discount only works if
+ * a coupon with this exact code exists and is active in the admin
+ * panel's coupon list.
+ */
+const NEW_CUSTOMER_OFFER_CODE = "NEW15";
+const NEW_CUSTOMER_OFFER_TEXT = "15% OFF";
+const NEW_CUSTOMER_OFFER_SEEN_KEY = "shrimoh_seen_welcome_offer";
+
+/*
  * TRUST / INFO PAGES
  * About, Contact, Shipping, Returns, Privacy and Terms are
  * shown as full-page overlays inside the app (no separate
@@ -317,6 +330,43 @@ function App() {
   function closeMobileMenu() {
     setMobileMenuOpen(false);
     document.body.style.overflow = "";
+  }
+
+  /* =========================================================
+     NEW CUSTOMER WELCOME OFFER
+     A small corner popup shown once per browser to first-time
+     visitors (checked via localStorage, so returning customers
+     don't see it again). Purely a client-side announcement - the
+     actual discount is whatever coupon code matches
+     NEW_CUSTOMER_OFFER_CODE in Admin -> Coupons.
+  ========================================================= */
+
+  const [showWelcomeOffer, setShowWelcomeOffer] = useState(false);
+
+  useEffect(() => {
+    let alreadySeen = true;
+
+    try {
+      alreadySeen = window.localStorage.getItem(NEW_CUSTOMER_OFFER_SEEN_KEY) === "1";
+    } catch {
+      alreadySeen = true;
+    }
+
+    if (alreadySeen) return;
+
+    const timer = setTimeout(() => setShowWelcomeOffer(true), 1500);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  function dismissWelcomeOffer() {
+    setShowWelcomeOffer(false);
+
+    try {
+      window.localStorage.setItem(NEW_CUSTOMER_OFFER_SEEN_KEY, "1");
+    } catch {
+      /* localStorage unavailable - safe to ignore, popup just won't persist as dismissed */
+    }
   }
 
   /* =========================================================
@@ -1898,18 +1948,50 @@ function App() {
         </div>
       </footer>
 
-      {/* WHATSAPP FLOATING BUTTON */}
-      <a
-        href={`https://wa.me/${WHATSAPP_NUMBER}`}
-        target="_blank"
-        rel="noreferrer"
-        className="lux-whatsapp-float"
-        aria-label="Chat with us on WhatsApp"
-      >
-        <svg viewBox="0 0 32 32" width="26" height="26" fill="currentColor" aria-hidden="true">
-          <path d="M16.004 3.2c-7.07 0-12.8 5.73-12.8 12.8 0 2.258.59 4.376 1.62 6.213L3.2 28.8l6.77-1.776a12.74 12.74 0 0 0 6.034 1.536h.005c7.07 0 12.8-5.73 12.8-12.8s-5.73-12.56-12.805-12.56zm0 23.36a10.5 10.5 0 0 1-5.353-1.466l-.384-.228-4.017 1.054 1.073-3.916-.25-.402a10.55 10.55 0 0 1-1.616-5.622c0-5.83 4.744-10.573 10.577-10.573 2.826 0 5.48 1.1 7.478 3.098a10.5 10.5 0 0 1 3.096 7.48c0 5.83-4.744 10.575-10.578 10.575zm5.79-7.918c-.317-.16-1.876-.926-2.167-1.032-.29-.107-.502-.16-.714.16-.21.318-.82 1.032-1.005 1.244-.185.213-.37.24-.687.08-.317-.16-1.338-.494-2.548-1.575-.942-.84-1.578-1.877-1.762-2.195-.185-.318-.02-.49.14-.65.143-.142.318-.37.476-.556.16-.185.212-.318.318-.53.106-.213.053-.398-.027-.558-.08-.16-.714-1.723-.978-2.36-.257-.617-.518-.534-.714-.544l-.608-.01c-.213 0-.558.08-.85.398-.29.318-1.11 1.084-1.11 2.646 0 1.562 1.137 3.07 1.296 3.283.16.212 2.238 3.417 5.42 4.79.758.328 1.35.523 1.81.67.76.242 1.452.208 1.998.126.61-.09 1.876-.766 2.14-1.507.264-.74.264-1.375.185-1.507-.08-.133-.29-.213-.607-.373z" />
-        </svg>
-      </a>
+      {/*
+        WHATSAPP FLOATING BUTTON
+        Hidden while the welcome offer popup is showing - both live in the
+        same bottom corner area on small phone screens, and stacking them
+        looked cramped/overlapping. It reappears the moment the offer is
+        dismissed (or was never shown, for returning visitors).
+      */}
+      {!showWelcomeOffer && (
+        <a
+          href={`https://wa.me/${WHATSAPP_NUMBER}`}
+          target="_blank"
+          rel="noreferrer"
+          className="lux-whatsapp-float"
+          aria-label="Chat with us on WhatsApp"
+        >
+          <svg viewBox="0 0 32 32" width="26" height="26" fill="currentColor" aria-hidden="true">
+            <path d="M16.004 3.2c-7.07 0-12.8 5.73-12.8 12.8 0 2.258.59 4.376 1.62 6.213L3.2 28.8l6.77-1.776a12.74 12.74 0 0 0 6.034 1.536h.005c7.07 0 12.8-5.73 12.8-12.8s-5.73-12.56-12.805-12.56zm0 23.36a10.5 10.5 0 0 1-5.353-1.466l-.384-.228-4.017 1.054 1.073-3.916-.25-.402a10.55 10.55 0 0 1-1.616-5.622c0-5.83 4.744-10.573 10.577-10.573 2.826 0 5.48 1.1 7.478 3.098a10.5 10.5 0 0 1 3.096 7.48c0 5.83-4.744 10.575-10.578 10.575zm5.79-7.918c-.317-.16-1.876-.926-2.167-1.032-.29-.107-.502-.16-.714.16-.21.318-.82 1.032-1.005 1.244-.185.213-.37.24-.687.08-.317-.16-1.338-.494-2.548-1.575-.942-.84-1.578-1.877-1.762-2.195-.185-.318-.02-.49.14-.65.143-.142.318-.37.476-.556.16-.185.212-.318.318-.53.106-.213.053-.398-.027-.558-.08-.16-.714-1.723-.978-2.36-.257-.617-.518-.534-.714-.544l-.608-.01c-.213 0-.558.08-.85.398-.29.318-1.11 1.084-1.11 2.646 0 1.562 1.137 3.07 1.296 3.283.16.212 2.238 3.417 5.42 4.79.758.328 1.35.523 1.81.67.76.242 1.452.208 1.998.126.61-.09 1.876-.766 2.14-1.507.264-.74.264-1.375.185-1.507-.08-.133-.29-.213-.607-.373z" />
+          </svg>
+        </a>
+      )}
+
+      {/* NEW CUSTOMER WELCOME OFFER (small corner popup, first visit only) */}
+      {showWelcomeOffer && (
+        <div className="lux-welcome-offer" role="dialog" aria-label="New customer offer">
+          <button
+            type="button"
+            className="lux-welcome-offer-close"
+            aria-label="Close"
+            onClick={dismissWelcomeOffer}
+          >
+            ×
+          </button>
+
+          <span className="lux-welcome-offer-kicker">WELCOME TO SHRIMOH</span>
+          <h3>{NEW_CUSTOMER_OFFER_TEXT} for new customers</h3>
+          <p>
+            Use code <strong>{NEW_CUSTOMER_OFFER_CODE}</strong> at checkout on your first order.
+          </p>
+
+          <button type="button" className="lux-welcome-offer-cta" onClick={dismissWelcomeOffer}>
+            Shop now
+          </button>
+        </div>
+      )}
 
       {/* PRODUCT DETAIL */}
       {selectedProduct && (
