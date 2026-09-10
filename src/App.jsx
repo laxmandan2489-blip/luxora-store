@@ -17,6 +17,52 @@ function slugifyCategory(name) {
     .replace(/(^-+|-+$)/g, "");
 }
 
+/*
+ * CATEGORY TAXONOMY
+ * This is the same fixed category list used in the Admin panel's
+ * "add/edit product" dropdown (src/Admin.jsx) - keeping one shared
+ * list here means the storefront nav always shows every category
+ * you can actually assign to a product, not just whichever
+ * categories happen to have products in them right now.
+ *
+ * "All Bags" is NOT a real product category (you never assign a
+ * product's category to "All Bags") - it's a storefront-only filter
+ * that shows every product whose category is one of BAG_CATEGORIES
+ * below. Add a new category to PRODUCT_CATEGORIES, and to
+ * BAG_CATEGORIES too if it's a type of bag, and it will show up
+ * everywhere automatically (nav, mobile menu, footer, "All Bags").
+ */
+const PRODUCT_CATEGORIES = [
+  "Bags",
+  "Handbags",
+  "Sling Bags",
+  "Tote Bags",
+  "Backpacks",
+  "Laptop Bags",
+  "Travel Bags",
+  "Clutches",
+  "Wallets",
+  "Girls",
+  "Boys",
+  "Jewellery",
+  "Rings",
+  "Bracelets",
+  "Accessories",
+];
+
+const BAG_CATEGORIES = [
+  "Bags",
+  "Handbags",
+  "Sling Bags",
+  "Tote Bags",
+  "Backpacks",
+  "Laptop Bags",
+  "Travel Bags",
+  "Clutches",
+];
+
+const ALL_BAGS_LABEL = "All Bags";
+
 const API = "https://luxora-store-mkva.onrender.com";
 
 /*
@@ -492,6 +538,37 @@ function App() {
     loadBestsellers();
   }, []);
 
+  /* =========================================================
+     SITE SETTINGS (owner-uploaded hero + brand-story images)
+     Comes from Admin -> Site Content. Both fall back to the old
+     look (a product photo / a plain monogram) until the owner
+     uploads something, so nothing changes for anyone until they
+     actually add images.
+  ========================================================= */
+
+  const [heroImageUrl, setHeroImageUrl] = useState("");
+  const [brandStoryImageUrl, setBrandStoryImageUrl] = useState("");
+
+  useEffect(() => {
+    async function loadSiteSettings() {
+      try {
+        const response = await fetch(`${API}/api/site-settings`);
+        if (!response.ok) return;
+
+        const data = await response.json();
+
+        if (data.success && data.settings) {
+          setHeroImageUrl(data.settings.heroImageUrl || "");
+          setBrandStoryImageUrl(data.settings.brandStoryImageUrl || "");
+        }
+      } catch (error) {
+        console.error("Site settings load error:", error);
+      }
+    }
+
+    loadSiteSettings();
+  }, []);
+
   const newArrivals = useMemo(() => products.slice(0, 8), [products]);
 
   /*
@@ -586,9 +663,18 @@ function App() {
   ========================================================= */
 
   const categories = useMemo(() => {
+    /*
+     * Fixed taxonomy first (so every category shows up in the nav
+     * even before any product exists in it), then any category a
+     * product actually uses that isn't in the fixed list (so
+     * nothing typed directly into the admin panel gets hidden).
+     */
     const values = products.map((product) => product.category).filter(Boolean);
+    const extra = Array.from(new Set(values)).filter(
+      (value) => !PRODUCT_CATEGORIES.includes(value)
+    );
 
-    return ["All", ...Array.from(new Set(values))];
+    return ["All", ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES, ...extra];
   }, [products]);
 
   const selectedCategory = useMemo(() => {
@@ -627,7 +713,10 @@ function App() {
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const categoryMatch =
-        selectedCategory === "All" || product.category === selectedCategory;
+        selectedCategory === "All" ||
+        (selectedCategory === ALL_BAGS_LABEL
+          ? BAG_CATEGORIES.includes(product.category)
+          : product.category === selectedCategory);
 
       const searchMatch =
         !searchText.trim() ||
@@ -1404,7 +1493,7 @@ function App() {
           </div>
 
           <nav className="lux-nav">
-            {categories.slice(0, 7).map((category) => (
+            {categories.map((category) => (
               <button
                 key={category}
                 type="button"
@@ -1479,7 +1568,9 @@ function App() {
       {/* HERO */}
       <section className="lux-hero">
         <div className="lux-hero-image">
-          {filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
+          {heroImageUrl ? (
+            <img src={heroImageUrl} alt="SHRIMOH collection" />
+          ) : filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
             <img src={getProductImages(filteredProducts[0])[0]} alt="SHRIMOH collection" />
           ) : (
             <div className="lux-hero-placeholder">SHRIMOH</div>
@@ -1879,12 +1970,18 @@ function App() {
         </div>
 
         <div className="lux-brand-story-mark">
-          <span>S</span>
-          <small>
-            SHRIMOH
-            <br />
-            EST. 2026
-          </small>
+          {brandStoryImageUrl ? (
+            <img src={brandStoryImageUrl} alt="SHRIMOH" className="lux-brand-story-photo" />
+          ) : (
+            <>
+              <span>S</span>
+              <small>
+                SHRIMOH
+                <br />
+                EST. 2026
+              </small>
+            </>
+          )}
         </div>
       </section>
 

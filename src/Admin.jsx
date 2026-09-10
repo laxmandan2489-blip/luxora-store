@@ -349,6 +349,88 @@ function Admin() {
     useState(false);
 
   /* =====================================================
+     SITE CONTENT (homepage hero + brand-story images)
+     Lets the owner drop in real photos later without touching
+     any code - both fall back to the current placeholder look
+     until something is uploaded here.
+     ===================================================== */
+  const [siteSettings, setSiteSettings] = useState({
+    heroImageUrl: "",
+    brandStoryImageUrl: "",
+  });
+  const [loadingSiteSettings, setLoadingSiteSettings] = useState(false);
+  const [siteHeroFile, setSiteHeroFile] = useState(null);
+  const [siteHeroPreview, setSiteHeroPreview] = useState("");
+  const [siteBrandStoryFile, setSiteBrandStoryFile] = useState(null);
+  const [siteBrandStoryPreview, setSiteBrandStoryPreview] = useState("");
+  const [savingSiteContent, setSavingSiteContent] = useState(false);
+  const [siteContentMessage, setSiteContentMessage] = useState("");
+
+  async function loadSiteSettings() {
+    setLoadingSiteSettings(true);
+    try {
+      const response = await fetch(`${API}/api/site-settings`);
+      const data = await response.json();
+      if (data.success && data.settings) {
+        setSiteSettings(data.settings);
+      }
+    } catch (error) {
+      console.error("Load site settings error:", error);
+    } finally {
+      setLoadingSiteSettings(false);
+    }
+  }
+
+  function handleSiteHeroChange(e) {
+    const file = e.target.files?.[0] || null;
+    setSiteHeroFile(file);
+    setSiteHeroPreview(file ? URL.createObjectURL(file) : "");
+  }
+
+  function handleSiteBrandStoryChange(e) {
+    const file = e.target.files?.[0] || null;
+    setSiteBrandStoryFile(file);
+    setSiteBrandStoryPreview(file ? URL.createObjectURL(file) : "");
+  }
+
+  async function saveSiteContent() {
+    if (!siteHeroFile && !siteBrandStoryFile) {
+      setSiteContentMessage("Choose at least one image first.");
+      return;
+    }
+
+    setSavingSiteContent(true);
+    setSiteContentMessage("");
+
+    try {
+      const formData = new FormData();
+      if (siteHeroFile) formData.append("heroImage", siteHeroFile);
+      if (siteBrandStoryFile) formData.append("brandStoryImage", siteBrandStoryFile);
+
+      const response = await adminFetch(`${API}/api/admin/site-settings`, {
+        method: "PUT",
+        body: formData,
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to update site images.");
+      }
+
+      setSiteSettings(data.settings);
+      setSiteHeroFile(null);
+      setSiteHeroPreview("");
+      setSiteBrandStoryFile(null);
+      setSiteBrandStoryPreview("");
+      setSiteContentMessage("Saved. Your live site now shows these images.");
+    } catch (error) {
+      setSiteContentMessage(error.message || "Unable to update site images.");
+    } finally {
+      setSavingSiteContent(false);
+    }
+  }
+
+  /* =====================================================
      CUSTOMERS
      ===================================================== */
   const [customers, setCustomers] =
@@ -515,6 +597,7 @@ function Admin() {
     if (activeTab === "dashboard") loadDashboard();
     if (activeTab === "customers") loadCustomers();
     if (activeTab === "coupons") loadCoupons();
+    if (activeTab === "content") loadSiteSettings();
   }, [activeTab, adminLoggedIn]);
 
   /* =====================================================
@@ -1728,6 +1811,46 @@ function Admin() {
           font-size: 12px;
           margin-top: 4px;
         }
+        .site-content-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+          gap: 20px;
+        }
+        .site-content-card {
+          border: 1px solid #e8e8e8;
+          border-radius: 14px;
+          padding: 18px;
+        }
+        .site-content-card h3 {
+          margin: 0 0 6px;
+          font-size: 15px;
+        }
+        .site-content-preview {
+          width: 100%;
+          height: 150px;
+          margin: 14px 0;
+          border-radius: 10px;
+          background: #f5f3ee;
+          border: 1px dashed #ddd;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
+          color: #999;
+          font-size: 12px;
+        }
+        .site-content-preview img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .site-content-preview-round {
+          width: 150px;
+          height: 150px;
+          border-radius: 50%;
+          margin-left: auto;
+          margin-right: auto;
+        }
         .status {
           display: inline-block;
           padding: 7px 10px;
@@ -2254,6 +2377,16 @@ function Admin() {
           >
             Coupons
           </button>
+          <button
+            className={
+              activeTab === "content"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("content")}
+          >
+            Site Content
+          </button>
         </div>
 
         {activeTab === "dashboard" && (
@@ -2722,6 +2855,89 @@ function Admin() {
               )}
             </div>
           </>
+        )}
+
+        {activeTab === "content" && (
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Site Content</h2>
+            </div>
+
+            <p className="customer-info" style={{ marginBottom: 20 }}>
+              Upload photos here whenever you have good ones ready - the homepage
+              automatically switches to them. Until then it keeps using its current
+              placeholder look, so nothing breaks if you leave this empty.
+            </p>
+
+            {loadingSiteSettings ? (
+              <div className="empty-state">Loading...</div>
+            ) : (
+              <div className="site-content-grid">
+                <div className="site-content-card">
+                  <h3>Homepage Hero Banner</h3>
+                  <p className="customer-info">
+                    The large image behind "Crafted for distinction" at the top of
+                    the homepage.
+                  </p>
+
+                  <div className="site-content-preview">
+                    {siteHeroPreview || siteSettings.heroImageUrl ? (
+                      <img
+                        src={siteHeroPreview || siteSettings.heroImageUrl}
+                        alt="Hero preview"
+                      />
+                    ) : (
+                      <span>No image uploaded yet</span>
+                    )}
+                  </div>
+
+                  <input type="file" accept="image/*" onChange={handleSiteHeroChange} />
+                </div>
+
+                <div className="site-content-card">
+                  <h3>Brand Story Photo</h3>
+                  <p className="customer-info">
+                    The round photo next to "Luxury doesn't need to shout" further
+                    down the homepage. Use a square-ish photo - it's cropped into a
+                    circle.
+                  </p>
+
+                  <div className="site-content-preview site-content-preview-round">
+                    {siteBrandStoryPreview || siteSettings.brandStoryImageUrl ? (
+                      <img
+                        src={siteBrandStoryPreview || siteSettings.brandStoryImageUrl}
+                        alt="Brand story preview"
+                      />
+                    ) : (
+                      <span>No image uploaded yet</span>
+                    )}
+                  </div>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleSiteBrandStoryChange}
+                  />
+                </div>
+              </div>
+            )}
+
+            {siteContentMessage && (
+              <p className="customer-info" style={{ marginTop: 16 }}>
+                {siteContentMessage}
+              </p>
+            )}
+
+            <button
+              type="button"
+              className="save-product-button"
+              style={{ marginTop: 20 }}
+              disabled={savingSiteContent || (!siteHeroFile && !siteBrandStoryFile)}
+              onClick={saveSiteContent}
+            >
+              {savingSiteContent ? "SAVING..." : "SAVE CHANGES"}
+            </button>
+          </div>
         )}
 
         {activeTab === "products" && (
