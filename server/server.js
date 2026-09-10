@@ -625,6 +625,103 @@ app.post("/api/coupons/validate", async function (req, res) {
   }
 });
 
+/* =====================================================
+   SITE SETTINGS (hero banner + brand-story images)
+   =====================================================
+   One single row (id=1) holding homepage images the owner can
+   change from Admin -> Site Content without ever touching code.
+   Requires this table to exist in Supabase - see the SQL in
+   apply-instructions.md. Until the owner uploads an image, these
+   URLs are null and the frontend falls back to its old behaviour
+   (auto-using the first product photo / a plain monogram).
+   ===================================================== */
+
+async function getSiteSettingsRow() {
+  const { data, error } = await supabase
+    .from("site_settings")
+    .select("*")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data || { hero_image_url: null, brand_story_image_url: null };
+}
+
+function formatSiteSettings(row) {
+  return {
+    heroImageUrl: row?.hero_image_url || "",
+    brandStoryImageUrl: row?.brand_story_image_url || ""
+  };
+}
+
+app.get("/api/site-settings", async function (req, res) {
+  try {
+    const row = await getSiteSettingsRow();
+    return res.json({ success: true, settings: formatSiteSettings(row) });
+  } catch (error) {
+    console.error("GET SITE SETTINGS ERROR:", error);
+    // Non-fatal for the storefront - it just falls back to defaults.
+    return res.json({ success: true, settings: { heroImageUrl: "", brandStoryImageUrl: "" } });
+  }
+});
+
+app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (req, res) {
+  const uploadedUrls = [];
+
+  try {
+    const files = Array.isArray(req.files) ? req.files : [];
+    const heroFile = files.find((file) => file.fieldname === "heroImage");
+    const brandStoryFile = files.find((file) => file.fieldname === "brandStoryImage");
+
+    const updateData = { updated_at: new Date().toISOString() };
+
+    if (heroFile) {
+      const url = await uploadImage(heroFile);
+      uploadedUrls.push(url);
+      updateData.hero_image_url = url;
+    }
+
+    if (brandStoryFile) {
+      const url = await uploadImage(brandStoryFile);
+      uploadedUrls.push(url);
+      updateData.brand_story_image_url = url;
+    }
+
+    if (!heroFile && !brandStoryFile) {
+      return res.status(400).json({
+        success: false,
+        message: "Please choose at least one image to upload."
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("site_settings")
+      .upsert({ id: 1, ...updateData })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.json({
+      success: true,
+      message: "Site images updated successfully.",
+      settings: formatSiteSettings(data)
+    });
+  } catch (error) {
+    console.error("UPDATE SITE SETTINGS ERROR:", error);
+
+    if (uploadedUrls.length) {
+      await deleteStorageImages(uploadedUrls);
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Unable to update site images."
+    });
+  }
+});
+
 app.get("/api/products", async function (req, res) {
   try {
     const { data, error } = await supabase
