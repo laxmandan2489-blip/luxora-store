@@ -324,7 +324,9 @@ function formatProductAdmin(product) {
     supplierCost: product.supplier_cost === null || product.supplier_cost === undefined
       ? null
       : safeNumber(product.supplier_cost),
-    shippingTime: product.shipping_time || ""
+    shippingTime: product.shipping_time || "",
+    margin: product.margin === null || product.margin === undefined ? null : safeNumber(product.margin),
+    status: product.status || "published"
   };
 }
 
@@ -722,6 +724,53 @@ app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (
   }
 });
 
+/*
+ * NEWSLETTER SIGNUP (homepage form, above the footer)
+ * Public - anyone can subscribe. Silently treats an email that's
+ * already subscribed as a success (no error shown to the visitor,
+ * no duplicate row created) since a unique constraint on the
+ * "email" column is what actually prevents duplicates.
+ */
+app.post("/api/newsletter", async function (req, res) {
+  try {
+    const email = String((req.body || {}).email || "").trim().toLowerCase();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailPattern.test(email)) {
+      return res.status(400).json({ success: false, message: "Please enter a valid email address." });
+    }
+
+    const { error } = await supabase.from("newsletter_subscribers").insert({ email });
+    // Postgres unique-violation code is 23505 - that just means they were
+    // already subscribed, which is fine, not an error worth showing.
+    if (error && error.code !== "23505") throw error;
+
+    return res.status(201).json({ success: true, message: "Subscribed successfully." });
+  } catch (error) {
+    console.error("NEWSLETTER SIGNUP ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to subscribe right now. Please try again." });
+  }
+});
+
+/*
+ * ADMIN: list newsletter subscribers (for exporting/emailing later).
+ * Not wired to a dedicated Admin.jsx tab yet - the data collects
+ * safely in Supabase either way, can add a UI for it whenever
+ * useful.
+ */
+app.get("/api/admin/newsletter", requireAdmin, async function (req, res) {
+  try {
+    const { data, error } = await supabase
+      .from("newsletter_subscribers")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return res.json({ success: true, subscribers: Array.isArray(data) ? data : [] });
+  } catch (error) {
+    console.error("GET NEWSLETTER SUBSCRIBERS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load subscribers." });
+  }
+});
+
 app.get("/api/products", async function (req, res) {
   try {
     const { data, error } = await supabase
@@ -870,6 +919,129 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     console.error("ADD PRODUCT ERROR:", error);
     if (uploadedUrls.length) await deleteStorageImages(uploadedUrls);
     return res.status(500).json({ success: false, message: error.message || "Unable to add product." });
+  }
+});
+
+/*
+ * MEESHO / SUPPLIER IMPORTER
+ * Takes a manually-copied supplier listing (Meesho or any other
+ * source) and creates a product row that starts life as a
+ * "draft" - it is NEVER visible on the public storefront
+ * (active stays false) until you deliberately move its status
+ * to "published" via PATCH /api/admin/products/:id/status.
+ * This lets you review photos/pricing/wording calmly before
+ * anything goes live.
+ */
+app.post("/api/admin/products/import", requireAdmin, upload.any(), async function (req, res) {
+  const uploadedUrls = [];
+  try {
+    const body = req.body || {};
+    const name = String(body.name || "").trim();
+    const category = String(body.category || "Bags").trim();
+    const costPrice = safeNumber(body.costPrice);
+    const marginType = body.marginType === "percent" ? "percent" : "fixed";
+    const marginValue = safeNumber(body.margin);
+    const sourceUrl = body.sourceUrl !== undefined ? String(body.sourceUrl).trim() : "";
+    const stock = Math.max(0, Math.floor(safeNumber(body.stock)));
+    const description = String(body.description || "");
+    const colors = normalizeColors(body.colors);
+
+    if (!name) return res.status(400).json({ success: false, message: "Product name is required." });
+    if (!Number.isFinite(costPrice) || costPrice <= 0) {
+      return res.status(400).json({ success: false, message: "Valid cost price is required." });
+    }
+
+    const price =
+      marginType === "percent"
+        ? Math.round(costPrice * (1 + marginValue / 100))
+        : Math.round(costPrice + marginValue);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      return res.status(400).json({ success: false, message: "Selling price came out invalid - check cost price and margin." });
+    }
+
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (files.length === 0) {
+      return res.status(400).json({ success: false, message: "Please upload at least one product image." });
+    }
+
+    for (const file of files) {
+      const url = await uploadImage(file);
+      uploadedUrls.push(url);
+    }
+
+    const productId = Date.now();
+    const requestedStatus = body.status === "published" || body.status === "review" ? body.status : "draft";
+
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        id: productId,
+        name,
+        category,
+        price,
+        old_price: null,
+        stock,
+        description,
+        colors,
+        images: uniqueImages(uploadedUrls),
+        active: requestedStatus === "published",
+        status: requestedStatus,
+        margin: marginValue,
+        supplier_cost: costPrice,
+        supplier_link: sourceUrl || null
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({
+      success: true,
+      message:
+        requestedStatus === "published"
+          ? "Product imported and published."
+          : "Product imported as draft. Review it, then publish whenever ready.",
+      product: formatProductAdmin(data)
+    });
+  } catch (error) {
+    console.error("IMPORT PRODUCT ERROR:", error);
+    if (uploadedUrls.length) await deleteStorageImages(uploadedUrls);
+    return res.status(500).json({ success: false, message: error.message || "Unable to import product." });
+  }
+});
+
+/*
+ * Move an imported (or any) product between draft / review /
+ * published. Setting "published" also flips active=true so it
+ * shows on the live site immediately - moving it out of
+ * "published" flips active=false so it disappears again without
+ * deleting anything.
+ */
+app.patch("/api/admin/products/:id/status", requireAdmin, async function (req, res) {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ success: false, message: "Invalid product ID." });
+    }
+    const status = String((req.body || {}).status || "").trim();
+    if (!["draft", "review", "published"].includes(status)) {
+      return res.status(400).json({ success: false, message: "Status must be draft, review or published." });
+    }
+
+    const { data, error } = await supabase
+      .from("products")
+      .update({ status, active: status === "published", updated_at: new Date().toISOString() })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw error;
+    if (!data) return res.status(404).json({ success: false, message: "Product not found." });
+
+    return res.json({ success: true, message: "Product status updated.", product: formatProductAdmin(data) });
+  } catch (error) {
+    console.error("UPDATE PRODUCT STATUS ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Unable to update product status." });
   }
 });
 
