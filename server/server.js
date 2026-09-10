@@ -142,7 +142,7 @@ async function sendOrderConfirmationEmail({
 
   const html = `
     <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211a10;">
-      <h2 style="letter-spacing:2px;">LUXORA</h2>
+      <h2 style="letter-spacing:2px;">SHRIMOH</h2>
       <p>Hi ${customerName || "there"},</p>
       <p>Thank you for your order! We've received it and it's being processed.</p>
       <p style="font-size:14px;color:#7d6c4f;">ORDER REFERENCE: <strong>${orderReference}</strong></p>
@@ -170,11 +170,11 @@ async function sendOrderConfirmationEmail({
       </table>
       <p style="font-size:13px;color:#7d6c4f;">Payment method: ${paymentMethod}</p>
       <p style="margin-top:24px;">We'll notify you again once your order ships.</p>
-      <p style="margin-top:24px;font-size:12px;color:#a19070;">LUXORA &middot; Thank you for shopping with us.</p>
+      <p style="margin-top:24px;font-size:12px;color:#a19070;">SHRIMOH &middot; Thank you for shopping with us.</p>
     </div>`;
 
   await mailTransporter.sendMail({
-    from: `"LUXORA" <${GMAIL_USER}>`,
+    from: `"SHRIMOH" <${GMAIL_USER}>`,
     to,
     subject: `Order Confirmed - ${orderReference}`,
     html
@@ -551,7 +551,7 @@ async function calculateCart(items, couponCode) {
 app.get("/", function (req, res) {
   res.json({
     success: true,
-    message: "LUXORA server is running",
+    message: "SHRIMOH server is running",
     database: "Supabase",
     payment: "Razorpay",
     storage: "Supabase Storage",
@@ -1166,7 +1166,7 @@ app.post("/api/create-order", async function (req, res) {
       return res.status(400).json({ success: false, message: "Order amount must be at least ₹1." });
     }
 
-    const receipt = `LUXORA_${Date.now()}`;
+    const receipt = `SHRIMOH_${Date.now()}`;
 
     console.log("RAZORPAY CREATE:", {
       subtotal: cart.subtotal,
@@ -1827,7 +1827,7 @@ app.use(function (req, res) {
 app.listen(PORT, HOST, async function () {
   console.log("");
   console.log("========================================");
-  console.log("          LUXORA SERVER");
+  console.log("          SHRIMOH SERVER");
   console.log("========================================");
   console.log(`PORT: ${PORT}`);
   console.log("DATABASE: SUPABASE");
