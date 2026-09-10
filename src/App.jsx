@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
+import shrimohIcon from "./assets/shrimoh-icon-square.png";
 
 /*
  * CATEGORY URL SLUGS
@@ -1483,8 +1484,11 @@ function App() {
               setSearchText("");
             }}
           >
-            <span>SHRIMOH</span>
-            <small>THE LUXURY STORE</small>
+            <img src={shrimohIcon} alt="" className="lux-logo-mark" />
+            <div className="lux-logo-text">
+              <span>SHRIMOH</span>
+              <small>THE LUXURY STORE</small>
+            </div>
           </div>
 
           <nav className="lux-nav">
@@ -2011,7 +2015,10 @@ function App() {
       <footer className="lux-footer">
         <div className="lux-footer-top">
           <div className="lux-footer-brand">
-            <div className="lux-footer-logo">SHRIMOH</div>
+            <div className="lux-footer-logo">
+              <img src={shrimohIcon} alt="" className="lux-footer-logo-mark" />
+              <span>SHRIMOH</span>
+            </div>
             <p>THE LUXURY STORE</p>
             <span>Timeless pieces for modern distinction.</span>
           </div>

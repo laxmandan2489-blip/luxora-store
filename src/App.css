@@ -177,8 +177,21 @@ a {
 .lux-logo {
   cursor: pointer;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   user-select: none;
+}
+
+.lux-logo-mark {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.lux-logo-text {
+  display: flex;
+  flex-direction: column;
 }
 
 .lux-logo span {
@@ -1326,9 +1339,23 @@ a {
 }
 
 .lux-footer-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lux-footer-logo span {
   font-family: "Playfair Display", Georgia, serif;
   font-size: 32px;
   letter-spacing: 6px;
+}
+
+.lux-footer-logo-mark {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .lux-footer-brand > p {
