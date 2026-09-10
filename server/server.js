@@ -191,6 +191,14 @@ const allowedOrigins = [
   "https://luxora-store-mkva.onrender.com"
 ];
 
+// Any custom domain the store is (or will be) served from — add new ones here
+// whenever you point a domain at Vercel (Settings -> Domains). This does NOT
+// need to be touched for renames within *.vercel.app, since those are
+// auto-allowed below.
+const allowedCustomDomains = [
+  // "https://www.shrimoh.com",
+];
+
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -199,6 +207,16 @@ app.use(
         return callback(null, true);
       }
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      if (allowedCustomDomains.includes(origin)) return callback(null, true);
+      // Any Vercel-hosted address (e.g. after renaming the Vercel project,
+      // or a Vercel preview URL) is auto-allowed so store renames never
+      // break the storefront again.
+      try {
+        const hostname = new URL(origin).hostname;
+        if (hostname.endsWith(".vercel.app")) return callback(null, true);
+      } catch (err) {
+        // fall through to reject below
+      }
       return callback(new Error("CORS origin not allowed."));
     },
     credentials: true
