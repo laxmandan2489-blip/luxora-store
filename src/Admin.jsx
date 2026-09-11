@@ -422,6 +422,9 @@ function Admin() {
   const [fetchLinkMessage, setFetchLinkMessage] = useState("");
   const [generatingPremium, setGeneratingPremium] = useState(false);
   const [premiumMessage, setPremiumMessage] = useState("");
+  const [cleanupFile, setCleanupFile] = useState(null);
+  const [cleaningPhoto, setCleaningPhoto] = useState(false);
+  const [cleanupMessage, setCleanupMessage] = useState("");
 
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
@@ -506,6 +509,8 @@ function Admin() {
     setImportPasteImageUrl("");
     setFetchLinkMessage("");
     setPremiumMessage("");
+    setCleanupFile(null);
+    setCleanupMessage("");
   }
 
   /*
@@ -623,6 +628,48 @@ function Admin() {
       setPremiumMessage(error.message || "AI content generation failed.");
     } finally {
       setGeneratingPremium(false);
+    }
+  }
+
+  function handleCleanupFileChange(event) {
+    setCleanupFile(event.target.files?.[0] || null);
+    setCleanupMessage("");
+  }
+
+  /*
+   * Sends one real product photo to the backend, which places it on
+   * a clean cream studio backdrop with a soft floor shadow -
+   * standard premium e-commerce presentation. No AI image
+   * generation, no billing, no rate limit - it only reframes the
+   * real photo you gave it. Result is added straight into the
+   * Images list below.
+   */
+  async function cleanUpPhoto() {
+    if (!cleanupFile) {
+      setCleanupMessage("Pehle ek product photo choose karo.");
+      return;
+    }
+    setCleaningPhoto(true);
+    setCleanupMessage("");
+    try {
+      const formData = new FormData();
+      formData.append("sourceImage", cleanupFile);
+      const response = await adminFetch(`${API}/api/admin/products/clean-photo`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setCleanupMessage(data.message || "Photo clean-up failed - upload the original instead.");
+        return;
+      }
+      setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
+      setCleanupFile(null);
+      setCleanupMessage("Premium version added to the Images list below.");
+    } catch (error) {
+      setCleanupMessage(error.message || "Photo clean-up failed - upload the original instead.");
+    } finally {
+      setCleaningPhoto(false);
     }
   }
 
@@ -3507,6 +3554,36 @@ function Admin() {
                     ))}
                   </div>
                 )}
+
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
+                  <label className="form-label">✨ Clean & Premium-ify a Photo (free, unlimited)</label>
+                  <span className="form-hint" style={{ display: "block", marginBottom: 8 }}>
+                    Puts your real product photo on a clean cream studio backdrop with a soft
+                    shadow — no AI generation, no billing, no limit. Doesn't invent anything new,
+                    just makes the real photo look catalog-ready.
+                  </span>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <input
+                      className="form-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCleanupFileChange}
+                      style={{ flex: 1, minWidth: 200 }}
+                    />
+                    <button
+                      type="button"
+                      className="status-action-button"
+                      disabled={cleaningPhoto || !cleanupFile}
+                      onClick={cleanUpPhoto}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {cleaningPhoto ? "Cleaning up..." : "Clean & Add"}
+                    </button>
+                  </div>
+                  {cleanupMessage && (
+                    <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>{cleanupMessage}</p>
+                  )}
+                </div>
 
               </div>
             </div>
