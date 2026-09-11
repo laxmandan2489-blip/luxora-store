@@ -422,14 +422,6 @@ function Admin() {
   const [fetchLinkMessage, setFetchLinkMessage] = useState("");
   const [generatingPremium, setGeneratingPremium] = useState(false);
   const [premiumMessage, setPremiumMessage] = useState("");
-  // AI product photography (4 premium shots + 1 lifestyle shot),
-  // generated from one real source photo. Nothing is uploaded to
-  // Supabase until the admin picks which generated images to keep.
-  const [aiSourceFile, setAiSourceFile] = useState(null);
-  const [generatingImages, setGeneratingImages] = useState(false);
-  const [aiGeneratedImages, setAiGeneratedImages] = useState([]);
-  const [aiImagesMessage, setAiImagesMessage] = useState("");
-  const [savingSelectedImages, setSavingSelectedImages] = useState(false);
 
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
@@ -514,9 +506,6 @@ function Admin() {
     setImportPasteImageUrl("");
     setFetchLinkMessage("");
     setPremiumMessage("");
-    setAiSourceFile(null);
-    setAiGeneratedImages([]);
-    setAiImagesMessage("");
   }
 
   /*
@@ -634,94 +623,6 @@ function Admin() {
       setPremiumMessage(error.message || "AI content generation failed.");
     } finally {
       setGeneratingPremium(false);
-    }
-  }
-
-  function handleAiSourceFileChange(event) {
-    setAiSourceFile(event.target.files?.[0] || null);
-    setAiGeneratedImages([]);
-    setAiImagesMessage("");
-  }
-
-  /*
-   * Sends one real product photo to the backend, which asks
-   * Gemini's image model to recreate it as 4 premium studio shots
-   * + 1 lifestyle shot. Results come back as base64 previews only
-   * - nothing is saved yet, so a bad generation costs nothing to
-   * discard.
-   */
-  async function generateAiImages() {
-    if (!aiSourceFile) {
-      setAiImagesMessage("Pehle ek source product photo choose karo.");
-      return;
-    }
-    setGeneratingImages(true);
-    setAiImagesMessage("");
-    setAiGeneratedImages([]);
-    try {
-      const formData = new FormData();
-      formData.append("sourceImage", aiSourceFile);
-      const response = await adminFetch(`${API}/api/admin/products/generate-images`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setAiImagesMessage(data.message || "AI image generation failed.");
-        return;
-      }
-      const images = data.images || [];
-      setAiGeneratedImages(images.map((img) => ({ ...img, selected: img.success })));
-      const failedCount = images.filter((img) => !img.success).length;
-      setAiImagesMessage(
-        failedCount > 0
-          ? `${images.length - failedCount} of ${images.length} images generated — ${failedCount} failed (you can retry). Review below, then add the ones you like.`
-          : "All 5 images generated — review below, then add the ones you like."
-      );
-    } catch (error) {
-      setAiImagesMessage(error.message || "AI image generation failed.");
-    } finally {
-      setGeneratingImages(false);
-    }
-  }
-
-  function toggleAiImageSelected(index) {
-    setAiGeneratedImages((prev) =>
-      prev.map((img, i) => (i === index ? { ...img, selected: !img.selected } : img))
-    );
-  }
-
-  /*
-   * Uploads every checked generated image to Supabase Storage and
-   * drops its URL into importFetchedImages - the same list used by
-   * "Fetch from Link" / "paste image link", so it flows into the
-   * product exactly the same way at submit time.
-   */
-  async function addSelectedAiImages() {
-    const selected = aiGeneratedImages.filter((img) => img.success && img.selected);
-    if (selected.length === 0) {
-      setAiImagesMessage("Koi image select nahi ki — checkbox tick karke phir try karo.");
-      return;
-    }
-    setSavingSelectedImages(true);
-    try {
-      for (const img of selected) {
-        const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl: img.dataUrl }),
-        });
-        const data = await response.json();
-        if (data.success) {
-          setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
-        }
-      }
-      setAiGeneratedImages([]);
-      setAiImagesMessage("Selected images product ke Images list mein add ho gayi — neeche dekh lo.");
-    } catch (error) {
-      setAiImagesMessage(error.message || "Unable to save selected images.");
-    } finally {
-      setSavingSelectedImages(false);
     }
   }
 
@@ -3607,93 +3508,6 @@ function Admin() {
                   </div>
                 )}
 
-                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(0,0,0,0.12)" }}>
-                  <label className="form-label">✨ Generate AI Images (4 premium + 1 lifestyle)</label>
-                  <p className="customer-info" style={{ fontSize: 13, marginBottom: 8 }}>
-                    Ek clear product photo choose karo — AI usi product ko preserve karte hue
-                    4 premium studio-style images aur 1 female-model lifestyle image banayega.
-                    Ye Google Gemini ki image-generation use karta hai (same GEMINI_API_KEY),
-                    lekin isme text-generation jaisa free tier nahi milta — per-image thodi
-                    si cost lag sakti hai, current pricing ai.google.dev par check kar lena.
-                  </p>
-                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <input
-                      className="form-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAiSourceFileChange}
-                      style={{ maxWidth: 260 }}
-                    />
-                    <button
-                      type="button"
-                      className="status-action-button"
-                      disabled={generatingImages || !aiSourceFile}
-                      onClick={generateAiImages}
-                    >
-                      {generatingImages ? "Generating..." : "✨ Generate 4 Premium + 1 Lifestyle"}
-                    </button>
-                  </div>
-                  {aiImagesMessage && (
-                    <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>{aiImagesMessage}</p>
-                  )}
-
-                  {aiGeneratedImages.length > 0 && (
-                    <>
-                      <div className="image-preview" style={{ marginTop: 12 }}>
-                        {aiGeneratedImages.map((img, index) => (
-                          <div
-                            className="image-preview-card"
-                            key={`${img.type}-${index}`}
-                            style={{ position: "relative", opacity: img.success ? 1 : 0.5 }}
-                          >
-                            {img.success ? (
-                              <>
-                                <img src={img.dataUrl} alt={img.type} />
-                                <label
-                                  style={{
-                                    position: "absolute",
-                                    top: 4,
-                                    left: 4,
-                                    background: "rgba(0,0,0,0.65)",
-                                    color: "#fff",
-                                    fontSize: 11,
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: 4,
-                                    cursor: "pointer",
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={img.selected}
-                                    onChange={() => toggleAiImageSelected(index)}
-                                  />
-                                  {img.type === "lifestyle" ? "Lifestyle" : "Premium"}
-                                </label>
-                              </>
-                            ) : (
-                              <div style={{ padding: 10, fontSize: 12 }}>
-                                {img.type === "lifestyle" ? "Lifestyle" : "Premium"} failed:{" "}
-                                {img.message || "unknown error"}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        className="status-action-button"
-                        disabled={savingSelectedImages}
-                        onClick={addSelectedAiImages}
-                        style={{ marginTop: 10 }}
-                      >
-                        {savingSelectedImages ? "Saving..." : "+ Add Selected Images to Product"}
-                      </button>
-                    </>
-                  )}
-                </div>
               </div>
             </div>
 
