@@ -411,6 +411,25 @@ function Admin() {
   const [importDescription, setImportDescription] = useState(IMPORT_DESCRIPTION_TEMPLATE);
   const [importingProduct, setImportingProduct] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  // Images auto-fetched by URL (either from "Fetch from Link" or a
+  // pasted "Copy Image Address" link) — stored as already-uploaded
+  // Supabase Storage URLs, separate from importImages (raw files
+  // picked with the file input below).
+  const [importFetchedImages, setImportFetchedImages] = useState([]);
+  const [importPasteImageUrl, setImportPasteImageUrl] = useState("");
+  const [fetchingFromLink, setFetchingFromLink] = useState(false);
+  const [fetchingImageUrl, setFetchingImageUrl] = useState(false);
+  const [fetchLinkMessage, setFetchLinkMessage] = useState("");
+  const [generatingPremium, setGeneratingPremium] = useState(false);
+  const [premiumMessage, setPremiumMessage] = useState("");
+  // AI product photography (4 premium shots + 1 lifestyle shot),
+  // generated from one real source photo. Nothing is uploaded to
+  // Supabase until the admin picks which generated images to keep.
+  const [aiSourceFile, setAiSourceFile] = useState(null);
+  const [generatingImages, setGeneratingImages] = useState(false);
+  const [aiGeneratedImages, setAiGeneratedImages] = useState([]);
+  const [aiImagesMessage, setAiImagesMessage] = useState("");
+  const [savingSelectedImages, setSavingSelectedImages] = useState(false);
 
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
@@ -491,6 +510,219 @@ function Admin() {
     setImportColors("Black");
     setImportStock("");
     setImportDescription(IMPORT_DESCRIPTION_TEMPLATE);
+    setImportFetchedImages([]);
+    setImportPasteImageUrl("");
+    setFetchLinkMessage("");
+    setPremiumMessage("");
+    setAiSourceFile(null);
+    setAiGeneratedImages([]);
+    setAiImagesMessage("");
+  }
+
+  /*
+   * Best-effort auto-fill: tries to read the pasted link's public
+   * title/description/image (the same info WhatsApp/Google would
+   * show as a link preview). Many supplier sites — Meesho included
+   * — block automated requests, so this can fail; when it does,
+   * it says so plainly and you just fill the fields in yourself.
+   * It never overwrites anything you've already typed.
+   */
+  async function fetchFromLink() {
+    if (!importSourceUrl.trim()) {
+      setFetchLinkMessage("Paste the product link first.");
+      return;
+    }
+    setFetchingFromLink(true);
+    setFetchLinkMessage("");
+    try {
+      const response = await adminFetch(`${API}/api/admin/products/fetch-url`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: importSourceUrl.trim() }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setFetchLinkMessage(data.message || "Couldn't auto-fill from this link — please fill the fields manually.");
+        return;
+      }
+      if (data.title && !importName.trim()) setImportName(data.title);
+      if (data.description && importDescription === IMPORT_DESCRIPTION_TEMPLATE) {
+        setImportDescription(data.description);
+      }
+      if (data.image) {
+        await fetchImageFromUrl(data.image);
+      }
+      setFetchLinkMessage("Auto-filled from the link — please review everything below before publishing.");
+    } catch (error) {
+      setFetchLinkMessage(error.message || "Couldn't auto-fill from this link — please fill the fields manually.");
+    } finally {
+      setFetchingFromLink(false);
+    }
+  }
+
+  /*
+   * Downloads one image from a direct image URL (e.g. right-click
+   * → "Copy Image Address" on a Meesho photo) into Supabase
+   * Storage. Used both by fetchFromLink() above and by the manual
+   * "paste image link" box in the Import tab.
+   */
+  async function fetchImageFromUrl(imageUrl) {
+    if (!imageUrl || !imageUrl.trim()) return;
+    setFetchingImageUrl(true);
+    setFetchLinkMessage("");
+    try {
+      const response = await adminFetch(`${API}/api/admin/products/fetch-image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: imageUrl.trim() }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setFetchLinkMessage(data.message || "Couldn't download that image — please upload it as a file instead.");
+        return;
+      }
+      setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
+    } catch (error) {
+      setFetchLinkMessage(error.message || "Couldn't download that image.");
+    } finally {
+      setFetchingImageUrl(false);
+    }
+  }
+
+  async function addPastedImageUrl() {
+    await fetchImageFromUrl(importPasteImageUrl);
+    setImportPasteImageUrl("");
+  }
+
+  function removeFetchedImage(url) {
+    setImportFetchedImages((prev) => prev.filter((item) => item !== url));
+  }
+
+  /*
+   * Sends whatever is currently in the title/description fields
+   * (auto-fetched or typed by hand) to the AI writer, which
+   * returns a SHRIMOH-branded premium version specific to THIS
+   * product — not a generic template. Requires ANTHROPIC_API_KEY
+   * to be configured on the backend.
+   */
+  async function generatePremiumContent() {
+    if (!importName.trim() && importDescription.trim() === IMPORT_DESCRIPTION_TEMPLATE.trim()) {
+      setPremiumMessage("Paste or fetch a title/description first, then generate.");
+      return;
+    }
+    setGeneratingPremium(true);
+    setPremiumMessage("");
+    try {
+      const response = await adminFetch(`${API}/api/admin/products/generate-premium`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: importName,
+          description: importDescription === IMPORT_DESCRIPTION_TEMPLATE ? "" : importDescription,
+          category: importCategory,
+        }),
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setPremiumMessage(data.message || "AI content generation failed.");
+        return;
+      }
+      if (data.title) setImportName(data.title);
+      if (data.description) setImportDescription(data.description);
+      setPremiumMessage("Premium content generated — review and edit anything before publishing.");
+    } catch (error) {
+      setPremiumMessage(error.message || "AI content generation failed.");
+    } finally {
+      setGeneratingPremium(false);
+    }
+  }
+
+  function handleAiSourceFileChange(event) {
+    setAiSourceFile(event.target.files?.[0] || null);
+    setAiGeneratedImages([]);
+    setAiImagesMessage("");
+  }
+
+  /*
+   * Sends one real product photo to the backend, which asks
+   * Gemini's image model to recreate it as 4 premium studio shots
+   * + 1 lifestyle shot. Results come back as base64 previews only
+   * - nothing is saved yet, so a bad generation costs nothing to
+   * discard.
+   */
+  async function generateAiImages() {
+    if (!aiSourceFile) {
+      setAiImagesMessage("Pehle ek source product photo choose karo.");
+      return;
+    }
+    setGeneratingImages(true);
+    setAiImagesMessage("");
+    setAiGeneratedImages([]);
+    try {
+      const formData = new FormData();
+      formData.append("sourceImage", aiSourceFile);
+      const response = await adminFetch(`${API}/api/admin/products/generate-images`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!data.success) {
+        setAiImagesMessage(data.message || "AI image generation failed.");
+        return;
+      }
+      const images = data.images || [];
+      setAiGeneratedImages(images.map((img) => ({ ...img, selected: img.success })));
+      const failedCount = images.filter((img) => !img.success).length;
+      setAiImagesMessage(
+        failedCount > 0
+          ? `${images.length - failedCount} of ${images.length} images generated — ${failedCount} failed (you can retry). Review below, then add the ones you like.`
+          : "All 5 images generated — review below, then add the ones you like."
+      );
+    } catch (error) {
+      setAiImagesMessage(error.message || "AI image generation failed.");
+    } finally {
+      setGeneratingImages(false);
+    }
+  }
+
+  function toggleAiImageSelected(index) {
+    setAiGeneratedImages((prev) =>
+      prev.map((img, i) => (i === index ? { ...img, selected: !img.selected } : img))
+    );
+  }
+
+  /*
+   * Uploads every checked generated image to Supabase Storage and
+   * drops its URL into importFetchedImages - the same list used by
+   * "Fetch from Link" / "paste image link", so it flows into the
+   * product exactly the same way at submit time.
+   */
+  async function addSelectedAiImages() {
+    const selected = aiGeneratedImages.filter((img) => img.success && img.selected);
+    if (selected.length === 0) {
+      setAiImagesMessage("Koi image select nahi ki — checkbox tick karke phir try karo.");
+      return;
+    }
+    setSavingSelectedImages(true);
+    try {
+      for (const img of selected) {
+        const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: img.dataUrl }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
+        }
+      }
+      setAiGeneratedImages([]);
+      setAiImagesMessage("Selected images product ke Images list mein add ho gayi — neeche dekh lo.");
+    } catch (error) {
+      setAiImagesMessage(error.message || "Unable to save selected images.");
+    } finally {
+      setSavingSelectedImages(false);
+    }
   }
 
   async function submitImportProduct(targetStatus) {
@@ -502,8 +734,8 @@ function Admin() {
       alert("Product name required.");
       return;
     }
-    if (importImages.length === 0) {
-      alert("Please select at least one product image.");
+    if (importImages.length === 0 && importFetchedImages.length === 0) {
+      alert("Please select at least one product image (upload a file, or fetch/paste one from the link).");
       return;
     }
     const cost = Number(importCostPrice);
@@ -527,6 +759,7 @@ function Admin() {
       formData.append("description", importDescription);
       formData.append("colors", importColors);
       formData.append("status", targetStatus);
+      formData.append("imageUrls", JSON.stringify(importFetchedImages));
       importImages.forEach((file) => formData.append("images", file));
 
       const response = await adminFetch(`${API}/api/admin/products/import`, {
@@ -3157,12 +3390,31 @@ function Admin() {
             <div className="product-form-grid">
               <div className="form-group full">
                 <label className="form-label">Meesho / Supplier Product URL (internal reference only, never shown to customers)</label>
-                <input
-                  className="form-input"
-                  value={importSourceUrl}
-                  onChange={(event) => setImportSourceUrl(event.target.value)}
-                  placeholder="https://www.meesho.com/..."
-                />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <input
+                    className="form-input"
+                    value={importSourceUrl}
+                    onChange={(event) => setImportSourceUrl(event.target.value)}
+                    placeholder="https://www.meesho.com/..."
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="status-action-button"
+                    disabled={fetchingFromLink || fetchingImageUrl}
+                    onClick={fetchFromLink}
+                    style={{ whiteSpace: "nowrap" }}
+                  >
+                    {fetchingFromLink || fetchingImageUrl ? "Fetching..." : "🔍 Try Auto-Fill from Link"}
+                  </button>
+                </div>
+                <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>
+                  Best-effort only — many supplier sites (Meesho included) block automated
+                  requests, so this can fail. If it does, just fill the fields below by hand.
+                </p>
+                {fetchLinkMessage && (
+                  <p className="customer-info" style={{ marginTop: 4, fontSize: 13 }}>{fetchLinkMessage}</p>
+                )}
               </div>
 
               <div className="form-group full">
@@ -3264,6 +3516,23 @@ function Admin() {
                   value={importDescription}
                   onChange={(event) => setImportDescription(event.target.value)}
                 />
+                <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
+                  <button
+                    type="button"
+                    className="status-action-button"
+                    disabled={generatingPremium}
+                    onClick={generatePremiumContent}
+                  >
+                    {generatingPremium ? "Generating..." : "✨ Generate Premium Content"}
+                  </button>
+                  <span className="customer-info" style={{ fontSize: 13 }}>
+                    Rewrites the title + description above into a SHRIMOH-premium version
+                    specific to this product (uses Google Gemini — needs GEMINI_API_KEY set up once, free tier).
+                  </span>
+                </div>
+                {premiumMessage && (
+                  <p className="customer-info" style={{ marginTop: 4, fontSize: 13 }}>{premiumMessage}</p>
+                )}
               </div>
 
               <div className="form-group full">
@@ -3284,6 +3553,147 @@ function Admin() {
                     ))}
                   </div>
                 )}
+
+                <div style={{ marginTop: 14 }}>
+                  <label className="form-label">
+                    Or paste an image link (right-click a Meesho photo → "Copy Image Address")
+                  </label>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <input
+                      className="form-input"
+                      value={importPasteImageUrl}
+                      onChange={(event) => setImportPasteImageUrl(event.target.value)}
+                      placeholder="https://images.meesho.com/..."
+                      style={{ flex: 1 }}
+                    />
+                    <button
+                      type="button"
+                      className="status-action-button"
+                      disabled={fetchingImageUrl || !importPasteImageUrl.trim()}
+                      onClick={addPastedImageUrl}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {fetchingImageUrl ? "Fetching..." : "+ Add Image"}
+                    </button>
+                  </div>
+                </div>
+
+                {importFetchedImages.length > 0 && (
+                  <div className="image-preview">
+                    {importFetchedImages.map((url) => (
+                      <div className="image-preview-card" key={url} style={{ position: "relative" }}>
+                        <img src={url} alt="Fetched product" />
+                        <button
+                          type="button"
+                          onClick={() => removeFetchedImage(url)}
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            background: "rgba(0,0,0,0.6)",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "50%",
+                            width: 22,
+                            height: 22,
+                            cursor: "pointer",
+                          }}
+                          title="Remove"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(0,0,0,0.12)" }}>
+                  <label className="form-label">✨ Generate AI Images (4 premium + 1 lifestyle)</label>
+                  <p className="customer-info" style={{ fontSize: 13, marginBottom: 8 }}>
+                    Ek clear product photo choose karo — AI usi product ko preserve karte hue
+                    4 premium studio-style images aur 1 female-model lifestyle image banayega.
+                    Ye Google Gemini ki image-generation use karta hai (same GEMINI_API_KEY),
+                    lekin isme text-generation jaisa free tier nahi milta — per-image thodi
+                    si cost lag sakti hai, current pricing ai.google.dev par check kar lena.
+                  </p>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <input
+                      className="form-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAiSourceFileChange}
+                      style={{ maxWidth: 260 }}
+                    />
+                    <button
+                      type="button"
+                      className="status-action-button"
+                      disabled={generatingImages || !aiSourceFile}
+                      onClick={generateAiImages}
+                    >
+                      {generatingImages ? "Generating..." : "✨ Generate 4 Premium + 1 Lifestyle"}
+                    </button>
+                  </div>
+                  {aiImagesMessage && (
+                    <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>{aiImagesMessage}</p>
+                  )}
+
+                  {aiGeneratedImages.length > 0 && (
+                    <>
+                      <div className="image-preview" style={{ marginTop: 12 }}>
+                        {aiGeneratedImages.map((img, index) => (
+                          <div
+                            className="image-preview-card"
+                            key={`${img.type}-${index}`}
+                            style={{ position: "relative", opacity: img.success ? 1 : 0.5 }}
+                          >
+                            {img.success ? (
+                              <>
+                                <img src={img.dataUrl} alt={img.type} />
+                                <label
+                                  style={{
+                                    position: "absolute",
+                                    top: 4,
+                                    left: 4,
+                                    background: "rgba(0,0,0,0.65)",
+                                    color: "#fff",
+                                    fontSize: 11,
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 4,
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={img.selected}
+                                    onChange={() => toggleAiImageSelected(index)}
+                                  />
+                                  {img.type === "lifestyle" ? "Lifestyle" : "Premium"}
+                                </label>
+                              </>
+                            ) : (
+                              <div style={{ padding: 10, fontSize: 12 }}>
+                                {img.type === "lifestyle" ? "Lifestyle" : "Premium"} failed:{" "}
+                                {img.message || "unknown error"}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="status-action-button"
+                        disabled={savingSelectedImages}
+                        onClick={addSelectedAiImages}
+                        style={{ marginTop: 10 }}
+                      >
+                        {savingSelectedImages ? "Saving..." : "+ Add Selected Images to Product"}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
