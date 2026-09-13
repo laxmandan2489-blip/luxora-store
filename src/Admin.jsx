@@ -41,6 +41,13 @@ const BULK_TEMPLATE_HEADERS = [
   "Description",
   "Colors",
   "Image URLs",
+  "Color Images",
+  "Supplier Name",
+  "Supplier Cost",
+  "Margin %",
+  "Supplier Product ID",
+  "Supplier Link",
+  "Shipping Time",
 ];
 
 const BULK_COLUMN_ALIASES = {
@@ -52,6 +59,22 @@ const BULK_COLUMN_ALIASES = {
   description: ["description", "desc"],
   colors: ["colors", "color"],
   images: ["image urls", "images", "image url", "photo urls", "photos"],
+  // Optional: one specific photo per color (e.g. so choosing "Black"
+  // shows a different photo than "Brown"). Format per cell:
+  // "Black=<url>|Brown=<url>" - same "|" convention as multi-value
+  // cells elsewhere, with "=" pairing a color name to its one photo.
+  colorImages: ["color images", "colorimages", "color photos", "photo per color"],
+  // Supplier/dropshipping fields - admin-only, never shown to
+  // customers, same as the single "Add Product" form's own section.
+  supplierName: ["supplier name"],
+  supplierCost: ["supplier cost", "cost", "cost price"],
+  // If Price is left blank, Supplier Cost + Margin % fills it in
+  // automatically (Price = cost + that % of cost) - the bulk
+  // equivalent of the single form's "Fill Price" margin calculator.
+  marginPercent: ["margin %", "margin percent", "margin"],
+  supplierProductId: ["supplier product id", "supplier id"],
+  supplierLink: ["supplier link"],
+  shippingTime: ["shipping time"],
 };
 
 // A small hand-written CSV parser (not a library) so it handles the
@@ -1283,17 +1306,43 @@ function Admin() {
      BULK UPLOAD (CSV)
      ===================================================== */
   function downloadBulkTemplate() {
-    const exampleRow = [
-      "Tan Leather Tote Bag",
-      "Tote Bags",
-      "2999",
-      "3999",
-      "15",
-      "Premium leather tote bag with an adjustable strap.",
-      "Tan|Black",
-      "https://example.com/image1.jpg|https://example.com/image2.jpg",
+    const exampleRows = [
+      [
+        "Tan Leather Tote Bag",
+        "Tote Bags",
+        "2999",
+        "3999",
+        "15",
+        "Premium leather tote bag with an adjustable strap.",
+        "Tan|Black",
+        "https://example.com/image1.jpg|https://example.com/image2.jpg",
+        "Tan=https://example.com/tan-photo.jpg|Black=https://example.com/black-photo.jpg",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ],
+      [
+        "Classic Sling Bag (price auto-filled from cost + margin)",
+        "Sling Bags",
+        "", // Price left blank on purpose - filled in from Supplier Cost + Margin % below
+        "",
+        "20",
+        "Everyday sling bag.",
+        "Black",
+        "https://example.com/image3.jpg",
+        "",
+        "AliExpress Seller XYZ",
+        "800",
+        "40",
+        "SUP-12345",
+        "https://supplier-site.com/product/12345",
+        "7-12 days",
+      ],
     ];
-    const csvContent = [BULK_TEMPLATE_HEADERS, exampleRow]
+    const csvContent = [BULK_TEMPLATE_HEADERS, ...exampleRows]
       .map((row) => row.map(csvEscapeCell).join(","))
       .join("\r\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -1337,6 +1386,13 @@ function Admin() {
           description: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.description),
           colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
           images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
+          colorImages: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorImages),
+          supplierName: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierName),
+          supplierCost: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierCost),
+          marginPercent: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.marginPercent),
+          supplierProductId: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierProductId),
+          supplierLink: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierLink),
+          shippingTime: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.shippingTime),
         };
 
         if (columnIndex.name === -1 || columnIndex.price === -1 || columnIndex.images === -1) {
@@ -1352,9 +1408,17 @@ function Admin() {
         const parsedRows = dataRows.map((row, index) => {
           const name = cell(row, columnIndex.name);
           const priceRaw = cell(row, columnIndex.price);
-          const price = Number(priceRaw);
+          let price = Number(priceRaw);
           const oldPriceRaw = cell(row, columnIndex.oldPrice);
           const stockRaw = cell(row, columnIndex.stock);
+          const supplierName = cell(row, columnIndex.supplierName);
+          const supplierCostRaw = cell(row, columnIndex.supplierCost);
+          const supplierCost = supplierCostRaw ? Number(supplierCostRaw) : null;
+          const marginPercentRaw = cell(row, columnIndex.marginPercent);
+          const marginPercent = marginPercentRaw ? Number(marginPercentRaw) : null;
+          const supplierProductId = cell(row, columnIndex.supplierProductId);
+          const supplierLink = cell(row, columnIndex.supplierLink);
+          const shippingTime = cell(row, columnIndex.shippingTime);
           const images = cell(row, columnIndex.images)
             .split("|")
             .map((url) => url.trim())
@@ -1364,10 +1428,59 @@ function Admin() {
             .map((color) => color.trim())
             .filter(Boolean);
 
+          // "Color Images" cell format: "Black=<url>|Brown=<url>" - one
+          // photo per color name, "|"-separated pairs, "=" splitting each
+          // pair (only the first "=" counts, so a URL with its own "="
+          // in a query string still parses correctly).
+          const colorImages = {};
+          const warnings = [];
+          cell(row, columnIndex.colorImages)
+            .split("|")
+            .map((pair) => pair.trim())
+            .filter(Boolean)
+            .forEach((pair) => {
+              const equalsIndex = pair.indexOf("=");
+              if (equalsIndex === -1) {
+                warnings.push(`"${pair}" in Color Images is missing "=" between the color name and its link.`);
+                return;
+              }
+              const colorName = pair.slice(0, equalsIndex).trim();
+              const url = pair.slice(equalsIndex + 1).trim();
+              if (!colorName || !url) return;
+              colorImages[colorName] = url;
+              if (!colors.some((c) => c.toLowerCase() === colorName.toLowerCase())) {
+                warnings.push(`"${colorName}" in Color Images doesn't match any color in the Colors column.`);
+              }
+            });
+
+          // If Price is left blank but Supplier Cost + Margin % are
+          // both given, fill it in automatically - same formula as
+          // the single "Add Product" form's "Fill Price" button
+          // (percent-on-cost only; a fixed-₹ margin can just be typed
+          // straight into Price instead).
+          let priceAutoFilled = false;
+          if (
+            (!priceRaw || !Number.isFinite(price) || price <= 0) &&
+            Number.isFinite(supplierCost) &&
+            supplierCost > 0 &&
+            Number.isFinite(marginPercent)
+          ) {
+            price = Math.round(supplierCost * (1 + marginPercent / 100));
+            priceAutoFilled = true;
+          }
+
           const errors = [];
           if (!name) errors.push("Product name is missing.");
-          if (!priceRaw || !Number.isFinite(price) || price <= 0) errors.push("A valid price is missing.");
+          if (!Number.isFinite(price) || price <= 0) {
+            errors.push(
+              "A valid price is missing (or fill in Supplier Cost + Margin % to calculate it automatically)."
+            );
+          }
           if (images.length === 0) errors.push("At least one image URL is missing.");
+
+          if (priceAutoFilled) {
+            warnings.push(`Price auto-calculated as ₹${price} from Supplier Cost + Margin %.`);
+          }
 
           return {
             rowNumber: index + 2, // spreadsheet row number: row 1 is the header
@@ -1379,8 +1492,15 @@ function Admin() {
             description: cell(row, columnIndex.description),
             colors,
             images,
+            colorImages,
+            supplierName,
+            supplierCost,
+            supplierProductId,
+            supplierLink,
+            shippingTime,
             valid: errors.length === 0,
             errors,
+            warnings,
           };
         });
 
@@ -1420,6 +1540,12 @@ function Admin() {
             description: row.description,
             colors: row.colors,
             images: row.images,
+            colorImages: row.colorImages,
+            supplierName: row.supplierName,
+            supplierCost: row.supplierCost,
+            supplierProductId: row.supplierProductId,
+            supplierLink: row.supplierLink,
+            shippingTime: row.shippingTime,
           })),
         }),
       });
@@ -2768,6 +2894,11 @@ function Admin() {
         .bulk-status-error {
           color: #b91c1c;
           font-weight: 600;
+          white-space: normal;
+        }
+        .bulk-status-warning {
+          color: #92620a;
+          font-weight: 500;
           white-space: normal;
         }
         .bulk-fail-list {
@@ -4388,7 +4519,15 @@ function Admin() {
                 by one. Each row needs a product name, a price, and at least one image URL (a
                 real public photo link - a spreadsheet cell can't hold an uploaded photo file
                 directly, so paste a link to each photo instead, for example from your supplier's
-                page or a photo you've already uploaded).
+                page or a photo you've already uploaded). The optional "Color Images" column lets
+                one specific photo show for each color - format each cell as
+                "Black=&lt;link&gt;|Brown=&lt;link&gt;" (color name, then "=", then that color's
+                photo link; "|" between colors). "Supplier Name", "Supplier Cost", "Supplier
+                Product ID", "Supplier Link" and "Shipping Time" are optional, admin-only fields
+                (never shown to customers) for tracking dropshipping details - same as the single
+                form's Supplier section above. If you leave "Price" blank, filling in "Supplier
+                Cost" and "Margin %" calculates it for you automatically (cost plus that % on
+                top), just like the "Fill Price" button in the form above.
               </p>
               <div className="bulk-upload-actions">
                 <button type="button" className="secondary-button" onClick={downloadBulkTemplate}>
@@ -4420,8 +4559,10 @@ function Admin() {
                           <th>Name</th>
                           <th>Category</th>
                           <th>Price</th>
+                          <th>Cost</th>
                           <th>Stock</th>
                           <th>Images</th>
+                          <th>Color Photos</th>
                           <th>Status</th>
                         </tr>
                       </thead>
@@ -4432,11 +4573,22 @@ function Admin() {
                             <td>{row.name || "—"}</td>
                             <td>{row.category}</td>
                             <td>{Number.isFinite(row.price) ? formatMoney(row.price) : "—"}</td>
+                            <td>{Number.isFinite(row.supplierCost) ? formatMoney(row.supplierCost) : "—"}</td>
                             <td>{row.stock}</td>
                             <td>{row.images.length}</td>
                             <td>
+                              {Object.keys(row.colorImages || {}).length > 0
+                                ? `${Object.keys(row.colorImages).length} of ${row.colors.length}`
+                                : "—"}
+                            </td>
+                            <td>
                               {row.valid ? (
-                                <span className="bulk-status-ok">✅ Ready</span>
+                                <span className="bulk-status-ok">
+                                  ✅ Ready
+                                  {row.warnings?.length > 0 && (
+                                    <span className="bulk-status-warning"> ⚠ {row.warnings.join(" ")}</span>
+                                  )}
+                                </span>
                               ) : (
                                 <span className="bulk-status-error">⚠ {row.errors.join(" ")}</span>
                               )}
