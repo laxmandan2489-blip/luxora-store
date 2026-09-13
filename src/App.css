@@ -56,7 +56,6 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-body:has(.lux-product-overlay),
 body:has(.lux-cart-overlay),
 body:has(.lux-wishlist-overlay),
 body:has(.lux-checkout-overlay) {
@@ -1525,40 +1524,60 @@ a {
 }
 
 /* =========================================================
-   PRODUCT DETAIL OVERLAY
-========================================================= */
-
-.lux-product-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 20000;
-  padding: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(19, 15, 9, 0.78);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  overflow-y: auto;
-}
-
-/* =========================================================
    PRODUCT DETAIL PAGE
+   A real, full page (/product/:id) instead of a popup/modal -
+   ".lux-product-page-wrap" is the page's own normal-flow
+   container (page padding, "Back" control, "You may also like"
+   below it), and ".lux-product-page" is just the gallery+info
+   two-column layout inside it.
 ========================================================= */
+
+.lux-product-page-wrap {
+  width: min(1320px, 96vw);
+  margin: 0 auto;
+  padding: 34px 0 10px;
+}
 
 .lux-product-page {
   position: relative;
-  width: min(1320px, 96vw);
-  height: min(900px, 92vh);
-  max-height: 92vh;
+  width: 100%;
   display: grid;
+  align-items: start;
   grid-template-columns: minmax(0, 1.04fr) minmax(420px, 0.76fr);
   background: var(--lux-bg);
-  overflow: hidden;
-  box-shadow:
-    0 35px 100px rgba(0, 0, 0, 0.42),
-    0 8px 30px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
   animation: luxProductOpen 0.35s ease;
+}
+
+.lux-related-section {
+  margin-top: 50px;
+}
+
+.lux-related-section .lux-section-header {
+  width: 100%;
+  padding: 0 0 35px;
+}
+
+.lux-related-section .lux-product-grid {
+  width: 100%;
+}
+
+.lux-product-not-found {
+  padding: 80px 0 100px;
+  text-align: center;
+}
+
+.lux-product-not-found h1 {
+  margin: 0 0 12px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 34px;
+  color: var(--lux-text);
+}
+
+.lux-product-not-found p {
+  margin: 0 0 24px;
+  color: #766a56;
+  font-size: 14px;
 }
 
 @keyframes luxProductOpen {
@@ -1853,29 +1872,32 @@ a {
 }
 
 /* =========================================================
-   PRODUCT CLOSE
+   PRODUCT BACK BUTTON
+   Replaces the old modal's "×" close button - a normal, in-flow
+   control above the page content (this is a real page, so there's
+   nothing to "close", only somewhere to go back to).
 ========================================================= */
 
-.lux-product-close {
-  position: absolute;
-  top: 17px;
-  right: 17px;
-  z-index: 80;
-  width: 43px;
-  height: 43px;
+.lux-product-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 11px 20px;
   border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.93);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
   color: var(--lux-text);
-  font-size: 25px;
-  font-weight: 300;
-  transition: all 0.25s ease;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
 }
 
-.lux-product-close:hover {
+.lux-product-back:hover {
   background: var(--lux-text);
-  color: white;
-  transform: rotate(90deg);
+  color: #fff;
 }
 
 /* =========================================================
@@ -1885,7 +1907,7 @@ a {
 .lux-product-wishlist {
   position: absolute;
   top: 17px;
-  right: 70px;
+  right: 17px;
   z-index: 80;
   width: 43px;
   height: 43px;
@@ -1917,7 +1939,7 @@ a {
   position: relative;
   min-width: 0;
   min-height: 0;
-  height: 100%;
+  height: min(700px, 82vh);
   background:
     radial-gradient(
       circle at 50% 42%,
@@ -2142,8 +2164,8 @@ a {
 
 .lux-product-info {
   min-width: 0;
-  padding: 68px 55px 45px;
-  overflow-y: auto;
+  padding: 34px 55px 45px;
+  overflow-y: visible;
   background: var(--lux-bg);
 }
 
@@ -4175,9 +4197,6 @@ a {
   }
 
   .lux-product-page {
-    width: 96vw;
-    height: 90vh;
-    max-height: 90vh;
     grid-template-columns: 1fr 0.9fr;
   }
 
@@ -4491,34 +4510,23 @@ a {
     margin-top: 8px;
   }
 
-  .lux-product-overlay {
-    padding: 0;
-    align-items: flex-start;
-    background: #f6f1e6;
-    backdrop-filter: none;
+  .lux-product-page-wrap {
+    padding: 18px 0 0;
   }
 
   .lux-product-page {
     width: 100%;
-    min-height: 100vh;
-    height: auto;
-    max-height: none;
     display: block;
-    overflow: visible;
     box-shadow: none;
   }
 
-  .lux-product-close {
-    top: 12px;
-    right: 12px;
-    width: 40px;
-    height: 40px;
-    background: rgba(255, 255, 255, 0.94);
+  .lux-product-back {
+    margin: 0 16px 14px;
   }
 
   .lux-product-wishlist {
     top: 12px;
-    right: 62px;
+    right: 12px;
     width: 40px;
     height: 40px;
   }

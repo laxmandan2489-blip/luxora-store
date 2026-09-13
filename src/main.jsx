@@ -16,12 +16,16 @@ const root = createRoot(document.getElementById("root"));
  *                     back/forward) - this is new.
  * /track-order     -> Storefront, showing the full-page "Track
  *                     Order" experience instead of the homepage.
+ * /product/:id     -> Storefront, showing a single product as a
+ *                     real full page at its own URL (not a popup) -
+ *                     shareable and works with browser back/forward.
  * everything else  -> Storefront, all products
  *
- * "/category/:slug", "/track-order" and "/*" all render the SAME
- * <App /> element so the storefront never remounts when navigating
- * between them - cart, wishlist etc. all stay intact. App reads
- * which one it is from the URL itself (see src/App.jsx).
+ * "/category/:slug", "/track-order", "/product/:id" and "/*" all
+ * render the SAME <App /> element so the storefront never remounts
+ * when navigating between them - cart, wishlist etc. all stay
+ * intact. App reads which one it is from the URL itself (see
+ * src/App.jsx).
  */
 root.render(
   <StrictMode>
@@ -30,6 +34,7 @@ root.render(
         <Route path="/admin/*" element={<Admin />} />
         <Route path="/category/:slug" element={<App />} />
         <Route path="/track-order" element={<App />} />
+        <Route path="/product/:id" element={<App />} />
         <Route path="/*" element={<App />} />
       </Routes>
     </BrowserRouter>

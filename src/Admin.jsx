@@ -59,10 +59,11 @@ const BULK_COLUMN_ALIASES = {
   description: ["description", "desc"],
   colors: ["colors", "color"],
   images: ["image urls", "images", "image url", "photo urls", "photos"],
-  // Optional: one specific photo per color (e.g. so choosing "Black"
-  // shows a different photo than "Brown"). Format per cell:
-  // "Black=<url>|Brown=<url>" - same "|" convention as multi-value
-  // cells elsewhere, with "=" pairing a color name to its one photo.
+  // Optional: one or more specific photos per color (e.g. so choosing
+  // "Black" shows different photos than "Brown"). Format per cell:
+  // "Black=<url1>,<url2>|Brown=<url1>" - "|" separates colors (same
+  // convention as multi-value cells elsewhere), "=" pairs a color name
+  // to its photos, and "," separates multiple photos for that color.
   colorImages: ["color images", "colorimages", "color photos", "photo per color"],
   // Supplier/dropshipping fields - admin-only, never shown to
   // customers, same as the single "Add Product" form's own section.
@@ -573,6 +574,11 @@ function Admin() {
   const [editColors, setEditColors] =
     useState("");
   const [editColorImageFiles, setEditColorImageFiles] =
+    useState({});
+  // Existing (already-uploaded) photos per color for the product being
+  // edited - the admin can remove individual ones here; whatever's left
+  // is kept, and any newly chosen files above get added on top of it.
+  const [editExistingColorImages, setEditExistingColorImages] =
     useState({});
   const [editImages, setEditImages] =
     useState([]);
@@ -1190,6 +1196,39 @@ function Admin() {
     setImages((previous) => previous.filter((_, i) => i !== index));
   }
 
+  /*
+   * PER-COLOR PHOTOS (Add Product)
+   * Each color can now have several photos, not just one - these
+   * three helpers add/reorder/remove within one color's own list,
+   * the same ◀ ▶ ✕ pattern already used for the main gallery above.
+   */
+  function addColorImageFiles(color, fileList) {
+    const selected = Array.from(fileList || []);
+    if (selected.length === 0) return;
+    setColorImageFiles((previous) => ({
+      ...previous,
+      [color]: [...(previous[color] || []), ...selected],
+    }));
+  }
+
+  function moveColorImage(color, index, direction) {
+    setColorImageFiles((previous) => {
+      const list = previous[color] || [];
+      const next = [...list];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return { ...previous, [color]: next };
+    });
+  }
+
+  function removeColorImage(color, index) {
+    setColorImageFiles((previous) => ({
+      ...previous,
+      [color]: (previous[color] || []).filter((_, i) => i !== index),
+    }));
+  }
+
   /* =====================================================
      ADD PRODUCT
      ===================================================== */
@@ -1258,10 +1297,9 @@ function Admin() {
         );
       });
       parseColorList(colors).forEach((color) => {
-        const file = colorImageFiles[color];
-        if (file) {
+        (colorImageFiles[color] || []).forEach((file) => {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
-        }
+        });
       });
       const response =
         await adminFetch(
@@ -1336,7 +1374,7 @@ function Admin() {
         "Premium leather tote bag with an adjustable strap.",
         "Tan|Black",
         "https://example.com/image1.jpg|https://example.com/image2.jpg",
-        "Tan=https://example.com/tan-photo.jpg|Black=https://example.com/black-photo.jpg",
+        "Tan=https://example.com/tan-photo1.jpg,https://example.com/tan-photo2.jpg|Black=https://example.com/black-photo.jpg",
         "",
         "",
         "",
@@ -1448,10 +1486,11 @@ function Admin() {
             .map((color) => color.trim())
             .filter(Boolean);
 
-          // "Color Images" cell format: "Black=<url>|Brown=<url>" - one
-          // photo per color name, "|"-separated pairs, "=" splitting each
-          // pair (only the first "=" counts, so a URL with its own "="
-          // in a query string still parses correctly).
+          // "Color Images" cell format: "Black=<url1>,<url2>|Brown=<url1>"
+          // - one or more photos per color name, "|"-separated pairs,
+          // "=" splitting each pair (only the first "=" counts, so a URL
+          // with its own "=" in a query string still parses correctly),
+          // and "," separating multiple photo links for the same color.
           const colorImages = {};
           const warnings = [];
           cell(row, columnIndex.colorImages)
@@ -1461,13 +1500,17 @@ function Admin() {
             .forEach((pair) => {
               const equalsIndex = pair.indexOf("=");
               if (equalsIndex === -1) {
-                warnings.push(`"${pair}" in Color Images is missing "=" between the color name and its link.`);
+                warnings.push(`"${pair}" in Color Images is missing "=" between the color name and its link(s).`);
                 return;
               }
               const colorName = pair.slice(0, equalsIndex).trim();
-              const url = pair.slice(equalsIndex + 1).trim();
-              if (!colorName || !url) return;
-              colorImages[colorName] = url;
+              const urls = pair
+                .slice(equalsIndex + 1)
+                .split(",")
+                .map((url) => url.trim())
+                .filter(Boolean);
+              if (!colorName || urls.length === 0) return;
+              colorImages[colorName] = urls;
               if (!colors.some((c) => c.toLowerCase() === colorName.toLowerCase())) {
                 warnings.push(`"${colorName}" in Color Images doesn't match any color in the Colors column.`);
               }
@@ -1797,6 +1840,15 @@ function Admin() {
     );
     setEditImages([]);
     setEditColorImageFiles({});
+    setEditExistingColorImages(() => {
+      const source = product?.colorImages || {};
+      const normalized = {};
+      for (const color of Object.keys(source)) {
+        const value = source[color];
+        normalized[color] = Array.isArray(value) ? [...value] : value ? [value] : [];
+      }
+      return normalized;
+    });
     setEditSupplierName(product?.supplierName || "");
     setEditSupplierProductId(product?.supplierProductId || "");
     setEditSupplierLink(product?.supplierLink || "");
@@ -1837,6 +1889,52 @@ function Admin() {
   function removeEditImage(index) {
     setEditImages((previous) => previous.filter((_, i) => i !== index));
   }
+
+  /*
+   * PER-COLOR PHOTOS (Edit Product)
+   * Same idea as the Add Product helpers above, but for newly queued
+   * files in the edit form. Uploading new photos for a color replaces
+   * that color's whole photo set on save (see server.js) - existing
+   * photos are shown separately, read-only, so the admin can see
+   * what's already there before deciding to replace it.
+   */
+  function addEditColorImageFiles(color, fileList) {
+    const selected = Array.from(fileList || []);
+    if (selected.length === 0) return;
+    setEditColorImageFiles((previous) => ({
+      ...previous,
+      [color]: [...(previous[color] || []), ...selected],
+    }));
+  }
+
+  function moveEditColorImage(color, index, direction) {
+    setEditColorImageFiles((previous) => {
+      const list = previous[color] || [];
+      const next = [...list];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return { ...previous, [color]: next };
+    });
+  }
+
+  function removeEditColorImage(color, index) {
+    setEditColorImageFiles((previous) => ({
+      ...previous,
+      [color]: (previous[color] || []).filter((_, i) => i !== index),
+    }));
+  }
+
+  // Removes one of a color's EXISTING (already-uploaded) photos - it's
+  // just dropped from what gets kept on save, nothing is deleted until
+  // the admin actually saves the product.
+  function removeEditExistingColorImage(color, index) {
+    setEditExistingColorImages((previous) => ({
+      ...previous,
+      [color]: (previous[color] || []).filter((_, i) => i !== index),
+    }));
+  }
+
   async function updateProduct(event) {
     event.preventDefault();
     if (!editingProduct?.id) {
@@ -1894,11 +1992,14 @@ function Admin() {
           file
         );
       });
+      // Existing photos the admin chose to KEEP (after any ✕ removals)
+      // for every color shown in the form - the server keeps exactly
+      // these and then adds any newly uploaded photos on top of them.
+      formData.append("colorImages", JSON.stringify(editExistingColorImages));
       parseColorList(editColors).forEach((color) => {
-        const file = editColorImageFiles[color];
-        if (file) {
+        (editColorImageFiles[color] || []).forEach((file) => {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
-        }
+        });
       });
       const response =
         await adminFetch(
@@ -2773,30 +2874,46 @@ function Admin() {
         .color-photo-grid {
           display: flex;
           flex-wrap: wrap;
-          gap: 14px;
+          gap: 18px;
           margin-top: 4px;
         }
         .color-photo-slot {
           display: flex;
           flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          width: 100px;
+          align-items: flex-start;
+          gap: 8px;
+          width: 220px;
+          padding: 10px;
+          border: 1px solid #e6e6e6;
+          border-radius: 10px;
+          background: #fafafa;
         }
         .color-photo-name {
           font-size: 12px;
           font-weight: 600;
         }
+        .color-photo-preview-list {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .color-photo-preview-card {
+          width: 82px;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          overflow: hidden;
+          background: white;
+          position: relative;
+        }
         .color-photo-preview {
           width: 80px;
           height: 80px;
           object-fit: cover;
-          border-radius: 8px;
-          border: 1px solid #ddd;
+          display: block;
         }
         .color-photo-placeholder {
-          width: 80px;
-          height: 80px;
+          width: 100%;
+          padding: 18px 0;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -2806,8 +2923,24 @@ function Admin() {
           color: #999;
           text-align: center;
         }
+        .color-photo-existing-tag,
+        .color-photo-new-tag {
+          display: block;
+          padding: 2px 4px;
+          font-size: 8px;
+          font-weight: 700;
+          letter-spacing: 0.4px;
+          text-align: center;
+          text-transform: uppercase;
+        }
+        .color-photo-existing-tag {
+          color: #4a7a4a;
+        }
+        .color-photo-new-tag {
+          color: #a06a1f;
+        }
         .color-photo-slot input[type="file"] {
-          width: 100px;
+          width: 100%;
           font-size: 10px;
         }
         .image-preview {
@@ -4240,40 +4373,75 @@ function Admin() {
                   {parseColorList(colors).length > 1 && (
                     <div className="form-group full">
                       <label className="form-label">
-                        Photo for each color (optional, recommended)
+                        Photos for each color (optional, recommended)
                       </label>
                       <p className="form-hint">
-                        Upload a photo of the bag in each color - customers will
-                        see this photo when they click that color on the product
-                        page. Leave any color blank to just show the main photos
-                        above for it.
+                        Upload one or more photos of the bag in each color - customers
+                        will see these photos when they click that color on the
+                        product page. Leave any color blank to just show the main
+                        photos above for it.
                       </p>
                       <div className="color-photo-grid">
                         {parseColorList(colors).map((color) => {
-                          const file = colorImageFiles[color];
+                          const files = colorImageFiles[color] || [];
                           return (
                             <div className="color-photo-slot" key={color}>
                               <span className="color-photo-name">{color}</span>
-                              {file ? (
-                                <img
-                                  className="color-photo-preview"
-                                  src={URL.createObjectURL(file)}
-                                  alt={`${color} preview`}
-                                />
-                              ) : (
-                                <div className="color-photo-placeholder">No photo</div>
-                              )}
                               <input
                                 type="file"
                                 accept="image/*"
+                                multiple
                                 onChange={(event) => {
-                                  const selected = event.target.files?.[0] || null;
-                                  setColorImageFiles((previous) => ({
-                                    ...previous,
-                                    [color]: selected,
-                                  }));
+                                  addColorImageFiles(color, event.target.files);
+                                  event.target.value = "";
                                 }}
                               />
+                              {files.length > 0 ? (
+                                <div className="color-photo-preview-list">
+                                  {files.map((file, index) => (
+                                    <div
+                                      className="color-photo-preview-card"
+                                      key={`${color}-${file.name}-${index}`}
+                                    >
+                                      <img
+                                        className="color-photo-preview"
+                                        src={URL.createObjectURL(file)}
+                                        alt={`${color} preview ${index + 1}`}
+                                      />
+                                      <div className="image-reorder-row">
+                                        <button
+                                          type="button"
+                                          className="image-reorder-button"
+                                          onClick={() => moveColorImage(color, index, -1)}
+                                          disabled={index === 0}
+                                          title="Move earlier"
+                                        >
+                                          ◀
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="image-reorder-button"
+                                          onClick={() => moveColorImage(color, index, 1)}
+                                          disabled={index === files.length - 1}
+                                          title="Move later"
+                                        >
+                                          ▶
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="image-remove-button"
+                                        onClick={() => removeColorImage(color, index)}
+                                        title="Remove this photo"
+                                      >
+                                        ✕ Remove
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="color-photo-placeholder">No photo yet</div>
+                              )}
                             </div>
                           );
                         })}
@@ -4621,9 +4789,10 @@ function Admin() {
                 real public photo link - a spreadsheet cell can't hold an uploaded photo file
                 directly, so paste a link to each photo instead, for example from your supplier's
                 page or a photo you've already uploaded). The optional "Color Images" column lets
-                one specific photo show for each color - format each cell as
-                "Black=&lt;link&gt;|Brown=&lt;link&gt;" (color name, then "=", then that color's
-                photo link; "|" between colors). "Supplier Name", "Supplier Cost", "Supplier
+                one or more photos show for each color - format each cell as
+                "Black=&lt;link1&gt;,&lt;link2&gt;|Brown=&lt;link1&gt;" (color name, then "=",
+                then that color's photo link(s) separated by commas if there's more than one;
+                "|" between colors). "Supplier Name", "Supplier Cost", "Supplier
                 Product ID", "Supplier Link" and "Shipping Time" are optional, admin-only fields
                 (never shown to customers) for tracking dropshipping details - same as the single
                 form's Supplier section above. If you leave "Price" blank, filling in "Supplier
@@ -5337,45 +5506,100 @@ function Admin() {
                 {parseColorList(editColors).length > 1 && (
                   <div className="form-group full">
                     <label className="form-label">
-                      Photo for each color (optional, recommended)
+                      Photos for each color (optional, recommended)
                     </label>
                     <p className="form-hint">
-                      Upload a photo of the bag in each color - customers will
-                      see this photo when they click that color on the product
-                      page. Colors with no photo just show the main photos above.
+                      Each color can have several photos. Remove any existing
+                      photo with its ✕, and/or add new ones below - customers see
+                      these when they click that color on the product page.
+                      Colors with no photo just show the main photos above.
                     </p>
                     <div className="color-photo-grid">
                       {parseColorList(editColors).map((color) => {
-                        const file = editColorImageFiles[color];
-                        const existingUrl = editingProduct?.colorImages?.[color];
-                        const previewSrc = file
-                          ? URL.createObjectURL(file)
-                          : existingUrl
-                          ? getImageUrl(existingUrl)
-                          : "";
+                        const existingUrls = editExistingColorImages[color] || [];
+                        const newFiles = editColorImageFiles[color] || [];
                         return (
                           <div className="color-photo-slot" key={color}>
                             <span className="color-photo-name">{color}</span>
-                            {previewSrc ? (
-                              <img
-                                className="color-photo-preview"
-                                src={previewSrc}
-                                alt={`${color} preview`}
-                              />
-                            ) : (
-                              <div className="color-photo-placeholder">No photo</div>
-                            )}
                             <input
                               type="file"
                               accept="image/*"
+                              multiple
                               onChange={(event) => {
-                                const selected = event.target.files?.[0] || null;
-                                setEditColorImageFiles((previous) => ({
-                                  ...previous,
-                                  [color]: selected,
-                                }));
+                                addEditColorImageFiles(color, event.target.files);
+                                event.target.value = "";
                               }}
                             />
+                            {existingUrls.length === 0 && newFiles.length === 0 && (
+                              <div className="color-photo-placeholder">No photo yet</div>
+                            )}
+                            {existingUrls.length > 0 && (
+                              <div className="color-photo-preview-list">
+                                {existingUrls.map((url, index) => (
+                                  <div className="color-photo-preview-card" key={`${color}-existing-${url}-${index}`}>
+                                    <img
+                                      className="color-photo-preview"
+                                      src={getImageUrl(url)}
+                                      alt={`${color} photo ${index + 1}`}
+                                    />
+                                    <span className="color-photo-existing-tag">Saved</span>
+                                    <button
+                                      type="button"
+                                      className="image-remove-button"
+                                      onClick={() => removeEditExistingColorImage(color, index)}
+                                      title="Remove this saved photo"
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {newFiles.length > 0 && (
+                              <div className="color-photo-preview-list">
+                                {newFiles.map((file, index) => (
+                                  <div
+                                    className="color-photo-preview-card"
+                                    key={`${color}-new-${file.name}-${index}`}
+                                  >
+                                    <img
+                                      className="color-photo-preview"
+                                      src={URL.createObjectURL(file)}
+                                      alt={`${color} new photo ${index + 1}`}
+                                    />
+                                    <span className="color-photo-new-tag">New</span>
+                                    <div className="image-reorder-row">
+                                      <button
+                                        type="button"
+                                        className="image-reorder-button"
+                                        onClick={() => moveEditColorImage(color, index, -1)}
+                                        disabled={index === 0}
+                                        title="Move earlier"
+                                      >
+                                        ◀
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="image-reorder-button"
+                                        onClick={() => moveEditColorImage(color, index, 1)}
+                                        disabled={index === newFiles.length - 1}
+                                        title="Move later"
+                                      >
+                                        ▶
+                                      </button>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="image-remove-button"
+                                      onClick={() => removeEditColorImage(color, index)}
+                                      title="Remove this new photo"
+                                    >
+                                      ✕ Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         );
                       })}

@@ -256,8 +256,7 @@ const INFO_PAGES = {
           delivery across India typically takes 5-9 business days depending on your location.
         </p>
         <p>
-          <strong>Free delivery</strong> is available on all orders above ₹1,999. Orders below
-          this amount may carry a small delivery charge shown clearly at checkout before you pay.
+          <strong>Free delivery</strong> is available on all orders, with no minimum order value.
         </p>
         <p>
           You will receive your order confirmation and shipping updates over email. Delivery
@@ -416,6 +415,20 @@ function App() {
    */
   const isTrackOrderPage = location.pathname === "/track-order" || location.pathname.startsWith("/track-order/");
 
+  /*
+   * PRODUCT DETAIL PAGE
+   * A real, full page at its own URL (/product/:id) instead of a
+   * popup/modal - this is what makes a product feel like an actual
+   * page on the site (shareable link, works with back/forward)
+   * rather than an overlay. "openProduct" navigates here instead of
+   * setting local state, and "selectedProduct" below is derived
+   * straight from this URL id.
+   */
+  const productIdFromUrl = location.pathname.startsWith("/product/")
+    ? decodeURIComponent(location.pathname.replace("/product/", "").split("/")[0])
+    : null;
+  const isProductPage = Boolean(productIdFromUrl);
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("featured");
@@ -493,7 +506,14 @@ function App() {
      PRODUCT DETAIL
   ========================================================= */
 
-  const [selectedProduct, setSelectedProduct] = useState(null);
+  /*
+   * selectedProduct is now derived straight from the URL
+   * (/product/:id) instead of being its own piece of state - the
+   * page you land on IS the product, so there's nothing to set.
+   */
+  const selectedProduct = isProductPage
+    ? products.find((product) => String(product.id) === String(productIdFromUrl)) || null
+    : null;
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [detailQuantity, setDetailQuantity] = useState(1);
@@ -921,51 +941,82 @@ function App() {
 
   /*
    * DISPLAY IMAGES FOR A GIVEN COLOR
-   * If the product has a dedicated photo saved for the currently
-   * selected color (product.colorImages), that photo is shown
-   * first in the gallery - so clicking a color swatch actually
-   * shows the customer what the bag looks like in that color,
-   * not just the same default photos every time. Falls back to
-   * the normal photo set for colors with no dedicated photo yet.
+   * If the product has its own photo gallery saved for the currently
+   * selected color (product.colorImages[color], an array of one or
+   * more photos), that whole gallery replaces the default photos -
+   * so clicking a color swatch opens that variant "like its own
+   * product" with all of its own angles/shots, not just one swapped
+   * hero image. Falls back to the normal shared photo set for any
+   * color that has no dedicated photos of its own yet.
    */
   function getDisplayImages(product, color) {
     const baseImages = getProductImages(product);
-    const colorPhoto = color && product?.colorImages ? product.colorImages[color] : "";
+    const colorPhotos = color && product?.colorImages ? product.colorImages[color] : null;
 
-    if (!colorPhoto) return baseImages;
+    if (!Array.isArray(colorPhotos) || colorPhotos.length === 0) return baseImages;
 
-    const cleanUrl = getImageUrl(colorPhoto);
-    return [cleanUrl, ...baseImages.filter((img) => img !== cleanUrl)];
+    return Array.from(new Set(colorPhotos.map(getImageUrl).filter(Boolean)));
+  }
+
+  /*
+   * "YOU MAY ALSO LIKE" - shown at the bottom of the product detail
+   * view so customers keep browsing instead of leaving after one
+   * item. Prefers other products in the same category, then fills
+   * any remaining slots with other products so it's never empty.
+   */
+  function getRelatedProducts(product, limit = 8) {
+    if (!product) return [];
+    const others = products.filter((candidate) => candidate.id !== product.id);
+    const sameCategory = others.filter((candidate) => candidate.category === product.category);
+    const rest = others.filter((candidate) => candidate.category !== product.category);
+    return [...sameCategory, ...rest].slice(0, limit);
   }
 
   /* =========================================================
      OPEN PRODUCT
   ========================================================= */
 
+  /*
+   * Opening a product is now just navigating to its own real page
+   * (/product/:id) - no local state to set, no popup to render.
+   * Image/color/quantity get initialised by the effect below,
+   * keyed off the URL's product id.
+   */
   function openProduct(product) {
-    const images = getProductImages(product);
-    const colors = Array.isArray(product?.colors) ? product.colors : [];
-
-    setSelectedProduct(product);
-    setSelectedImage(images[0] || "");
-    setSelectedImageIndex(0);
-    setDetailQuantity(1);
-    setDetailColor(colors[0] || "");
-
-    document.body.style.overflow = "hidden";
+    if (!product) return;
+    navigate(`/product/${product.id}`);
   }
 
-  function closeProduct() {
-    setSelectedProduct(null);
-    setSelectedImage("");
-    setSelectedImageIndex(0);
-    setDetailColor("");
-    setTouchStartX(null);
-
-    if (!checkoutOpen) {
-      document.body.style.overflow = "";
+  /*
+   * "Back" on the product page - goes back in history when there is
+   * somewhere to go back to (the normal case: came from the grid,
+   * search, a related product, etc.), otherwise falls back to the
+   * homepage (e.g. someone opened a shared product link directly).
+   */
+  function goBackFromProduct() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate("/");
     }
   }
+
+  /*
+   * Whenever a NEW product page loads (id in the URL changes),
+   * reset quantity/color back to defaults and scroll up to the top
+   * of the page - this replaces what "openProduct" used to do
+   * directly, now that opening a product is just a navigation.
+   */
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    const colors = Array.isArray(selectedProduct.colors) ? selectedProduct.colors : [];
+    setDetailQuantity(1);
+    setDetailColor(colors[0] || "");
+    setTouchStartX(null);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProduct?.id]);
 
   /*
    * When the customer picks a different color swatch, jump the
@@ -1050,7 +1101,8 @@ function App() {
     );
   }, [cart]);
 
-  const deliveryCharge = totalPrice === 0 || totalPrice >= 1999 ? 0 : 0;
+  // Delivery is free on every order, no minimum order value.
+  const deliveryCharge = 0;
 
   const checkoutTotal = totalPrice + deliveryCharge;
 
@@ -1071,8 +1123,8 @@ function App() {
     );
   }, [checkoutItems]);
 
-  const checkoutDeliveryCharge =
-    checkoutSubtotal === 0 || checkoutSubtotal >= 1999 ? 0 : 0;
+  // Delivery is free on every order, no minimum order value.
+  const checkoutDeliveryCharge = 0;
 
   const checkoutDiscount = appliedCoupon
     ? Math.min(Number(appliedCoupon.discountAmount || 0), checkoutSubtotal)
@@ -1258,8 +1310,6 @@ function App() {
       selectedColor: detailColor || "",
       quantity,
     });
-
-    closeProduct();
 
     setCartOpen(false);
     setCheckoutOpen(true);
@@ -1621,9 +1671,13 @@ function App() {
     function handleEscape(e) {
       if (e.key !== "Escape") return;
 
-      if (selectedProduct) {
-        closeProduct();
-      } else if (checkoutOpen) {
+      /*
+       * The product view is a real page now (not a popup), so
+       * Escape no longer navigates away from it - only the overlay
+       * drawers below (checkout, cart, wishlist, mobile menu, info
+       * pages) close on Escape.
+       */
+      if (checkoutOpen) {
         closeCheckout();
       } else if (cartOpen) {
         setCartOpen(false);
@@ -1644,7 +1698,7 @@ function App() {
       window.removeEventListener("keydown", handleEscape);
       document.body.style.overflow = "";
     };
-  }, [selectedProduct, checkoutOpen, cartOpen, wishlistOpen, mobileMenuOpen, activePage]);
+  }, [checkoutOpen, cartOpen, wishlistOpen, mobileMenuOpen, activePage]);
 
   /* =========================================================
      RENDER
@@ -1654,7 +1708,7 @@ function App() {
     <div className="shrimoh-app">
       {/* ANNOUNCEMENT BAR */}
       <div className="lux-announcement">
-        <div>✦ FREE DELIVERY ON ORDERS ABOVE ₹1,999</div>
+        <div>✦ FREE DELIVERY ON ALL ORDERS</div>
         <div className="lux-announcement-center">PREMIUM COLLECTION · SECURE SHOPPING</div>
         <div>HANDCRAFTED STYLE · MADE FOR YOU</div>
       </div>
@@ -1815,7 +1869,7 @@ function App() {
         />
       )}
 
-      {!isTrackOrderPage && (
+      {!isTrackOrderPage && !isProductPage && (
       <>
 
       {/*
@@ -2304,134 +2358,30 @@ function App() {
       </>
       )}
 
-      {/* FOOTER */}
-      <footer className="lux-footer">
-        <div className="lux-footer-top">
-          <div className="lux-footer-brand">
-            <div className="lux-footer-logo">
-              <img src={shrimohIcon} alt="" className="lux-footer-logo-mark" />
-              <span>SHRIMOH</span>
-            </div>
-            <p>THE LUXURY STORE</p>
-            <span>Timeless pieces for modern distinction.</span>
-          </div>
-
-          <div className="lux-footer-links">
-            <div>
-              <strong>SHOP</strong>
-              <button onClick={() => goToCategory("All")}>All Products</button>
-
-              {categories.slice(1, 5).map((category) => (
-                <button key={category} onClick={() => goToCategory(category)}>
-                  {category}
-                </button>
-              ))}
-            </div>
-
-            <div>
-              <strong>ABOUT</strong>
-              <button type="button" onClick={() => openInfoPage("about")}>
-                Our Story
-              </button>
-              <button type="button" onClick={() => openInfoPage("shipping")}>
-                Shipping
-              </button>
-              <button type="button" onClick={() => openInfoPage("returns")}>
-                Returns
-              </button>
-            </div>
-
-            <div>
-              <strong>CONNECT</strong>
-              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">
-                WhatsApp
-              </a>
-              <button type="button" onClick={() => openInfoPage("contact")}>
-                Contact Us
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="lux-footer-bottom">
-          <span>© 2026 SHRIMOH. ALL RIGHTS RESERVED.</span>
-
-          <div className="lux-footer-legal">
-            <button type="button" onClick={() => openInfoPage("privacy")}>
-              Privacy Policy
-            </button>
-            <button type="button" onClick={() => openInfoPage("terms")}>
-              Terms & Conditions
+      {/* PRODUCT DETAIL PAGE - a real full page at /product/:id, not a popup */}
+      {isProductPage && !selectedProduct && (
+        <div className="lux-product-page-wrap">
+          <div className="lux-product-not-found">
+            <h1>Product not found</h1>
+            <p>This product may have been removed or the link is incorrect.</p>
+            <button type="button" className="lux-product-back" onClick={() => navigate("/")}>
+              ← Back to shop
             </button>
           </div>
         </div>
-      </footer>
-
-      {/*
-        WHATSAPP FLOATING BUTTON
-        Hidden while the welcome offer popup is showing - both live in the
-        same bottom corner area on small phone screens, and stacking them
-        looked cramped/overlapping. It reappears the moment the offer is
-        dismissed (or was never shown, for returning visitors).
-      */}
-      {!showWelcomeOffer && (
-        <a
-          href={`https://wa.me/${WHATSAPP_NUMBER}`}
-          target="_blank"
-          rel="noreferrer"
-          className="lux-whatsapp-float"
-          aria-label="Chat with us on WhatsApp"
-        >
-          <svg viewBox="0 0 32 32" width="26" height="26" fill="currentColor" aria-hidden="true">
-            <path d="M16.004 3.2c-7.07 0-12.8 5.73-12.8 12.8 0 2.258.59 4.376 1.62 6.213L3.2 28.8l6.77-1.776a12.74 12.74 0 0 0 6.034 1.536h.005c7.07 0 12.8-5.73 12.8-12.8s-5.73-12.56-12.805-12.56zm0 23.36a10.5 10.5 0 0 1-5.353-1.466l-.384-.228-4.017 1.054 1.073-3.916-.25-.402a10.55 10.55 0 0 1-1.616-5.622c0-5.83 4.744-10.573 10.577-10.573 2.826 0 5.48 1.1 7.478 3.098a10.5 10.5 0 0 1 3.096 7.48c0 5.83-4.744 10.575-10.578 10.575zm5.79-7.918c-.317-.16-1.876-.926-2.167-1.032-.29-.107-.502-.16-.714.16-.21.318-.82 1.032-1.005 1.244-.185.213-.37.24-.687.08-.317-.16-1.338-.494-2.548-1.575-.942-.84-1.578-1.877-1.762-2.195-.185-.318-.02-.49.14-.65.143-.142.318-.37.476-.556.16-.185.212-.318.318-.53.106-.213.053-.398-.027-.558-.08-.16-.714-1.723-.978-2.36-.257-.617-.518-.534-.714-.544l-.608-.01c-.213 0-.558.08-.85.398-.29.318-1.11 1.084-1.11 2.646 0 1.562 1.137 3.07 1.296 3.283.16.212 2.238 3.417 5.42 4.79.758.328 1.35.523 1.81.67.76.242 1.452.208 1.998.126.61-.09 1.876-.766 2.14-1.507.264-.74.264-1.375.185-1.507-.08-.133-.29-.213-.607-.373z" />
-          </svg>
-        </a>
       )}
 
-      {/* NEW CUSTOMER WELCOME OFFER (small corner popup, first visit only) - hidden on the Track Order page, where it just gets in the way */}
-      {showWelcomeOffer && !isTrackOrderPage && (
-        <div className="lux-welcome-offer" role="dialog" aria-label="New customer offer">
+      {isProductPage && selectedProduct && (
+        <div className="lux-product-page-wrap">
           <button
             type="button"
-            className="lux-welcome-offer-close"
-            aria-label="Close"
-            onClick={dismissWelcomeOffer}
+            className="lux-product-back"
+            onClick={goBackFromProduct}
           >
-            ×
+            ← Back
           </button>
 
-          <span className="lux-welcome-offer-kicker">WELCOME TO SHRIMOH</span>
-          <h3>{NEW_CUSTOMER_OFFER_TEXT} for new customers</h3>
-          <p>
-            Use code <strong>{NEW_CUSTOMER_OFFER_CODE}</strong> at checkout on your first order.
-          </p>
-
-          <button type="button" className="lux-welcome-offer-cta" onClick={dismissWelcomeOffer}>
-            Shop now
-          </button>
-        </div>
-      )}
-
-      {/* PRODUCT DETAIL */}
-      {selectedProduct && (
-        <div
-          className="lux-product-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              closeProduct();
-            }
-          }}
-        >
           <div className="lux-product-page">
-            <button
-              type="button"
-              className="lux-product-close"
-              onClick={closeProduct}
-              aria-label="Close product"
-            >
-              ×
-            </button>
-
             <button
               type="button"
               className={`lux-product-wishlist${
@@ -2556,7 +2506,7 @@ function App() {
                 )}
               </div>
 
-              <p className="lux-price-note">Tax included · Free delivery above ₹1,999</p>
+              <p className="lux-price-note">Tax included · Free delivery on all orders</p>
 
               {Array.isArray(selectedProduct.colors) && selectedProduct.colors.length > 1 && (
                 <div className="lux-color-section">
@@ -2566,7 +2516,8 @@ function App() {
 
                   <div className="lux-color-swatches">
                     {selectedProduct.colors.map((color) => {
-                      const photo = selectedProduct.colorImages?.[color];
+                      const colorPhotos = selectedProduct.colorImages?.[color];
+                      const photo = Array.isArray(colorPhotos) ? colorPhotos[0] : colorPhotos;
 
                       return (
                         <button
@@ -2635,7 +2586,6 @@ function App() {
                   onClick={() => {
                     addToCart(selectedProduct, detailQuantity, detailColor);
                     setCartOpen(true);
-                    closeProduct();
                   }}
                 >
                   ADD TO CART
@@ -2665,7 +2615,7 @@ function App() {
                   <span>02</span>
                   <div>
                     <strong>FREE DELIVERY</strong>
-                    <p>On orders above ₹1,999.</p>
+                    <p>On all orders, every time.</p>
                   </div>
                 </div>
 
@@ -2717,7 +2667,7 @@ function App() {
                   </summary>
 
                   <div className="lux-details-content">
-                    <p>Free delivery is available on orders above ₹1,999.</p>
+                    <p>Free delivery is available on all orders.</p>
                     <p>Orders are securely packed and processed with care.</p>
                   </div>
                 </details>
@@ -2738,6 +2688,183 @@ function App() {
               </div>
             </section>
           </div>
+
+          {/* YOU MAY ALSO LIKE - other real product pages, buyable there too */}
+          {(() => {
+            const relatedProducts = getRelatedProducts(selectedProduct);
+
+            if (relatedProducts.length === 0) return null;
+
+            return (
+              <div className="lux-related-section">
+                <section className="lux-section-header">
+                  <div>
+                    <span>KEEP EXPLORING</span>
+                    <h2>You May Also Like</h2>
+                  </div>
+                </section>
+
+                <div className="lux-product-grid lux-scroll-row">
+                  {relatedProducts.map((product) => {
+                    const image = getProductImages(product)[0];
+                    const isSoldOut = Number(product.stock || 0) <= 0;
+
+                    return (
+                      <article
+                        className="lux-product-card"
+                        key={`related-${product.id}`}
+                        onClick={() => openProduct(product)}
+                      >
+                        <div className="lux-card-image">
+                          {image ? (
+                            <img src={image} alt={product.name} loading="lazy" />
+                          ) : (
+                            <div className="lux-card-placeholder">SHRIMOH</div>
+                          )}
+
+                          {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
+
+                          <button
+                            type="button"
+                            className={`lux-wishlist-heart${
+                              isWishlisted(product.id) ? " active" : ""
+                            }`}
+                            onClick={(e) => toggleWishlist(product, e)}
+                            aria-label={
+                              isWishlisted(product.id)
+                                ? "Remove from wishlist"
+                                : "Add to wishlist"
+                            }
+                          >
+                            {isWishlisted(product.id) ? "♥" : "♡"}
+                          </button>
+                        </div>
+
+                        <div className="lux-card-info">
+                          <div>
+                            <span>{product.category || "COLLECTION"}</span>
+                            <h3>{product.name}</h3>
+                          </div>
+
+                          <div className="lux-card-price">
+                            <strong>₹{product.price.toLocaleString("en-IN")}</strong>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <footer className="lux-footer">
+        <div className="lux-footer-top">
+          <div className="lux-footer-brand">
+            <div className="lux-footer-logo">
+              <img src={shrimohIcon} alt="" className="lux-footer-logo-mark" />
+              <span>SHRIMOH</span>
+            </div>
+            <p>THE LUXURY STORE</p>
+            <span>Timeless pieces for modern distinction.</span>
+          </div>
+
+          <div className="lux-footer-links">
+            <div>
+              <strong>SHOP</strong>
+              <button onClick={() => goToCategory("All")}>All Products</button>
+
+              {categories.slice(1, 5).map((category) => (
+                <button key={category} onClick={() => goToCategory(category)}>
+                  {category}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              <strong>ABOUT</strong>
+              <button type="button" onClick={() => openInfoPage("about")}>
+                Our Story
+              </button>
+              <button type="button" onClick={() => openInfoPage("shipping")}>
+                Shipping
+              </button>
+              <button type="button" onClick={() => openInfoPage("returns")}>
+                Returns
+              </button>
+            </div>
+
+            <div>
+              <strong>CONNECT</strong>
+              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">
+                WhatsApp
+              </a>
+              <button type="button" onClick={() => openInfoPage("contact")}>
+                Contact Us
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="lux-footer-bottom">
+          <span>© 2026 SHRIMOH. ALL RIGHTS RESERVED.</span>
+
+          <div className="lux-footer-legal">
+            <button type="button" onClick={() => openInfoPage("privacy")}>
+              Privacy Policy
+            </button>
+            <button type="button" onClick={() => openInfoPage("terms")}>
+              Terms & Conditions
+            </button>
+          </div>
+        </div>
+      </footer>
+
+      {/*
+        WHATSAPP FLOATING BUTTON
+        Hidden while the welcome offer popup is showing - both live in the
+        same bottom corner area on small phone screens, and stacking them
+        looked cramped/overlapping. It reappears the moment the offer is
+        dismissed (or was never shown, for returning visitors).
+      */}
+      {!showWelcomeOffer && (
+        <a
+          href={`https://wa.me/${WHATSAPP_NUMBER}`}
+          target="_blank"
+          rel="noreferrer"
+          className="lux-whatsapp-float"
+          aria-label="Chat with us on WhatsApp"
+        >
+          <svg viewBox="0 0 32 32" width="26" height="26" fill="currentColor" aria-hidden="true">
+            <path d="M16.004 3.2c-7.07 0-12.8 5.73-12.8 12.8 0 2.258.59 4.376 1.62 6.213L3.2 28.8l6.77-1.776a12.74 12.74 0 0 0 6.034 1.536h.005c7.07 0 12.8-5.73 12.8-12.8s-5.73-12.56-12.805-12.56zm0 23.36a10.5 10.5 0 0 1-5.353-1.466l-.384-.228-4.017 1.054 1.073-3.916-.25-.402a10.55 10.55 0 0 1-1.616-5.622c0-5.83 4.744-10.573 10.577-10.573 2.826 0 5.48 1.1 7.478 3.098a10.5 10.5 0 0 1 3.096 7.48c0 5.83-4.744 10.575-10.578 10.575zm5.79-7.918c-.317-.16-1.876-.926-2.167-1.032-.29-.107-.502-.16-.714.16-.21.318-.82 1.032-1.005 1.244-.185.213-.37.24-.687.08-.317-.16-1.338-.494-2.548-1.575-.942-.84-1.578-1.877-1.762-2.195-.185-.318-.02-.49.14-.65.143-.142.318-.37.476-.556.16-.185.212-.318.318-.53.106-.213.053-.398-.027-.558-.08-.16-.714-1.723-.978-2.36-.257-.617-.518-.534-.714-.544l-.608-.01c-.213 0-.558.08-.85.398-.29.318-1.11 1.084-1.11 2.646 0 1.562 1.137 3.07 1.296 3.283.16.212 2.238 3.417 5.42 4.79.758.328 1.35.523 1.81.67.76.242 1.452.208 1.998.126.61-.09 1.876-.766 2.14-1.507.264-.74.264-1.375.185-1.507-.08-.133-.29-.213-.607-.373z" />
+          </svg>
+        </a>
+      )}
+
+      {/* NEW CUSTOMER WELCOME OFFER (small corner popup, first visit only) - hidden on the Track Order page, where it just gets in the way */}
+      {showWelcomeOffer && !isTrackOrderPage && (
+        <div className="lux-welcome-offer" role="dialog" aria-label="New customer offer">
+          <button
+            type="button"
+            className="lux-welcome-offer-close"
+            aria-label="Close"
+            onClick={dismissWelcomeOffer}
+          >
+            ×
+          </button>
+
+          <span className="lux-welcome-offer-kicker">WELCOME TO SHRIMOH</span>
+          <h3>{NEW_CUSTOMER_OFFER_TEXT} for new customers</h3>
+          <p>
+            Use code <strong>{NEW_CUSTOMER_OFFER_CODE}</strong> at checkout on your first order.
+          </p>
+
+          <button type="button" className="lux-welcome-offer-cta" onClick={dismissWelcomeOffer}>
+            Shop now
+          </button>
         </div>
       )}
 
