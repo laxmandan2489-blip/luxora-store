@@ -110,32 +110,43 @@ const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
   : null;
 
 /*
- * ORDER CONFIRMATION EMAIL (free, via Gmail SMTP)
+ * ORDER CONFIRMATION EMAIL
  *
- * Uses a Gmail account + an "App Password" (NOT the normal
- * Gmail login password - Google requires a separate 16-digit
- * App Password for apps like this to send mail).
+ * TWO WAYS to send this, tried in this order:
  *
- * Set these two environment variables on Render:
- *   GMAIL_USER            e.g. infoshrimoh@gmail.com
- *   GMAIL_APP_PASSWORD    the 16-digit App Password (no spaces)
+ * 1) BREVO_API_KEY (recommended - this is what actually works on
+ *    Render). Render's outbound network blocks/hangs on raw SMTP
+ *    connections (port 465/587) even with a 100% correct Gmail
+ *    account + App Password - that's the "Connection timeout" /
+ *    ETIMEDOUT error. Brevo's API is plain HTTPS (port 443, same as
+ *    any normal web request), so it is NOT affected by that block.
+ *    Free plan: ~300 emails/day, no credit card needed.
+ *      1. Sign up free at brevo.com
+ *      2. Settings -> Senders, Domains & Dedicated IPs -> add
+ *         GMAIL_USER (below) as a sender -> click the confirmation
+ *         link Brevo emails to that address
+ *      3. SMTP & API -> API Keys -> generate a new key
+ *      4. Set BREVO_API_KEY on Render to that key
  *
- * If these are not set, email sending is silently skipped
+ * 2) GMAIL_USER / GMAIL_APP_PASSWORD via raw Gmail SMTP - only used
+ *    when BREVO_API_KEY is not set. Works fine when running this
+ *    server somewhere that doesn't block outbound SMTP (e.g. your
+ *    own machine), but do NOT rely on this on Render.
+ *
+ * Either way GMAIL_USER doubles as the "from" address shown to the
+ * customer (display name is always forced to "SHRIMOH" below,
+ * regardless of which one is used).
+ *
+ * If neither is configured, email sending is silently skipped
  * (order saving is never affected either way).
  */
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 /*
- * IMPORTANT: use an explicit host/port here instead of the
- * "service: gmail" shorthand, and force IPv4 with `family: 4`.
- *
- * Render (and several other hosts) route outbound connections over
- * IPv6 by default, and Gmail's SMTP server frequently hangs/times
- * out on that route ("Connection timeout" / ETIMEDOUT), even with a
- * completely correct account + App Password. Forcing IPv4 is the
- * standard fix for this - the account/password are never the
- * problem in that error.
+ * Kept as a fallback (see comment above) - not used on Render once
+ * BREVO_API_KEY is set, but harmless to leave configured.
  */
 const mailTransporter =
   GMAIL_USER && GMAIL_APP_PASSWORD
@@ -151,6 +162,34 @@ const mailTransporter =
       })
     : null;
 
+/*
+ * Sends one transactional email through Brevo's HTTPS API
+ * (api.brevo.com) - see the big comment above for why this is used
+ * instead of SMTP on Render. Throws on failure so the caller's
+ * try/catch can log it exactly like a failed SMTP send.
+ */
+async function sendViaBrevoApi({ to, customerName, subject, html }) {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": BREVO_API_KEY
+    },
+    body: JSON.stringify({
+      sender: { name: "SHRIMOH", email: GMAIL_USER },
+      to: [{ email: to, name: customerName || undefined }],
+      subject,
+      htmlContent: html
+    })
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    throw new Error(`Brevo API error ${response.status}: ${errorBody}`);
+  }
+}
+
 async function sendOrderConfirmationEmail({
   to,
   customerName,
@@ -162,11 +201,11 @@ async function sendOrderConfirmationEmail({
   total,
   paymentMethod
 }) {
-  if (!mailTransporter) {
-    console.warn("Order email skipped: GMAIL_USER / GMAIL_APP_PASSWORD not configured.");
+  if (!to) return;
+  if (!BREVO_API_KEY && !mailTransporter) {
+    console.warn("Order email skipped: set BREVO_API_KEY (recommended), or GMAIL_USER / GMAIL_APP_PASSWORD.");
     return;
   }
-  if (!to) return;
 
   const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -216,10 +255,17 @@ async function sendOrderConfirmationEmail({
       <p style="margin-top:24px;font-size:12px;color:#a19070;">SHRIMOH &middot; Thank you for shopping with us.</p>
     </div>`;
 
+  const subject = `Order Confirmed - ${orderReference}`;
+
+  if (BREVO_API_KEY) {
+    await sendViaBrevoApi({ to, customerName, subject, html });
+    return;
+  }
+
   await mailTransporter.sendMail({
     from: `"SHRIMOH" <${GMAIL_USER}>`,
     to,
-    subject: `Order Confirmed - ${orderReference}`,
+    subject,
     html
   });
 }
