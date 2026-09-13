@@ -40,6 +40,13 @@ function getImageUrl(image) {
   return `${API}/${value}`;
 }
 
+function parseColorList(colorsString) {
+  return String(colorsString || "")
+    .split(",")
+    .map((color) => color.trim())
+    .filter(Boolean);
+}
+
 function getProductImages(product) {
   if (Array.isArray(product?.images)) {
     return product.images.filter(Boolean);
@@ -54,25 +61,26 @@ function formatMoney(value) {
   return `₹${Number(value || 0).toLocaleString("en-IN")}`;
 }
 
-/* =====================================================
-   MEESHO / SUPPLIER IMPORTER helpers
-   ===================================================== */
-const IMPORT_DESCRIPTION_TEMPLATE = `Highlights:
--
+/*
+ * PROFIT HELPERS
+ * Nothing here is saved anywhere new - price and supplierCost are
+ * already stored on every product, so profit is just computed live
+ * from the two fields already on screen, both while adding/editing
+ * a product and in the product list card.
+ */
+function computeProfit(price, cost) {
+  const p = Number(price) || 0;
+  const c = Number(cost) || 0;
+  const profit = p - c;
+  const percent = c > 0 ? (profit / c) * 100 : 0;
+  return { profit, percent };
+}
 
-Material:
--
-
-Size:
--
-
-What's Included:
--
-
-Shipping & Returns:
-- Ships in 5-9 days. Easy 7-day returns.`;
-
-function calcSellingPrice(costPrice, margin, marginType) {
+// Given a cost price and a margin (either a flat ₹ amount or a
+// percentage on top of cost), returns the selling price that
+// margin implies - used only to help fill the Price field, never
+// stored or sent anywhere itself.
+function computeSellingPriceFromMargin(costPrice, margin, marginType) {
   const cost = Number(costPrice) || 0;
   const marginValue = Number(margin) || 0;
   if (marginType === "percent") {
@@ -306,6 +314,8 @@ function Admin() {
     useState("");
   const [colors, setColors] =
     useState("Black");
+  const [colorImageFiles, setColorImageFiles] =
+    useState({});
   const [images, setImages] =
     useState([]);
   const [loading, setLoading] =
@@ -332,6 +342,10 @@ function Admin() {
     useState("");
   const [shippingTime, setShippingTime] =
     useState("");
+  const [marginType, setMarginType] =
+    useState("percent");
+  const [marginValue, setMarginValue] =
+    useState("");
 
   /* =====================================================
      PRODUCT EDIT / DELETE
@@ -352,6 +366,8 @@ function Admin() {
     useState("");
   const [editColors, setEditColors] =
     useState("");
+  const [editColorImageFiles, setEditColorImageFiles] =
+    useState({});
   const [editImages, setEditImages] =
     useState([]);
   const [editingLoading, setEditingLoading] =
@@ -366,6 +382,10 @@ function Admin() {
   const [editSupplierCost, setEditSupplierCost] =
     useState("");
   const [editShippingTime, setEditShippingTime] =
+    useState("");
+  const [editMarginType, setEditMarginType] =
+    useState("percent");
+  const [editMarginValue, setEditMarginValue] =
     useState("");
 
   /* =====================================================
@@ -393,38 +413,6 @@ function Admin() {
   const [siteBrandStoryPreview, setSiteBrandStoryPreview] = useState("");
   const [savingSiteContent, setSavingSiteContent] = useState(false);
   const [siteContentMessage, setSiteContentMessage] = useState("");
-
-  /* =====================================================
-     MEESHO / SUPPLIER IMPORT (new "Import Product" tab)
-     Nothing here goes live automatically - every import lands
-     as a "draft" until you deliberately publish it.
-     ===================================================== */
-  const [importSourceUrl, setImportSourceUrl] = useState("");
-  const [importImages, setImportImages] = useState([]);
-  const [importName, setImportName] = useState("");
-  const [importCategory, setImportCategory] = useState(categories[0]);
-  const [importCostPrice, setImportCostPrice] = useState("");
-  const [importMarginType, setImportMarginType] = useState("fixed");
-  const [importMargin, setImportMargin] = useState("");
-  const [importColors, setImportColors] = useState("Black");
-  const [importStock, setImportStock] = useState("");
-  const [importDescription, setImportDescription] = useState(IMPORT_DESCRIPTION_TEMPLATE);
-  const [importingProduct, setImportingProduct] = useState(false);
-  const [importMessage, setImportMessage] = useState("");
-  // Images auto-fetched by URL (either from "Fetch from Link" or a
-  // pasted "Copy Image Address" link) — stored as already-uploaded
-  // Supabase Storage URLs, separate from importImages (raw files
-  // picked with the file input below).
-  const [importFetchedImages, setImportFetchedImages] = useState([]);
-  const [importPasteImageUrl, setImportPasteImageUrl] = useState("");
-  const [fetchingFromLink, setFetchingFromLink] = useState(false);
-  const [fetchingImageUrl, setFetchingImageUrl] = useState(false);
-  const [fetchLinkMessage, setFetchLinkMessage] = useState("");
-  const [generatingPremium, setGeneratingPremium] = useState(false);
-  const [premiumMessage, setPremiumMessage] = useState("");
-  const [cleanupFile, setCleanupFile] = useState(null);
-  const [cleaningPhoto, setCleaningPhoto] = useState(false);
-  const [cleanupMessage, setCleanupMessage] = useState("");
 
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
@@ -487,249 +475,6 @@ function Admin() {
       setSiteContentMessage(error.message || "Unable to update site images.");
     } finally {
       setSavingSiteContent(false);
-    }
-  }
-
-  function handleImportImagesChange(event) {
-    setImportImages(Array.from(event.target.files || []));
-  }
-
-  function resetImportForm() {
-    setImportSourceUrl("");
-    setImportImages([]);
-    setImportName("");
-    setImportCategory(categories[0]);
-    setImportCostPrice("");
-    setImportMarginType("fixed");
-    setImportMargin("");
-    setImportColors("Black");
-    setImportStock("");
-    setImportDescription(IMPORT_DESCRIPTION_TEMPLATE);
-    setImportFetchedImages([]);
-    setImportPasteImageUrl("");
-    setFetchLinkMessage("");
-    setPremiumMessage("");
-    setCleanupFile(null);
-    setCleanupMessage("");
-  }
-
-  /*
-   * Best-effort auto-fill: tries to read the pasted link's public
-   * title/description/image (the same info WhatsApp/Google would
-   * show as a link preview). Many supplier sites — Meesho included
-   * — block automated requests, so this can fail; when it does,
-   * it says so plainly and you just fill the fields in yourself.
-   * It never overwrites anything you've already typed.
-   */
-  async function fetchFromLink() {
-    if (!importSourceUrl.trim()) {
-      setFetchLinkMessage("Paste the product link first.");
-      return;
-    }
-    setFetchingFromLink(true);
-    setFetchLinkMessage("");
-    try {
-      const response = await adminFetch(`${API}/api/admin/products/fetch-url`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: importSourceUrl.trim() }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setFetchLinkMessage(data.message || "Couldn't auto-fill from this link — please fill the fields manually.");
-        return;
-      }
-      if (data.title && !importName.trim()) setImportName(data.title);
-      if (data.description && importDescription === IMPORT_DESCRIPTION_TEMPLATE) {
-        setImportDescription(data.description);
-      }
-      if (data.image) {
-        await fetchImageFromUrl(data.image);
-      }
-      setFetchLinkMessage("Auto-filled from the link — please review everything below before publishing.");
-    } catch (error) {
-      setFetchLinkMessage(error.message || "Couldn't auto-fill from this link — please fill the fields manually.");
-    } finally {
-      setFetchingFromLink(false);
-    }
-  }
-
-  /*
-   * Downloads one image from a direct image URL (e.g. right-click
-   * → "Copy Image Address" on a Meesho photo) into Supabase
-   * Storage. Used both by fetchFromLink() above and by the manual
-   * "paste image link" box in the Import tab.
-   */
-  async function fetchImageFromUrl(imageUrl) {
-    if (!imageUrl || !imageUrl.trim()) return;
-    setFetchingImageUrl(true);
-    setFetchLinkMessage("");
-    try {
-      const response = await adminFetch(`${API}/api/admin/products/fetch-image`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: imageUrl.trim() }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setFetchLinkMessage(data.message || "Couldn't download that image — please upload it as a file instead.");
-        return;
-      }
-      setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
-    } catch (error) {
-      setFetchLinkMessage(error.message || "Couldn't download that image.");
-    } finally {
-      setFetchingImageUrl(false);
-    }
-  }
-
-  async function addPastedImageUrl() {
-    await fetchImageFromUrl(importPasteImageUrl);
-    setImportPasteImageUrl("");
-  }
-
-  function removeFetchedImage(url) {
-    setImportFetchedImages((prev) => prev.filter((item) => item !== url));
-  }
-
-  /*
-   * Sends whatever is currently in the title/description fields
-   * (auto-fetched or typed by hand) to the AI writer, which
-   * returns a SHRIMOH-branded premium version specific to THIS
-   * product — not a generic template. Requires ANTHROPIC_API_KEY
-   * to be configured on the backend.
-   */
-  async function generatePremiumContent() {
-    if (!importName.trim() && importDescription.trim() === IMPORT_DESCRIPTION_TEMPLATE.trim()) {
-      setPremiumMessage("Paste or fetch a title/description first, then generate.");
-      return;
-    }
-    setGeneratingPremium(true);
-    setPremiumMessage("");
-    try {
-      const response = await adminFetch(`${API}/api/admin/products/generate-premium`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: importName,
-          description: importDescription === IMPORT_DESCRIPTION_TEMPLATE ? "" : importDescription,
-          category: importCategory,
-        }),
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setPremiumMessage(data.message || "AI content generation failed.");
-        return;
-      }
-      if (data.title) setImportName(data.title);
-      if (data.description) setImportDescription(data.description);
-      setPremiumMessage("Premium content generated — review and edit anything before publishing.");
-    } catch (error) {
-      setPremiumMessage(error.message || "AI content generation failed.");
-    } finally {
-      setGeneratingPremium(false);
-    }
-  }
-
-  function handleCleanupFileChange(event) {
-    setCleanupFile(event.target.files?.[0] || null);
-    setCleanupMessage("");
-  }
-
-  /*
-   * Sends one real product photo to the backend, which places it on
-   * a clean cream studio backdrop with a soft floor shadow -
-   * standard premium e-commerce presentation. No AI image
-   * generation, no billing, no rate limit - it only reframes the
-   * real photo you gave it. Result is added straight into the
-   * Images list below.
-   */
-  async function cleanUpPhoto() {
-    if (!cleanupFile) {
-      setCleanupMessage("Pehle ek product photo choose karo.");
-      return;
-    }
-    setCleaningPhoto(true);
-    setCleanupMessage("");
-    try {
-      const formData = new FormData();
-      formData.append("sourceImage", cleanupFile);
-      const response = await adminFetch(`${API}/api/admin/products/clean-photo`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-      if (!data.success) {
-        setCleanupMessage(data.message || "Photo clean-up failed - upload the original instead.");
-        return;
-      }
-      setImportFetchedImages((prev) => (prev.includes(data.url) ? prev : [...prev, data.url]));
-      setCleanupFile(null);
-      setCleanupMessage("Premium version added to the Images list below.");
-    } catch (error) {
-      setCleanupMessage(error.message || "Photo clean-up failed - upload the original instead.");
-    } finally {
-      setCleaningPhoto(false);
-    }
-  }
-
-  async function submitImportProduct(targetStatus) {
-    if (!adminLoggedIn) {
-      alert("Please login as admin first.");
-      return;
-    }
-    if (!importName.trim()) {
-      alert("Product name required.");
-      return;
-    }
-    if (importImages.length === 0 && importFetchedImages.length === 0) {
-      alert("Please select at least one product image (upload a file, or fetch/paste one from the link).");
-      return;
-    }
-    const cost = Number(importCostPrice);
-    if (!cost || cost <= 0) {
-      alert("Valid cost price is required.");
-      return;
-    }
-
-    try {
-      setImportingProduct(true);
-      setImportMessage("");
-
-      const formData = new FormData();
-      formData.append("name", importName.trim());
-      formData.append("category", importCategory);
-      formData.append("costPrice", importCostPrice);
-      formData.append("margin", importMargin || 0);
-      formData.append("marginType", importMarginType);
-      formData.append("sourceUrl", importSourceUrl);
-      formData.append("stock", importStock || 0);
-      formData.append("description", importDescription);
-      formData.append("colors", importColors);
-      formData.append("status", targetStatus);
-      formData.append("imageUrls", JSON.stringify(importFetchedImages));
-      importImages.forEach((file) => formData.append("images", file));
-
-      const response = await adminFetch(`${API}/api/admin/products/import`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json();
-      if (!response.ok || data?.success === false) {
-        throw new Error(data?.message || `Server error ${response.status}`);
-      }
-
-      setImportMessage(
-        targetStatus === "published"
-          ? "Imported and published — it's live on the site now."
-          : "Saved as a draft. Review it in the Products tab, then publish whenever you're ready."
-      );
-      resetImportForm();
-      loadProducts();
-    } catch (error) {
-      setImportMessage(error.message || "Import failed.");
-    } finally {
-      setImportingProduct(false);
     }
   }
 
@@ -1286,6 +1031,12 @@ function Admin() {
           file
         );
       });
+      parseColorList(colors).forEach((color) => {
+        const file = colorImageFiles[color];
+        if (file) {
+          formData.append(`colorImage__${encodeURIComponent(color)}`, file);
+        }
+      });
       const response =
         await adminFetch(
           `${API}/api/products`,
@@ -1318,12 +1069,15 @@ function Admin() {
       setStock("");
       setDescription("");
       setColors("Black");
+      setColorImageFiles({});
       setImages([]);
       setSupplierName("");
       setSupplierProductId("");
       setSupplierLink("");
       setSupplierCost("");
       setShippingTime("");
+      setMarginType("percent");
+      setMarginValue("");
       if (event.target) {
         event.target.reset();
       }
@@ -1371,6 +1125,7 @@ function Admin() {
         : product?.colors || "Black"
     );
     setEditImages([]);
+    setEditColorImageFiles({});
     setEditSupplierName(product?.supplierName || "");
     setEditSupplierProductId(product?.supplierProductId || "");
     setEditSupplierLink(product?.supplierLink || "");
@@ -1380,6 +1135,8 @@ function Admin() {
         : product.supplierCost
     );
     setEditShippingTime(product?.shippingTime || "");
+    setEditMarginType("percent");
+    setEditMarginValue("");
   }
   function closeEditProduct() {
     if (editingLoading) {
@@ -1452,6 +1209,12 @@ function Admin() {
           file
         );
       });
+      parseColorList(editColors).forEach((color) => {
+        const file = editColorImageFiles[color];
+        if (file) {
+          formData.append(`colorImage__${encodeURIComponent(color)}`, file);
+        }
+      });
       const response =
         await adminFetch(
           `${API}/api/products/${editingProduct.id}`,
@@ -1481,6 +1244,7 @@ function Admin() {
       );
       setEditingProduct(null);
       setEditImages([]);
+      setEditColorImageFiles({});
       await loadProducts();
     } catch (error) {
       console.error(
@@ -2250,6 +2014,51 @@ function Admin() {
         .form-textarea {
           resize: vertical;
         }
+        .form-hint {
+          font-size: 12px;
+          color: #777;
+          margin: -4px 0 10px;
+        }
+        .color-photo-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 14px;
+          margin-top: 4px;
+        }
+        .color-photo-slot {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 6px;
+          width: 100px;
+        }
+        .color-photo-name {
+          font-size: 12px;
+          font-weight: 600;
+        }
+        .color-photo-preview {
+          width: 80px;
+          height: 80px;
+          object-fit: cover;
+          border-radius: 8px;
+          border: 1px solid #ddd;
+        }
+        .color-photo-placeholder {
+          width: 80px;
+          height: 80px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px dashed #ccc;
+          border-radius: 8px;
+          font-size: 10px;
+          color: #999;
+          text-align: center;
+        }
+        .color-photo-slot input[type="file"] {
+          width: 100px;
+          font-size: 10px;
+        }
         .image-preview {
           display: flex;
           flex-wrap: wrap;
@@ -2341,6 +2150,43 @@ function Admin() {
           margin-bottom: 3px;
           font-size: 10px;
           letter-spacing: 0.5px;
+        }
+        .margin-box {
+          background: #f0fdf4;
+          border: 1px solid #bbf7d0;
+          border-radius: 9px;
+          padding: 12px 13px;
+        }
+        .margin-row {
+          display: flex;
+          gap: 10px;
+        }
+        .margin-row .form-input {
+          flex: 1;
+        }
+        .margin-row .form-select {
+          width: auto;
+        }
+        .margin-apply-button {
+          padding: 0 14px;
+          border: 1px solid #16a34a;
+          border-radius: 9px;
+          background: #16a34a;
+          color: white;
+          font-size: 13px;
+          font-weight: 600;
+          white-space: nowrap;
+          cursor: pointer;
+        }
+        .margin-apply-button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .margin-profit-line {
+          margin: 10px 0 0;
+          font-size: 13px;
+          font-weight: 600;
+          color: #15803d;
         }
         /* =================================================
            IMPORT STATUS BADGE (draft / review / published)
@@ -2756,16 +2602,6 @@ function Admin() {
             onClick={() => setActiveTab("content")}
           >
             Site Content
-          </button>
-          <button
-            className={
-              activeTab === "import"
-                ? "tab-button active"
-                : "tab-button"
-            }
-            onClick={() => setActiveTab("import")}
-          >
-            Import Product
           </button>
         </div>
 
@@ -3320,301 +3156,6 @@ function Admin() {
           </div>
         )}
 
-        {activeTab === "import" && (
-          <div className="panel">
-            <div className="panel-header">
-              <h2 className="panel-title">Import Product (Meesho / any supplier)</h2>
-            </div>
-
-            <p className="customer-info" style={{ marginBottom: 20 }}>
-              Paste the details from a Meesho (or any other) listing here manually — this
-              does not scrape Meesho automatically. Fill this in once, and it works out
-              your selling price and a ready-made description template for you. Nothing
-              goes live on its own: every import is saved as a <strong>Draft</strong> first
-              so you can review photos, price and wording — go to the Products tab and hit
-              "Publish" whenever you're happy with it.
-            </p>
-
-            <div className="product-form-grid">
-              <div className="form-group full">
-                <label className="form-label">Meesho / Supplier Product URL (internal reference only, never shown to customers)</label>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <input
-                    className="form-input"
-                    value={importSourceUrl}
-                    onChange={(event) => setImportSourceUrl(event.target.value)}
-                    placeholder="https://www.meesho.com/..."
-                    style={{ flex: 1 }}
-                  />
-                  <button
-                    type="button"
-                    className="status-action-button"
-                    disabled={fetchingFromLink || fetchingImageUrl}
-                    onClick={fetchFromLink}
-                    style={{ whiteSpace: "nowrap" }}
-                  >
-                    {fetchingFromLink || fetchingImageUrl ? "Fetching..." : "🔍 Try Auto-Fill from Link"}
-                  </button>
-                </div>
-                <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>
-                  Best-effort only — many supplier sites (Meesho included) block automated
-                  requests, so this can fail. If it does, just fill the fields below by hand.
-                </p>
-                {fetchLinkMessage && (
-                  <p className="customer-info" style={{ marginTop: 4, fontSize: 13 }}>{fetchLinkMessage}</p>
-                )}
-              </div>
-
-              <div className="form-group full">
-                <label className="form-label">Product Title (how it'll show on SHRIMOH)</label>
-                <input
-                  className="form-input"
-                  value={importName}
-                  onChange={(event) => setImportName(event.target.value)}
-                  placeholder="e.g. Premium Women's Everyday Shoulder Bag"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Category</label>
-                <select
-                  className="form-input"
-                  value={importCategory}
-                  onChange={(event) => setImportCategory(event.target.value)}
-                >
-                  {categories.map((cat) => (
-                    <option key={cat} value={cat}>
-                      {cat}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Stock</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  min="0"
-                  value={importStock}
-                  onChange={(event) => setImportStock(event.target.value)}
-                  placeholder="10"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Colors (comma separated)</label>
-                <input
-                  className="form-input"
-                  value={importColors}
-                  onChange={(event) => setImportColors(event.target.value)}
-                  placeholder="Black, Tan"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Cost Price (₹) — what you pay the supplier</label>
-                <input
-                  className="form-input"
-                  type="number"
-                  min="0"
-                  value={importCostPrice}
-                  onChange={(event) => setImportCostPrice(event.target.value)}
-                  placeholder="399"
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Margin</label>
-                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                  <select
-                    className="form-input"
-                    style={{ maxWidth: 110 }}
-                    value={importMarginType}
-                    onChange={(event) => setImportMarginType(event.target.value)}
-                  >
-                    <option value="fixed">₹ Fixed</option>
-                    <option value="percent">% Percent</option>
-                  </select>
-                  <input
-                    className="form-input"
-                    type="number"
-                    min="0"
-                    value={importMargin}
-                    onChange={(event) => setImportMargin(event.target.value)}
-                    placeholder={importMarginType === "percent" ? "40" : "220"}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group full">
-                <div className="supplier-info-box" style={{ fontSize: 14 }}>
-                  <strong>Selling price (auto-calculated)</strong>
-                  <div style={{ fontSize: 20, marginTop: 6 }}>
-                    {formatMoney(calcSellingPrice(importCostPrice, importMargin, importMarginType))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group full">
-                <label className="form-label">Description</label>
-                <textarea
-                  className="form-input"
-                  rows={9}
-                  value={importDescription}
-                  onChange={(event) => setImportDescription(event.target.value)}
-                />
-                <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center" }}>
-                  <button
-                    type="button"
-                    className="status-action-button"
-                    disabled={generatingPremium}
-                    onClick={generatePremiumContent}
-                  >
-                    {generatingPremium ? "Generating..." : "✨ Generate Premium Content"}
-                  </button>
-                  <span className="customer-info" style={{ fontSize: 13 }}>
-                    Rewrites the title + description above into a SHRIMOH-premium version
-                    specific to this product (uses Google Gemini — needs GEMINI_API_KEY set up once, free tier).
-                  </span>
-                </div>
-                {premiumMessage && (
-                  <p className="customer-info" style={{ marginTop: 4, fontSize: 13 }}>{premiumMessage}</p>
-                )}
-              </div>
-
-              <div className="form-group full">
-                <label className="form-label">Product Images *</label>
-                <input
-                  className="form-input"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImportImagesChange}
-                />
-                {importImages.length > 0 && (
-                  <div className="image-preview">
-                    {importImages.map((file, index) => (
-                      <div className="image-preview-card" key={`${file.name}-${index}`}>
-                        <img src={URL.createObjectURL(file)} alt={file.name} />
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ marginTop: 14 }}>
-                  <label className="form-label">
-                    Or paste an image link (right-click a Meesho photo → "Copy Image Address")
-                  </label>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <input
-                      className="form-input"
-                      value={importPasteImageUrl}
-                      onChange={(event) => setImportPasteImageUrl(event.target.value)}
-                      placeholder="https://images.meesho.com/..."
-                      style={{ flex: 1 }}
-                    />
-                    <button
-                      type="button"
-                      className="status-action-button"
-                      disabled={fetchingImageUrl || !importPasteImageUrl.trim()}
-                      onClick={addPastedImageUrl}
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      {fetchingImageUrl ? "Fetching..." : "+ Add Image"}
-                    </button>
-                  </div>
-                </div>
-
-                {importFetchedImages.length > 0 && (
-                  <div className="image-preview">
-                    {importFetchedImages.map((url) => (
-                      <div className="image-preview-card" key={url} style={{ position: "relative" }}>
-                        <img src={url} alt="Fetched product" />
-                        <button
-                          type="button"
-                          onClick={() => removeFetchedImage(url)}
-                          style={{
-                            position: "absolute",
-                            top: 4,
-                            right: 4,
-                            background: "rgba(0,0,0,0.6)",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: "50%",
-                            width: 22,
-                            height: 22,
-                            cursor: "pointer",
-                          }}
-                          title="Remove"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid #eee" }}>
-                  <label className="form-label">✨ Clean & Premium-ify a Photo (free, unlimited)</label>
-                  <span className="form-hint" style={{ display: "block", marginBottom: 8 }}>
-                    Puts your real product photo on a clean cream studio backdrop with a soft
-                    shadow — no AI generation, no billing, no limit. Doesn't invent anything new,
-                    just makes the real photo look catalog-ready.
-                  </span>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <input
-                      className="form-input"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleCleanupFileChange}
-                      style={{ flex: 1, minWidth: 200 }}
-                    />
-                    <button
-                      type="button"
-                      className="status-action-button"
-                      disabled={cleaningPhoto || !cleanupFile}
-                      onClick={cleanUpPhoto}
-                      style={{ whiteSpace: "nowrap" }}
-                    >
-                      {cleaningPhoto ? "Cleaning up..." : "Clean & Add"}
-                    </button>
-                  </div>
-                  {cleanupMessage && (
-                    <p className="customer-info" style={{ marginTop: 8, fontSize: 13 }}>{cleanupMessage}</p>
-                  )}
-                </div>
-
-              </div>
-            </div>
-
-            {importMessage && (
-              <p className="customer-info" style={{ marginTop: 16 }}>
-                {importMessage}
-              </p>
-            )}
-
-            <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-              <button
-                type="button"
-                className="cancel-product-button"
-                disabled={importingProduct}
-                onClick={() => submitImportProduct("draft")}
-              >
-                {importingProduct ? "SAVING..." : "SAVE AS DRAFT"}
-              </button>
-              <button
-                type="button"
-                className="save-product-button"
-                disabled={importingProduct}
-                onClick={() => submitImportProduct("published")}
-              >
-                {importingProduct ? "PUBLISHING..." : "PUBLISH NOW"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {activeTab === "products" && (
           <>
             <div className="panel">
@@ -3733,6 +3274,49 @@ function Admin() {
                       placeholder="Black, Brown, White"
                     />
                   </div>
+                  {parseColorList(colors).length > 1 && (
+                    <div className="form-group full">
+                      <label className="form-label">
+                        Photo for each color (optional, recommended)
+                      </label>
+                      <p className="form-hint">
+                        Upload a photo of the bag in each color - customers will
+                        see this photo when they click that color on the product
+                        page. Leave any color blank to just show the main photos
+                        above for it.
+                      </p>
+                      <div className="color-photo-grid">
+                        {parseColorList(colors).map((color) => {
+                          const file = colorImageFiles[color];
+                          return (
+                            <div className="color-photo-slot" key={color}>
+                              <span className="color-photo-name">{color}</span>
+                              {file ? (
+                                <img
+                                  className="color-photo-preview"
+                                  src={URL.createObjectURL(file)}
+                                  alt={`${color} preview`}
+                                />
+                              ) : (
+                                <div className="color-photo-placeholder">No photo</div>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(event) => {
+                                  const selected = event.target.files?.[0] || null;
+                                  setColorImageFiles((previous) => ({
+                                    ...previous,
+                                    [color]: selected,
+                                  }));
+                                }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div className="form-group full">
                     <label className="form-label">
                       Description
@@ -3792,6 +3376,50 @@ function Admin() {
                       placeholder="e.g. 7-12 days"
                     />
                   </div>
+
+                  {supplierCost !== "" && (
+                    <div className="form-group full margin-box">
+                      <label className="form-label">Margin / Profit</label>
+                      <div className="margin-row">
+                        <input
+                          className="form-input"
+                          type="number"
+                          value={marginValue}
+                          onChange={(event) => setMarginValue(event.target.value)}
+                          placeholder="e.g. 30"
+                        />
+                        <select
+                          className="form-select"
+                          value={marginType}
+                          onChange={(event) => setMarginType(event.target.value)}
+                        >
+                          <option value="percent">% on cost</option>
+                          <option value="fixed">₹ on cost</option>
+                        </select>
+                        <button
+                          type="button"
+                          className="margin-apply-button"
+                          disabled={!marginValue}
+                          onClick={() =>
+                            setPrice(
+                              String(computeSellingPriceFromMargin(supplierCost, marginValue, marginType))
+                            )
+                          }
+                        >
+                          Fill Price
+                        </button>
+                      </div>
+                      {price !== "" && (
+                        <p className="margin-profit-line">
+                          {(() => {
+                            const { profit, percent } = computeProfit(price, supplierCost);
+                            return `Selling at ${formatMoney(price)} → profit ${formatMoney(profit)} (${percent.toFixed(0)}% on cost)`;
+                          })()}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="form-group full">
                     <label className="form-label">Supplier Link</label>
                     <input
@@ -3948,7 +3576,20 @@ function Admin() {
                                 {product.supplierName && <div>{product.supplierName}</div>}
                                 {product.supplierCost !== null &&
                                   product.supplierCost !== undefined && (
-                                    <div>Cost: {formatMoney(product.supplierCost)}</div>
+                                    <>
+                                      <div>Cost: {formatMoney(product.supplierCost)}</div>
+                                      {(() => {
+                                        const { profit, percent } = computeProfit(
+                                          product.price,
+                                          product.supplierCost
+                                        );
+                                        return (
+                                          <div>
+                                            Profit: {formatMoney(profit)} ({percent.toFixed(0)}%)
+                                          </div>
+                                        );
+                                      })()}
+                                    </>
                                   )}
                                 {product.shippingTime && <div>Ships in: {product.shippingTime}</div>}
                               </div>
@@ -4374,6 +4015,54 @@ function Admin() {
                     placeholder="Black, Brown, White"
                   />
                 </div>
+                {parseColorList(editColors).length > 1 && (
+                  <div className="form-group full">
+                    <label className="form-label">
+                      Photo for each color (optional, recommended)
+                    </label>
+                    <p className="form-hint">
+                      Upload a photo of the bag in each color - customers will
+                      see this photo when they click that color on the product
+                      page. Colors with no photo just show the main photos above.
+                    </p>
+                    <div className="color-photo-grid">
+                      {parseColorList(editColors).map((color) => {
+                        const file = editColorImageFiles[color];
+                        const existingUrl = editingProduct?.colorImages?.[color];
+                        const previewSrc = file
+                          ? URL.createObjectURL(file)
+                          : existingUrl
+                          ? getImageUrl(existingUrl)
+                          : "";
+                        return (
+                          <div className="color-photo-slot" key={color}>
+                            <span className="color-photo-name">{color}</span>
+                            {previewSrc ? (
+                              <img
+                                className="color-photo-preview"
+                                src={previewSrc}
+                                alt={`${color} preview`}
+                              />
+                            ) : (
+                              <div className="color-photo-placeholder">No photo</div>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(event) => {
+                                const selected = event.target.files?.[0] || null;
+                                setEditColorImageFiles((previous) => ({
+                                  ...previous,
+                                  [color]: selected,
+                                }));
+                              }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 <div className="form-group full">
                   <label className="form-label">
                     Description
@@ -4428,6 +4117,52 @@ function Admin() {
                     onChange={(event) => setEditShippingTime(event.target.value)}
                   />
                 </div>
+
+                {editSupplierCost !== "" && (
+                  <div className="form-group full margin-box">
+                    <label className="form-label">Margin / Profit</label>
+                    <div className="margin-row">
+                      <input
+                        className="form-input"
+                        type="number"
+                        value={editMarginValue}
+                        onChange={(event) => setEditMarginValue(event.target.value)}
+                        placeholder="e.g. 30"
+                      />
+                      <select
+                        className="form-select"
+                        value={editMarginType}
+                        onChange={(event) => setEditMarginType(event.target.value)}
+                      >
+                        <option value="percent">% on cost</option>
+                        <option value="fixed">₹ on cost</option>
+                      </select>
+                      <button
+                        type="button"
+                        className="margin-apply-button"
+                        disabled={!editMarginValue}
+                        onClick={() =>
+                          setEditPrice(
+                            String(
+                              computeSellingPriceFromMargin(editSupplierCost, editMarginValue, editMarginType)
+                            )
+                          )
+                        }
+                      >
+                        Fill Price
+                      </button>
+                    </div>
+                    {editPrice !== "" && (
+                      <p className="margin-profit-line">
+                        {(() => {
+                          const { profit, percent } = computeProfit(editPrice, editSupplierCost);
+                          return `Selling at ${formatMoney(editPrice)} → profit ${formatMoney(profit)} (${percent.toFixed(0)}% on cost)`;
+                        })()}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="form-group full">
                   <label className="form-label">Supplier Link</label>
                   <input

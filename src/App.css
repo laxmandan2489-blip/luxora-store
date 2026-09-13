@@ -354,6 +354,72 @@ a {
   font-size: 26px;
 }
 
+.lux-search-suggestions {
+  width: min(1100px, 92vw);
+  margin: 0 auto 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.lux-search-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.lux-search-suggestion:hover {
+  background: #f2ecdb;
+}
+
+.lux-search-suggestion-image {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  background: #f5f0e2;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lux-search-suggestion-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lux-search-suggestion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.lux-search-suggestion-info strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lux-text);
+}
+
+.lux-search-suggestion-info em {
+  font-style: normal;
+  font-size: 12px;
+  color: #8d7c5c;
+}
+
+.lux-search-no-results {
+  width: min(1100px, 92vw);
+  margin: 0 auto 22px;
+  font-size: 13px;
+  color: #8d7c5c;
+}
+
 /* =========================================================
    HERO
 ========================================================= */
@@ -627,6 +693,19 @@ a {
   color: #a08e6a;
   font-size: 8px;
   letter-spacing: 1.5px;
+}
+
+.lux-sort-select {
+  display: block;
+  margin: 12px 0 0 auto;
+  padding: 9px 12px;
+  border: 1px solid #d8c8a4;
+  background: #fbf7ee;
+  color: #332a1c;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 /* =========================================================
@@ -2159,6 +2238,48 @@ a {
 }
 
 /* =========================================================
+   COLOR SWATCHES
+========================================================= */
+
+.lux-color-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.lux-color-swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #e7ddc4;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.lux-color-swatch:hover {
+  transform: scale(1.08);
+}
+
+.lux-color-swatch.active {
+  border-color: #332a1c;
+  box-shadow: 0 0 0 2px #fbf7ee, 0 0 0 3px #332a1c;
+}
+
+.lux-color-swatch.has-photo {
+  background-size: cover;
+  background-position: center;
+}
+
+/* =========================================================
    QUANTITY
 ========================================================= */
 
@@ -2681,6 +2802,14 @@ a {
   display: block;
   color: #948357;
   font-size: 9px;
+}
+
+.lux-cart-item-color {
+  display: block;
+  color: #948357;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  margin: -2px 0 6px;
 }
 
 .lux-cart-item-info > strong,
@@ -3469,6 +3598,363 @@ a {
   color: white;
   font-size: 8px;
   letter-spacing: 1.8px;
+}
+
+.lux-success-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.lux-success-track-btn {
+  min-height: 48px;
+  padding: 0 22px;
+  border: 1px solid var(--lux-text) !important;
+  background: transparent !important;
+  color: var(--lux-text) !important;
+}
+
+/* =========================================================
+   ORDER TRACKING MODAL
+========================================================= */
+
+.lux-track-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30000;
+  background: rgba(17, 13, 8, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.lux-track-modal {
+  width: min(520px, 100%);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--lux-bg);
+  border-radius: 8px;
+  animation: luxCartIn 0.25s ease;
+}
+
+.lux-track-header {
+  min-height: 90px;
+  padding: 22px 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--lux-line);
+  position: sticky;
+  top: 0;
+  background: var(--lux-bg);
+}
+
+.lux-track-header span {
+  color: #a1907c;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+
+.lux-track-header h2 {
+  margin: 6px 0 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 25px;
+  font-weight: 400;
+}
+
+.lux-track-header button {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dccdaa;
+  border-radius: 50%;
+  background: transparent;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.lux-track-header button:hover {
+  background: #1c150d;
+  color: #fff;
+}
+
+.lux-track-form {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lux-track-intro {
+  margin: 0;
+  font-size: 12px;
+  color: #7d6c4f;
+  line-height: 1.6;
+}
+
+.lux-track-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: #8a7a5c;
+}
+
+.lux-track-form input {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid #d8c8a4;
+  background: transparent;
+  color: var(--lux-text);
+  font-size: 14px;
+  border-radius: 4px;
+}
+
+.lux-track-form input:focus {
+  outline: none;
+  border-color: var(--lux-text);
+}
+
+.lux-track-error {
+  margin: 0;
+  color: #a8442f;
+  font-size: 12px;
+}
+
+.lux-track-form button {
+  min-height: 50px;
+  border: 1px solid var(--lux-text);
+  background: var(--lux-text);
+  color: white;
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  border-radius: 4px;
+}
+
+.lux-track-form button:disabled {
+  opacity: 0.6;
+}
+
+.lux-track-result {
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.lux-track-back {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: #8a7a5c;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.lux-track-back:hover {
+  color: var(--lux-text);
+}
+
+.lux-track-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lux-track-summary span {
+  color: #a1907c;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+
+.lux-track-summary strong {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.lux-track-summary em {
+  font-style: normal;
+  font-size: 12px;
+  color: #7d6c4f;
+}
+
+.lux-track-cancelled {
+  padding: 14px 16px;
+  background: #f7e6e2;
+  color: #a8442f;
+  font-size: 13px;
+  border-radius: 4px;
+}
+
+.lux-track-timeline {
+  display: flex;
+  flex-direction: column;
+}
+
+.lux-track-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  position: relative;
+  padding-bottom: 22px;
+}
+
+.lux-track-step:last-child {
+  padding-bottom: 0;
+}
+
+.lux-track-step::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: #e2d6b8;
+}
+
+.lux-track-step:last-child::before {
+  display: none;
+}
+
+.lux-track-step.done::before {
+  background: #b1a181;
+}
+
+.lux-track-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #e2d6b8;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.lux-track-step.done .lux-track-dot {
+  background: #b1a181;
+}
+
+.lux-track-step.current .lux-track-dot {
+  background: var(--lux-text);
+  box-shadow: 0 0 0 4px rgba(28, 21, 13, 0.12);
+}
+
+.lux-track-step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lux-track-step-info strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: #b1a181;
+}
+
+.lux-track-step.done .lux-track-step-info strong {
+  color: var(--lux-text);
+}
+
+.lux-track-step-info em {
+  font-style: normal;
+  font-size: 11px;
+  color: #a1907c;
+}
+
+.lux-track-courier {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: #f5f0e2;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #7d6c4f;
+}
+
+.lux-track-courier a {
+  margin-top: 4px;
+  color: var(--lux-text);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-decoration: underline;
+}
+
+.lux-track-items {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-top: 1px solid var(--lux-line);
+  padding-top: 18px;
+}
+
+.lux-track-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lux-track-item-image {
+  width: 50px;
+  height: 50px;
+  flex-shrink: 0;
+  background: #f5f0e2;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.lux-track-item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lux-track-item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lux-track-item-info strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.lux-track-item-info em {
+  font-style: normal;
+  font-size: 11px;
+  color: #8a7a5c;
+}
+
+.lux-track-item-info span {
+  font-size: 11px;
+  color: #a1907c;
+}
+
+.lux-track-item-price {
+  font-size: 13px;
+  color: #7d6c4f;
+}
+
+.lux-track-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--lux-line);
+  padding-top: 16px;
+  font-size: 13px;
+}
+
+.lux-track-total strong {
+  font-size: 17px;
 }
 
 /* =========================================================

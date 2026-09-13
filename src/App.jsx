@@ -19,6 +19,56 @@ function slugifyCategory(name) {
 }
 
 /*
+ * COLOR SWATCH -> CSS COLOR
+ * Admin types color names as free text (e.g. "Rose Gold", "Camel"),
+ * and most of those are not valid CSS color keywords. This maps the
+ * common fashion/bag color names we expect to a real hex so the
+ * swatch renders correctly, and falls back to a neutral grey (never
+ * an invalid/blank CSS value) for anything not in the list - the
+ * color's name is always shown as text next to the swatches too, so
+ * the swatch itself is a visual aid, not the only source of truth.
+ */
+const COLOR_NAME_MAP = {
+  black: "#111111",
+  white: "#ffffff",
+  ivory: "#fffff0",
+  cream: "#f5f0e6",
+  beige: "#e8dcc8",
+  tan: "#d2b48c",
+  camel: "#c19a6b",
+  brown: "#6b4423",
+  "dark brown": "#4a2c17",
+  chocolate: "#3d2314",
+  maroon: "#722f37",
+  burgundy: "#6d1a2f",
+  red: "#b3282d",
+  pink: "#e8b4bc",
+  "dusty rose": "#c48a92",
+  "rose gold": "#b76e79",
+  gold: "#c9a24b",
+  mustard: "#c8a951",
+  yellow: "#e8c547",
+  orange: "#c46a2b",
+  olive: "#6b6b3a",
+  green: "#3f5d3a",
+  "bottle green": "#254636",
+  navy: "#1f2a44",
+  blue: "#2f4d7a",
+  grey: "#8a8a8a",
+  gray: "#8a8a8a",
+  charcoal: "#3a3a3a",
+  silver: "#c0c0c0",
+  purple: "#5b3a5e",
+  lavender: "#9a8fc2",
+  nude: "#dfc1a3"
+};
+
+function colorToCss(colorName) {
+  const key = String(colorName || "").trim().toLowerCase();
+  return COLOR_NAME_MAP[key] || "#b8b8b8";
+}
+
+/*
  * CATEGORY TAXONOMY
  * This is the same fixed category list used in the Admin panel's
  * "add/edit product" dropdown (src/Admin.jsx) - keeping one shared
@@ -358,6 +408,7 @@ function App() {
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
+  const [sortBy, setSortBy] = useState("featured");
 
   /*
    * MOBILE NAV
@@ -436,6 +487,7 @@ function App() {
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [detailQuantity, setDetailQuantity] = useState(1);
+  const [detailColor, setDetailColor] = useState("");
   const [touchStartX, setTouchStartX] = useState(null);
 
   /* =========================================================
@@ -618,6 +670,79 @@ function App() {
   const [couponLoading, setCouponLoading] = useState(false);
 
   /* =========================================================
+     ORDER TRACKING
+     Customer-facing "where is my order" lookup - independent of
+     admin login. Needs the order reference + the mobile/email used
+     at checkout (enforced server-side in /api/track-order).
+  ========================================================= */
+
+  const ORDER_TRACKING_STEPS = ["Received", "Confirmed", "Processing", "Shipped", "Delivered"];
+
+  const [trackOpen, setTrackOpen] = useState(false);
+  const [trackReference, setTrackReference] = useState("");
+  const [trackContact, setTrackContact] = useState("");
+  const [trackLoading, setTrackLoading] = useState(false);
+  const [trackError, setTrackError] = useState("");
+  const [trackResult, setTrackResult] = useState(null); // { order, customerName, statusHistory }
+
+  function closeTrackOrder() {
+    setTrackOpen(false);
+    document.body.style.overflow = "";
+  }
+
+  function resetTrackSearch() {
+    setTrackResult(null);
+    setTrackError("");
+  }
+
+  async function lookupOrder(event) {
+    if (event) event.preventDefault();
+    const reference = trackReference.trim();
+    const contact = trackContact.trim();
+
+    if (!reference) {
+      setTrackError("Please enter your order reference (e.g. LUX-...).");
+      return;
+    }
+    if (!contact) {
+      setTrackError("Please enter the mobile number or email used for this order.");
+      return;
+    }
+
+    setTrackLoading(true);
+    setTrackError("");
+    setTrackResult(null);
+
+    try {
+      const params = new URLSearchParams({ reference });
+      if (/^[0-9+\-\s()]{6,}$/.test(contact) && /\d{7,}/.test(contact.replace(/\D/g, ""))) {
+        params.set("mobile", contact);
+      } else {
+        params.set("email", contact);
+      }
+
+      const response = await fetch(`${API}/api/track-order?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setTrackError(data.message || "No order found for those details.");
+        return;
+      }
+
+      setTrackResult({
+        order: data.order,
+        customerName: data.customerName || "",
+        statusHistory: Array.isArray(data.statusHistory) ? data.statusHistory : [],
+      });
+    } catch (err) {
+      console.error("TRACK ORDER ERROR:", err);
+      setTrackError("Unable to look up this order right now. Please try again shortly.");
+    } finally {
+      setTrackLoading(false);
+    }
+  }
+
+  /* =========================================================
      LOAD PRODUCTS
   ========================================================= */
 
@@ -722,6 +847,41 @@ function App() {
     });
   }, [products, selectedCategory, searchText]);
 
+  /*
+   * SORT
+   * Applied on top of filteredProducts, right before the grid
+   * renders it - "featured" keeps the server's natural order,
+   * everything else re-orders a copy (never mutates the original
+   * products array, which other parts of the page still rely on
+   * being in server order).
+   */
+  const sortedProducts = useMemo(() => {
+    if (sortBy === "price-asc") {
+      return [...filteredProducts].sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+    }
+    if (sortBy === "price-desc") {
+      return [...filteredProducts].sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
+    }
+    if (sortBy === "newest") {
+      // Product IDs are created from Date.now(), so a higher ID is a newer product.
+      return [...filteredProducts].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+    }
+    return filteredProducts;
+  }, [filteredProducts, sortBy]);
+
+  /*
+   * SEARCH SUGGESTIONS
+   * Live "as you type" matches shown in a dropdown under the
+   * search bar - searches every product regardless of which
+   * category is currently open, so typing a product name always
+   * finds it even if you're browsing a different category.
+   */
+  const searchSuggestions = useMemo(() => {
+    const query = searchText.trim().toLowerCase();
+    if (!query) return [];
+    return products.filter((product) => product.name?.toLowerCase().includes(query)).slice(0, 5);
+  }, [products, searchText]);
+
   /* =========================================================
      PRODUCT IMAGES
   ========================================================= */
@@ -757,17 +917,38 @@ function App() {
     return Array.from(new Set(images.filter(Boolean).map(getImageUrl)));
   }
 
+  /*
+   * DISPLAY IMAGES FOR A GIVEN COLOR
+   * If the product has a dedicated photo saved for the currently
+   * selected color (product.colorImages), that photo is shown
+   * first in the gallery - so clicking a color swatch actually
+   * shows the customer what the bag looks like in that color,
+   * not just the same default photos every time. Falls back to
+   * the normal photo set for colors with no dedicated photo yet.
+   */
+  function getDisplayImages(product, color) {
+    const baseImages = getProductImages(product);
+    const colorPhoto = color && product?.colorImages ? product.colorImages[color] : "";
+
+    if (!colorPhoto) return baseImages;
+
+    const cleanUrl = getImageUrl(colorPhoto);
+    return [cleanUrl, ...baseImages.filter((img) => img !== cleanUrl)];
+  }
+
   /* =========================================================
      OPEN PRODUCT
   ========================================================= */
 
   function openProduct(product) {
     const images = getProductImages(product);
+    const colors = Array.isArray(product?.colors) ? product.colors : [];
 
     setSelectedProduct(product);
     setSelectedImage(images[0] || "");
     setSelectedImageIndex(0);
     setDetailQuantity(1);
+    setDetailColor(colors[0] || "");
 
     document.body.style.overflow = "hidden";
   }
@@ -776,12 +957,27 @@ function App() {
     setSelectedProduct(null);
     setSelectedImage("");
     setSelectedImageIndex(0);
+    setDetailColor("");
     setTouchStartX(null);
 
     if (!checkoutOpen) {
       document.body.style.overflow = "";
     }
   }
+
+  /*
+   * When the customer picks a different color swatch, jump the
+   * gallery back to that color's photo (if one is set) so the
+   * main image always matches the color currently selected.
+   */
+  useEffect(() => {
+    if (!selectedProduct) return;
+
+    const images = getDisplayImages(selectedProduct, detailColor);
+    setSelectedImage(images[0] || "");
+    setSelectedImageIndex(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailColor, selectedProduct?.id]);
 
   /* =========================================================
      PRODUCT SLIDER
@@ -916,6 +1112,7 @@ function App() {
       const secureItems = checkoutItems.map((item) => ({
         id: Number(item.id),
         quantity: Number(item.quantity || 0),
+        color: item.selectedColor || "",
       }));
 
       const response = await fetch(`${API}/api/coupons/validate`, {
@@ -966,11 +1163,12 @@ function App() {
      ADD TO CART
   ========================================================= */
 
-  function addToCart(product, quantity = 1) {
+  function addToCart(product, quantity = 1, color = "") {
     if (!product) return;
 
     const safeQuantity = Math.max(1, Number(quantity || 1));
     const stock = Number(product.stock || 0);
+    const safeColor = color || "";
 
     if (stock <= 0) {
       alert("This product is currently sold out.");
@@ -978,7 +1176,9 @@ function App() {
     }
 
     setCart((previousCart) => {
-      const existingIndex = previousCart.findIndex((item) => item.id === product.id);
+      const existingIndex = previousCart.findIndex(
+        (item) => item.id === product.id && (item.selectedColor || "") === safeColor
+      );
 
       if (existingIndex >= 0) {
         return previousCart.map((item, index) => {
@@ -999,6 +1199,7 @@ function App() {
         ...previousCart,
         {
           ...product,
+          selectedColor: safeColor,
           quantity: Math.min(safeQuantity, stock || 99),
         },
       ];
@@ -1052,6 +1253,7 @@ function App() {
 
     setDirectBuyItem({
       ...selectedProduct,
+      selectedColor: detailColor || "",
       quantity,
     });
 
@@ -1205,6 +1407,7 @@ function App() {
       const secureItems = checkoutItems.map((item) => ({
         id: Number(item.id),
         quantity: Number(item.quantity || 0),
+        color: item.selectedColor || "",
       }));
 
       if (
@@ -1511,6 +1714,19 @@ function App() {
 
             <button
               type="button"
+              onClick={() => {
+                setTrackOpen(true);
+                document.body.style.overflow = "hidden";
+              }}
+              className="lux-track-icon"
+              aria-label="Track order"
+              title="Track your order"
+            >
+              📦
+            </button>
+
+            <button
+              type="button"
               onClick={() => setWishlistOpen(true)}
               className={`lux-wishlist-icon${wishlist.length > 0 ? " has-items" : ""}`}
               aria-label="Wishlist"
@@ -1549,6 +1765,38 @@ function App() {
                 ×
               </button>
             </div>
+
+            {searchText.trim() && (
+              <div className="lux-search-suggestions">
+                {searchSuggestions.length > 0 ? (
+                  searchSuggestions.map((product) => {
+                    const image = getProductImages(product)[0];
+                    return (
+                      <button
+                        type="button"
+                        key={product.id}
+                        className="lux-search-suggestion"
+                        onClick={() => {
+                          openProduct(product);
+                          setSearchText("");
+                          setSearchOpen(false);
+                        }}
+                      >
+                        <span className="lux-search-suggestion-image">
+                          {image ? <img src={image} alt={product.name} /> : null}
+                        </span>
+                        <span className="lux-search-suggestion-info">
+                          <strong>{product.name}</strong>
+                          <em>₹{Number(product.price || 0).toLocaleString("en-IN")}</em>
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <p className="lux-search-no-results">No products match "{searchText.trim()}"</p>
+                )}
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -1828,6 +2076,18 @@ function App() {
             {filteredProducts.length} {filteredProducts.length === 1 ? "piece" : "pieces"}
           </p>
           <span>PREMIUM · TIMELESS · REFINED</span>
+
+          <select
+            className="lux-sort-select"
+            value={sortBy}
+            onChange={(event) => setSortBy(event.target.value)}
+            aria-label="Sort products"
+          >
+            <option value="featured">Sort: Featured</option>
+            <option value="newest">Sort: Newest First</option>
+            <option value="price-asc">Sort: Price - Low to High</option>
+            <option value="price-desc">Sort: Price - High to Low</option>
+          </select>
         </div>
       </section>
 
@@ -1865,7 +2125,7 @@ function App() {
         </div>
       ) : (
         <main className="lux-product-grid">
-          {filteredProducts.map((product, index) => {
+          {sortedProducts.map((product, index) => {
             const image = getProductImages(product)[0];
             const hasDiscount = product.oldPrice > product.price;
             const isSoldOut = Number(product.stock || 0) <= 0;
@@ -1907,7 +2167,20 @@ function App() {
                       type="button"
                       disabled={isSoldOut}
                       onClick={() => {
-                        addToCart(product, 1);
+                        /*
+                         * Products with more than one color need
+                         * the customer to pick one first - send
+                         * them to the detail view instead of
+                         * silently adding a colorless line. A
+                         * single-color product can skip straight
+                         * to the cart with that one color applied.
+                         */
+                        const productColors = Array.isArray(product.colors) ? product.colors : [];
+                        if (productColors.length > 1) {
+                          openProduct(product);
+                          return;
+                        }
+                        addToCart(product, 1, productColors[0] || "");
                         setCartOpen(true);
                       }}
                     >
@@ -2156,7 +2429,7 @@ function App() {
 
             <section className="lux-gallery">
               {(() => {
-                const images = getProductImages(selectedProduct);
+                const images = getDisplayImages(selectedProduct, detailColor);
 
                 return (
                   <div
@@ -2265,6 +2538,39 @@ function App() {
 
               <p className="lux-price-note">Tax included · Free delivery above ₹1,999</p>
 
+              {Array.isArray(selectedProduct.colors) && selectedProduct.colors.length > 1 && (
+                <div className="lux-color-section">
+                  <span className="lux-option-label">
+                    COLOR{detailColor ? `: ${detailColor}` : ""}
+                  </span>
+
+                  <div className="lux-color-swatches">
+                    {selectedProduct.colors.map((color) => {
+                      const photo = selectedProduct.colorImages?.[color];
+
+                      return (
+                        <button
+                          key={color}
+                          type="button"
+                          className={`lux-color-swatch${
+                            detailColor === color ? " active" : ""
+                          }${photo ? " has-photo" : ""}`}
+                          style={
+                            photo
+                              ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                              : { backgroundColor: colorToCss(color) }
+                          }
+                          onClick={() => setDetailColor(color)}
+                          aria-label={color}
+                          aria-pressed={detailColor === color}
+                          title={color}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div className="lux-divider" />
 
               {selectedProduct.description && (
@@ -2307,7 +2613,7 @@ function App() {
                   className="lux-add-button"
                   disabled={Number(selectedProduct.stock || 0) <= 0}
                   onClick={() => {
-                    addToCart(selectedProduct, detailQuantity);
+                    addToCart(selectedProduct, detailQuantity, detailColor);
                     setCartOpen(true);
                     closeProduct();
                   }}
@@ -2474,6 +2780,11 @@ function App() {
                         <div className="lux-cart-item-info">
                           <span>{item.category || "COLLECTION"}</span>
                           <h3>{item.name}</h3>
+                          {item.selectedColor && (
+                            <span className="lux-cart-item-color">
+                              Color: {item.selectedColor}
+                            </span>
+                          )}
                           <strong>₹{(item.price * item.quantity).toLocaleString("en-IN")}</strong>
 
                           <div className="lux-cart-controls">
@@ -2697,6 +3008,17 @@ function App() {
                 type="button"
                 onClick={() => {
                   closeMobileMenu();
+                  setTrackOpen(true);
+                  document.body.style.overflow = "hidden";
+                }}
+              >
+                📦 TRACK ORDER
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  closeMobileMenu();
                   setWishlistOpen(true);
                   document.body.style.overflow = "hidden";
                 }}
@@ -2716,6 +3038,159 @@ function App() {
               </button>
             </div>
           </aside>
+        </div>
+      )}
+
+      {/* ORDER TRACKING */}
+      {trackOpen && (
+        <div
+          className="lux-track-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeTrackOrder();
+          }}
+        >
+          <div className="lux-track-modal">
+            <div className="lux-track-header">
+              <div>
+                <span>WHERE'S MY ORDER</span>
+                <h2>Track Order</h2>
+              </div>
+              <button type="button" onClick={closeTrackOrder} aria-label="Close">
+                ×
+              </button>
+            </div>
+
+            {!trackResult ? (
+              <form className="lux-track-form" onSubmit={lookupOrder}>
+                <p className="lux-track-intro">
+                  Enter your order reference and the mobile number or email you used at checkout.
+                </p>
+
+                <label>
+                  Order Reference
+                  <input
+                    type="text"
+                    value={trackReference}
+                    onChange={(e) => setTrackReference(e.target.value)}
+                    placeholder="e.g. LUX-172..."
+                    autoFocus
+                  />
+                </label>
+
+                <label>
+                  Mobile Number or Email
+                  <input
+                    type="text"
+                    value={trackContact}
+                    onChange={(e) => setTrackContact(e.target.value)}
+                    placeholder="9876543210 or you@email.com"
+                  />
+                </label>
+
+                {trackError && <p className="lux-track-error">{trackError}</p>}
+
+                <button type="submit" disabled={trackLoading}>
+                  {trackLoading ? "SEARCHING..." : "TRACK ORDER"}
+                </button>
+              </form>
+            ) : (
+              <div className="lux-track-result">
+                <button type="button" className="lux-track-back" onClick={resetTrackSearch}>
+                  ← Track another order
+                </button>
+
+                <div className="lux-track-summary">
+                  <span>ORDER #{trackResult.order.orderReference}</span>
+                  {trackResult.customerName && <strong>Hi {trackResult.customerName},</strong>}
+                  {trackResult.order.createdAt && (
+                    <em>
+                      Placed on{" "}
+                      {new Date(trackResult.order.createdAt).toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </em>
+                  )}
+                </div>
+
+                {trackResult.order.status === "Cancelled" ? (
+                  <div className="lux-track-cancelled">This order has been cancelled.</div>
+                ) : (
+                  <div className="lux-track-timeline">
+                    {ORDER_TRACKING_STEPS.map((step, index) => {
+                      const currentIndex = ORDER_TRACKING_STEPS.indexOf(trackResult.order.status);
+                      const isDone = index <= currentIndex;
+                      const isCurrent = index === currentIndex;
+                      const historyEntry = trackResult.statusHistory.find((h) => h.status === step);
+                      return (
+                        <div
+                          key={step}
+                          className={`lux-track-step${isDone ? " done" : ""}${isCurrent ? " current" : ""}`}
+                        >
+                          <span className="lux-track-dot" />
+                          <div className="lux-track-step-info">
+                            <strong>{step}</strong>
+                            {historyEntry?.at && (
+                              <em>
+                                {new Date(historyEntry.at).toLocaleDateString("en-IN", {
+                                  day: "numeric",
+                                  month: "short",
+                                })}
+                              </em>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {(trackResult.order.courierName || trackResult.order.trackingNumber) && (
+                  <div className="lux-track-courier">
+                    {trackResult.order.courierName && (
+                      <span>
+                        Courier: <strong>{trackResult.order.courierName}</strong>
+                      </span>
+                    )}
+                    {trackResult.order.trackingNumber && (
+                      <span>
+                        Tracking No: <strong>{trackResult.order.trackingNumber}</strong>
+                      </span>
+                    )}
+                    {trackResult.order.trackingUrl && (
+                      <a href={trackResult.order.trackingUrl} target="_blank" rel="noopener noreferrer">
+                        TRACK WITH COURIER →
+                      </a>
+                    )}
+                  </div>
+                )}
+
+                <div className="lux-track-items">
+                  {trackResult.order.items.map((item, index) => (
+                    <div className="lux-track-item" key={index}>
+                      <div className="lux-track-item-image">
+                        {item.image && <img src={item.image} alt={item.name} />}
+                      </div>
+                      <div className="lux-track-item-info">
+                        <strong>{item.name}</strong>
+                        {item.selectedColor && <em>Color: {item.selectedColor}</em>}
+                        <span>Qty {item.quantity}</span>
+                      </div>
+                      <div className="lux-track-item-price">
+                        ₹{Number(item.lineTotal || item.price * item.quantity).toLocaleString("en-IN")}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="lux-track-total">
+                  <span>Order Total</span>
+                  <strong>₹{Number(trackResult.order.total).toLocaleString("en-IN")}</strong>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2752,18 +3227,35 @@ function App() {
 
                 <div className="lux-success-line" />
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOrderPlaced(false);
-                    setCheckoutOpen(false);
-                    setDirectBuyItem(null);
+                <div className="lux-success-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOrderPlaced(false);
+                      setCheckoutOpen(false);
+                      setDirectBuyItem(null);
 
-                    document.body.style.overflow = "";
-                  }}
-                >
-                  CONTINUE SHOPPING
-                </button>
+                      document.body.style.overflow = "";
+                    }}
+                  >
+                    CONTINUE SHOPPING
+                  </button>
+
+                  {orderReference && (
+                    <button
+                      type="button"
+                      className="lux-success-track-btn"
+                      onClick={() => {
+                        resetTrackSearch();
+                        setTrackReference(orderReference);
+                        setTrackContact(customer.mobile || customer.email || "");
+                        setTrackOpen(true);
+                      }}
+                    >
+                      TRACK YOUR ORDER
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <>
@@ -2923,6 +3415,11 @@ function App() {
                             <section>
                               <span>{item.category || "COLLECTION"}</span>
                               <h3>{item.name}</h3>
+                              {item.selectedColor && (
+                                <span className="lux-cart-item-color">
+                                  Color: {item.selectedColor}
+                                </span>
+                              )}
                             </section>
 
                             <strong>₹{(item.price * item.quantity).toLocaleString("en-IN")}</strong>
