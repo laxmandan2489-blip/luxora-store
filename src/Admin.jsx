@@ -129,6 +129,30 @@ function getOrderId(order) {
   );
 }
 
+function getOrderCourierName(order) {
+  return (
+    order?.courierName ||
+    order?.courier_name ||
+    ""
+  );
+}
+
+function getOrderTrackingNumber(order) {
+  return (
+    order?.trackingNumber ||
+    order?.tracking_number ||
+    ""
+  );
+}
+
+function getOrderTrackingUrl(order) {
+  return (
+    order?.trackingUrl ||
+    order?.tracking_url ||
+    ""
+  );
+}
+
 /* =====================================================
    CUSTOMER DETAILS
    ===================================================== */
@@ -299,6 +323,26 @@ function Admin() {
     useState(false);
   const [savingStatus, setSavingStatus] =
     useState(false);
+
+  /* =====================================================
+     SHIPPING / COURIER DETAILS (per order)
+     Feeds the customer-facing Track Order page - these
+     fields are what shows up there once saved here.
+     ===================================================== */
+  const [shipCourier, setShipCourier] =
+    useState("");
+  const [shipTrackingNumber, setShipTrackingNumber] =
+    useState("");
+  const [shipTrackingUrl, setShipTrackingUrl] =
+    useState("");
+  const [savingShipping, setSavingShipping] =
+    useState(false);
+
+  useEffect(() => {
+    setShipCourier(getOrderCourierName(selectedOrder));
+    setShipTrackingNumber(getOrderTrackingNumber(selectedOrder));
+    setShipTrackingUrl(getOrderTrackingUrl(selectedOrder));
+  }, [selectedOrder]);
 
   const [name, setName] =
     useState("");
@@ -1431,6 +1475,72 @@ function Admin() {
   }
 
   /* =====================================================
+     UPDATE SHIPPING / COURIER DETAILS
+     Saves courier name + tracking number/link against the
+     order - this is exactly what the customer-facing Track
+     Order page reads back, so this is how a courier update
+     "shows up" on the website once entered here.
+     ===================================================== */
+  async function updateOrderShipping(order) {
+    const id = getOrderId(order);
+    if (!id || id === "—") {
+      alert("Order ID not found.");
+      return;
+    }
+    try {
+      setSavingShipping(true);
+      const response = await adminFetch(
+        `${API}/api/orders/${id}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            courierName: shipCourier.trim(),
+            trackingNumber: shipTrackingNumber.trim(),
+            trackingUrl: shipTrackingUrl.trim(),
+          }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          data?.message || `Server error ${response.status}`
+        );
+      }
+
+      const patch = {
+        courierName: shipCourier.trim(),
+        courier_name: shipCourier.trim(),
+        trackingNumber: shipTrackingNumber.trim(),
+        tracking_number: shipTrackingNumber.trim(),
+        trackingUrl: shipTrackingUrl.trim(),
+        tracking_url: shipTrackingUrl.trim(),
+      };
+
+      setOrders((previous) =>
+        previous.map((item) =>
+          String(getOrderId(item)) === String(id)
+            ? { ...item, ...patch }
+            : item
+        )
+      );
+      setSelectedOrder((previous) =>
+        previous && String(getOrderId(previous)) === String(id)
+          ? { ...previous, ...patch }
+          : previous
+      );
+      alert("Shipping details saved. Customer's Track Order page will now show this.");
+    } catch (error) {
+      console.error("UPDATE ORDER SHIPPING ERROR:", error);
+      alert(error.message || "Shipping details save nahi hue.");
+    } finally {
+      setSavingShipping(false);
+    }
+  }
+
+  /* =====================================================
      FILTERED ORDERS
      ===================================================== */
   const filteredOrders =
@@ -2386,6 +2496,15 @@ function Admin() {
           border: 1px solid #ccc;
           border-radius: 8px;
           min-width: 190px;
+        }
+        .shipping-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 15px;
+          margin: 15px 0 15px;
+        }
+        .shipping-grid .form-group.full {
+          grid-column: 1 / -1;
         }
         .items-table {
           width: 100%;
@@ -3802,6 +3921,66 @@ function Admin() {
                 </span>
               )}
             </div>
+
+            <h3>
+              Shipping / Courier Details
+            </h3>
+            <p className="form-hint">
+              Customer ka "Track Order" page yahi dikhaega - jab courier ko order de do, ye bhar do.
+            </p>
+            <div className="shipping-grid">
+              <div className="form-group">
+                <label className="form-label">
+                  Courier Name
+                </label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g. Delhivery"
+                  value={shipCourier}
+                  onChange={(event) =>
+                    setShipCourier(event.target.value)
+                  }
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">
+                  Tracking Number
+                </label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g. DL998877665"
+                  value={shipTrackingNumber}
+                  onChange={(event) =>
+                    setShipTrackingNumber(event.target.value)
+                  }
+                />
+              </div>
+              <div className="form-group full">
+                <label className="form-label">
+                  Tracking Link
+                </label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="https://www.delhivery.com/track/..."
+                  value={shipTrackingUrl}
+                  onChange={(event) =>
+                    setShipTrackingUrl(event.target.value)
+                  }
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              className="add-button"
+              disabled={savingShipping}
+              onClick={() => updateOrderShipping(selectedOrder)}
+            >
+              {savingShipping ? "Saving..." : "Save Shipping Info"}
+            </button>
+
             <h3>
               Order Items
             </h3>

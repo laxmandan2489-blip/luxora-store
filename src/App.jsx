@@ -119,7 +119,7 @@ const API = "https://luxora-store-mkva.onrender.com";
  * 10 digit mobile number) - this exact string is used to build
  * the wa.me link for the floating WhatsApp button.
  */
-const SUPPORT_EMAIL = "getluxorastore@gmail.com";
+const SUPPORT_EMAIL = "infoshrimoh@gmail.com";
 const WHATSAPP_NUMBER = "9461515979"; // TODO: replace with your real WhatsApp business number
 
 /*
