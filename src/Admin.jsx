@@ -1531,7 +1531,7 @@ function Admin() {
           ? { ...previous, ...patch }
           : previous
       );
-      alert("Shipping details saved. Customer's Track Order page will now show this.");
+      alert("Shipping details saved. Customer's Track Order page will show this, and they'll get an email with the courier + tracking details.");
     } catch (error) {
       console.error("UPDATE ORDER SHIPPING ERROR:", error);
       alert(error.message || "Shipping details save nahi hue.");
