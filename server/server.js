@@ -117,7 +117,7 @@ const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
  * App Password for apps like this to send mail).
  *
  * Set these two environment variables on Render:
- *   GMAIL_USER            e.g. getluxorastore@gmail.com
+ *   GMAIL_USER            e.g. infoshrimoh@gmail.com
  *   GMAIL_APP_PASSWORD    the 16-digit App Password (no spaces)
  *
  * If these are not set, email sending is silently skipped
