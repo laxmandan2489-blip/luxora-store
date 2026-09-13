@@ -1170,6 +1170,22 @@ function Admin() {
     setImages(selectedFiles);
   }
 
+  /*
+   * Swaps an image with its neighbour so the admin can reorder photos
+   * before uploading (Image 1 becomes the product's main photo). direction
+   * is -1 to move a photo earlier or +1 to move it later; out-of-range
+   * moves (already first/last) are simply ignored.
+   */
+  function moveImage(index, direction) {
+    setImages((previous) => {
+      const next = [...previous];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  }
+
   /* =====================================================
      ADD PRODUCT
      ===================================================== */
@@ -1802,6 +1818,16 @@ function Admin() {
         event.target.files || []
       );
     setEditImages(selectedFiles);
+  }
+
+  function moveEditImage(index, direction) {
+    setEditImages((previous) => {
+      const next = [...previous];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
   }
   async function updateProduct(event) {
     event.preventDefault();
@@ -2797,9 +2823,32 @@ function Admin() {
         }
         .image-number {
           display: block;
-          padding: 7px;
+          padding: 7px 7px 0;
           font-size: 11px;
           text-align: center;
+        }
+        .image-reorder-row {
+          display: flex;
+          gap: 4px;
+          padding: 6px 7px 7px;
+        }
+        .image-reorder-button {
+          flex: 1;
+          padding: 4px 0;
+          font-size: 12px;
+          font-weight: 700;
+          background: #f3f3f3;
+          border: 1px solid #ddd;
+          border-radius: 6px;
+          cursor: pointer;
+          line-height: 1;
+        }
+        .image-reorder-button:hover:not(:disabled) {
+          background: #e6e6e6;
+        }
+        .image-reorder-button:disabled {
+          opacity: 0.35;
+          cursor: not-allowed;
         }
         .add-button {
           margin-top: 22px;
@@ -4356,7 +4405,28 @@ function Admin() {
                               <span className="image-number">
                                 Image{" "}
                                 {index + 1}
+                                {index === 0 ? " (main)" : ""}
                               </span>
+                              <div className="image-reorder-row">
+                                <button
+                                  type="button"
+                                  className="image-reorder-button"
+                                  onClick={() => moveImage(index, -1)}
+                                  disabled={index === 0}
+                                  title="Move earlier"
+                                >
+                                  ◀
+                                </button>
+                                <button
+                                  type="button"
+                                  className="image-reorder-button"
+                                  onClick={() => moveImage(index, 1)}
+                                  disabled={index === images.length - 1}
+                                  title="Move later"
+                                >
+                                  ▶
+                                </button>
+                              </div>
                             </div>
                           )
                         )}
@@ -5429,7 +5499,28 @@ function Admin() {
                             <span className="image-number">
                               New Image{" "}
                               {index + 1}
+                              {index === 0 ? " (main)" : ""}
                             </span>
+                            <div className="image-reorder-row">
+                              <button
+                                type="button"
+                                className="image-reorder-button"
+                                onClick={() => moveEditImage(index, -1)}
+                                disabled={index === 0}
+                                title="Move earlier"
+                              >
+                                ◀
+                              </button>
+                              <button
+                                type="button"
+                                className="image-reorder-button"
+                                onClick={() => moveEditImage(index, 1)}
+                                disabled={index === editImages.length - 1}
+                                title="Move later"
+                              >
+                                ▶
+                              </button>
+                            </div>
                           </div>
                         )
                       )}
