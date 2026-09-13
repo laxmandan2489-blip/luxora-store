@@ -190,72 +190,18 @@ async function sendViaBrevoApi({ to, customerName, subject, html }) {
   }
 }
 
-async function sendOrderConfirmationEmail({
-  to,
-  customerName,
-  orderReference,
-  items,
-  subtotal,
-  delivery,
-  discount,
-  total,
-  paymentMethod
-}) {
+/*
+ * Shared "actually send this email" step - both the order
+ * confirmation email and the shipping-update email below build
+ * their own HTML, then hand it to this one function so the
+ * Brevo-vs-SMTP branching only lives in one place.
+ */
+async function sendTransactionalEmail({ to, customerName, subject, html }) {
   if (!to) return;
   if (!BREVO_API_KEY && !mailTransporter) {
-    console.warn("Order email skipped: set BREVO_API_KEY (recommended), or GMAIL_USER / GMAIL_APP_PASSWORD.");
+    console.warn("Email skipped: set BREVO_API_KEY (recommended), or GMAIL_USER / GMAIL_APP_PASSWORD.");
     return;
   }
-
-  const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
-
-  const itemsHtml = (Array.isArray(items) ? items : [])
-    .map(
-      (item) => `
-        <tr>
-          <td style="padding:8px 0;border-bottom:1px solid #e8dfc9;">${item.name}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #e8dfc9;text-align:center;">${item.quantity}</td>
-          <td style="padding:8px 0;border-bottom:1px solid #e8dfc9;text-align:right;">${formatMoney(
-            item.lineTotal ?? item.price * item.quantity
-          )}</td>
-        </tr>`
-    )
-    .join("");
-
-  const html = `
-    <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#211a10;">
-      <h2 style="letter-spacing:2px;">SHRIMOH</h2>
-      <p>Hi ${customerName || "there"},</p>
-      <p>Thank you for your order! We've received it and it's being processed.</p>
-      <p style="font-size:14px;color:#7d6c4f;">ORDER REFERENCE: <strong>${orderReference}</strong></p>
-      <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-        <thead>
-          <tr>
-            <th style="text-align:left;padding:8px 0;border-bottom:2px solid #211a10;">Item</th>
-            <th style="text-align:center;padding:8px 0;border-bottom:2px solid #211a10;">Qty</th>
-            <th style="text-align:right;padding:8px 0;border-bottom:2px solid #211a10;">Amount</th>
-          </tr>
-        </thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-      <table style="width:100%;font-size:14px;">
-        <tr><td>Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
-        ${
-          discount > 0
-            ? `<tr><td>Discount</td><td style="text-align:right;">-${formatMoney(discount)}</td></tr>`
-            : ""
-        }
-        <tr><td>Delivery</td><td style="text-align:right;">${delivery === 0 ? "FREE" : formatMoney(delivery)}</td></tr>
-        <tr><td style="font-weight:bold;padding-top:8px;">Total</td><td style="text-align:right;font-weight:bold;padding-top:8px;">${formatMoney(
-          total
-        )}</td></tr>
-      </table>
-      <p style="font-size:13px;color:#7d6c4f;">Payment method: ${paymentMethod}</p>
-      <p style="margin-top:24px;">We'll notify you again once your order ships.</p>
-      <p style="margin-top:24px;font-size:12px;color:#a19070;">SHRIMOH &middot; Thank you for shopping with us.</p>
-    </div>`;
-
-  const subject = `Order Confirmed - ${orderReference}`;
 
   if (BREVO_API_KEY) {
     await sendViaBrevoApi({ to, customerName, subject, html });
@@ -267,6 +213,191 @@ async function sendOrderConfirmationEmail({
     to,
     subject,
     html
+  });
+}
+
+const formatMoney = (value) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
+
+/*
+ * SHARED EMAIL "SHELL" - the cream/ink/gold look, matching the
+ * storefront's own colors (see App.css --lux-* variables). Both
+ * emails below build their own middle section, then wrap it with
+ * this so every customer email looks like one consistent brand
+ * instead of a plain system notification.
+ */
+const EMAIL_BRAND = {
+  cream: "#fbf7ee",
+  paper: "#ffffff",
+  ink: "#1c150d",
+  text: "#3a2f20",
+  muted: "#7d6c4f",
+  gold: "#b1a181",
+  line: "#e7ddc4",
+  soft: "#f5f0e2"
+};
+
+function emailShell({ eyebrow, heading, bodyHtml }) {
+  return `
+  <div style="background:${EMAIL_BRAND.cream};padding:32px 12px;font-family:Georgia,'Times New Roman',serif;">
+    <div style="max-width:560px;margin:0 auto;background:${EMAIL_BRAND.paper};border:1px solid ${EMAIL_BRAND.line};border-radius:10px;overflow:hidden;">
+      <div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid ${EMAIL_BRAND.line};">
+        <div style="font-size:22px;letter-spacing:6px;color:${EMAIL_BRAND.ink};font-weight:bold;">SHRIMOH</div>
+        <div style="font-size:9px;letter-spacing:2px;color:${EMAIL_BRAND.gold};margin-top:6px;">THE LUXURY STORE</div>
+      </div>
+      <div style="padding:36px 40px;font-family:Arial,Helvetica,sans-serif;color:${EMAIL_BRAND.text};">
+        ${
+          eyebrow
+            ? `<div style="font-size:9px;letter-spacing:2px;color:${EMAIL_BRAND.gold};margin-bottom:10px;">${eyebrow}</div>`
+            : ""
+        }
+        ${
+          heading
+            ? `<h1 style="margin:0 0 18px;font-family:Georgia,serif;font-weight:400;font-size:26px;color:${EMAIL_BRAND.ink};">${heading}</h1>`
+            : ""
+        }
+        ${bodyHtml}
+      </div>
+      <div style="padding:22px 40px;background:${EMAIL_BRAND.soft};text-align:center;">
+        <div style="font-size:10px;letter-spacing:1.5px;color:${EMAIL_BRAND.gold};">SHRIMOH &middot; THE LUXURY STORE</div>
+        <div style="font-size:11px;color:${EMAIL_BRAND.muted};margin-top:6px;">Thank you for shopping with us.</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function sendOrderConfirmationEmail({
+  to,
+  customerName,
+  orderReference,
+  items,
+  subtotal,
+  delivery,
+  discount,
+  total,
+  paymentMethod
+}) {
+  const itemsHtml = (Array.isArray(items) ? items : [])
+    .map((item) => {
+      const image = String(item.image || "").trim();
+      const imageCell = image
+        ? `<img src="${image}" alt="" width="56" height="56" style="width:56px;height:56px;object-fit:cover;border-radius:8px;display:block;border:1px solid ${EMAIL_BRAND.line};" />`
+        : `<div style="width:56px;height:56px;border-radius:8px;background:${EMAIL_BRAND.soft};"></div>`;
+      const colorLine = item.selectedColor
+        ? `<br /><span style="font-size:11px;color:${EMAIL_BRAND.gold};">Color: ${item.selectedColor}</span>`
+        : "";
+      return `
+        <tr>
+          <td style="padding:14px 0;border-bottom:1px solid ${EMAIL_BRAND.line};width:56px;">${imageCell}</td>
+          <td style="padding:14px 14px;border-bottom:1px solid ${EMAIL_BRAND.line};font-size:14px;">${item.name || "Product"}${colorLine}</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${EMAIL_BRAND.line};text-align:center;font-size:13px;color:${EMAIL_BRAND.muted};">${item.quantity}</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${EMAIL_BRAND.line};text-align:right;font-size:14px;">${formatMoney(
+            item.lineTotal ?? item.price * item.quantity
+          )}</td>
+        </tr>`;
+    })
+    .join("");
+
+  const bodyHtml = `
+    <p style="margin:0 0 4px;font-size:14px;">Hi ${customerName || "there"},</p>
+    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">Thank you for your order - we've received it and it's already being prepared with care.</p>
+
+    <div style="display:inline-block;padding:10px 16px;background:${EMAIL_BRAND.soft};border-radius:6px;font-size:11px;letter-spacing:0.5px;color:${EMAIL_BRAND.muted};margin-bottom:28px;">
+      ORDER REFERENCE&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${orderReference}</strong>
+    </div>
+
+    <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+      <thead>
+        <tr>
+          <th colspan="2" style="text-align:left;padding:0 0 10px;border-bottom:1px solid ${EMAIL_BRAND.ink};font-size:10px;letter-spacing:1px;color:${EMAIL_BRAND.muted};font-weight:normal;">ITEM</th>
+          <th style="text-align:center;padding:0 0 10px;border-bottom:1px solid ${EMAIL_BRAND.ink};font-size:10px;letter-spacing:1px;color:${EMAIL_BRAND.muted};font-weight:normal;">QTY</th>
+          <th style="text-align:right;padding:0 0 10px;border-bottom:1px solid ${EMAIL_BRAND.ink};font-size:10px;letter-spacing:1px;color:${EMAIL_BRAND.muted};font-weight:normal;">AMOUNT</th>
+        </tr>
+      </thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+
+    <table style="width:100%;font-size:13px;">
+      <tr><td style="padding:4px 0;color:${EMAIL_BRAND.muted};">Subtotal</td><td style="text-align:right;padding:4px 0;">${formatMoney(subtotal)}</td></tr>
+      ${
+        discount > 0
+          ? `<tr><td style="padding:4px 0;color:${EMAIL_BRAND.muted};">Discount</td><td style="text-align:right;padding:4px 0;">-${formatMoney(discount)}</td></tr>`
+          : ""
+      }
+      <tr><td style="padding:4px 0;color:${EMAIL_BRAND.muted};">Delivery</td><td style="text-align:right;padding:4px 0;">${delivery === 0 ? "FREE" : formatMoney(delivery)}</td></tr>
+      <tr><td style="padding-top:12px;border-top:1px solid ${EMAIL_BRAND.line};font-weight:bold;font-size:16px;">Total</td><td style="text-align:right;padding-top:12px;border-top:1px solid ${EMAIL_BRAND.line};font-weight:bold;font-size:16px;">${formatMoney(
+        total
+      )}</td></tr>
+    </table>
+
+    <p style="font-size:12px;color:${EMAIL_BRAND.muted};margin:20px 0 0;">Payment method: ${paymentMethod}</p>
+    <p style="font-size:13px;line-height:1.6;margin-top:22px;">We'll send you another email the moment your order ships, with the courier name and tracking details.</p>
+  `;
+
+  await sendTransactionalEmail({
+    to,
+    customerName,
+    subject: `Order Confirmed - ${orderReference}`,
+    html: emailShell({ eyebrow: "ORDER CONFIRMED", heading: "Thank you for your order", bodyHtml })
+  });
+}
+
+/*
+ * SHIPPING UPDATE EMAIL
+ * Sent whenever the admin panel's "Save Shipping Info" saves a
+ * courier name / tracking number against an order (see the
+ * /api/orders/:id/status handler below) - tells the customer their
+ * order has shipped and gives them the courier + tracking details,
+ * plus a link to the site's own Track Order page.
+ */
+async function sendShippingUpdateEmail({
+  to,
+  customerName,
+  orderReference,
+  status,
+  courierName,
+  trackingNumber,
+  trackingUrl
+}) {
+  const bodyHtml = `
+    <p style="margin:0 0 4px;font-size:14px;">Hi ${customerName || "there"},</p>
+    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">Good news - your order is on its way to you.</p>
+
+    <div style="display:inline-block;padding:10px 16px;background:${EMAIL_BRAND.soft};border-radius:6px;font-size:11px;letter-spacing:0.5px;color:${EMAIL_BRAND.muted};margin-bottom:12px;">
+      ORDER REFERENCE&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${orderReference}</strong>
+    </div>
+    <div style="font-size:11px;letter-spacing:1px;color:${EMAIL_BRAND.gold};margin-bottom:26px;">STATUS: <strong>${String(status || "").toUpperCase()}</strong></div>
+
+    ${
+      courierName || trackingNumber
+        ? `<table style="width:100%;font-size:13px;margin-bottom:24px;border:1px solid ${EMAIL_BRAND.line};border-radius:6px;border-collapse:collapse;">
+      ${
+        courierName
+          ? `<tr><td style="padding:12px 16px;color:${EMAIL_BRAND.muted};border-bottom:1px solid ${EMAIL_BRAND.line};">Courier</td><td style="padding:12px 16px;text-align:right;font-weight:bold;border-bottom:1px solid ${EMAIL_BRAND.line};">${courierName}</td></tr>`
+          : ""
+      }
+      ${
+        trackingNumber
+          ? `<tr><td style="padding:12px 16px;color:${EMAIL_BRAND.muted};">Tracking Number</td><td style="padding:12px 16px;text-align:right;font-weight:bold;">${trackingNumber}</td></tr>`
+          : ""
+      }
+    </table>`
+        : ""
+    }
+
+    ${
+      trackingUrl
+        ? `<p style="text-align:center;margin:0 0 26px;"><a href="${trackingUrl}" style="display:inline-block;padding:13px 30px;background:${EMAIL_BRAND.ink};color:#fff;text-decoration:none;font-size:10px;letter-spacing:1.5px;border-radius:4px;">TRACK WITH COURIER</a></p>`
+        : ""
+    }
+
+    <p style="font-size:12px;color:${EMAIL_BRAND.muted};line-height:1.6;">You can also check your order status anytime on the SHRIMOH website using "Track Order" with this reference number and your mobile number or email.</p>
+  `;
+
+  await sendTransactionalEmail({
+    to,
+    customerName,
+    subject: `Your SHRIMOH Order Has Shipped - ${orderReference}`,
+    html: emailShell({ eyebrow: "ON ITS WAY", heading: "Your order has shipped", bodyHtml })
   });
 }
 
@@ -2388,6 +2519,51 @@ async function updateOrder(req, res) {
         .from("order_status_history")
         .insert({ order_id: existing.id, status: String(status) });
       if (historyError) console.error("STATUS HISTORY ERROR:", historyError);
+    }
+
+    /*
+     * SHIPPING UPDATE EMAIL (best-effort, never fails the request)
+     * Only fires when THIS request actually included courier/tracking
+     * fields and the order now has something worth telling the
+     * customer - a plain status change (e.g. Received -> Confirmed)
+     * with no courier/tracking fields in the body does not re-send it.
+     */
+    const shippingInfoSubmitted =
+      body.courierName !== undefined || body.trackingNumber !== undefined || body.trackingUrl !== undefined;
+    const updatedCourierName = String(updated.courier_name || "").trim();
+    const updatedTrackingNumber = String(updated.tracking_number || "").trim();
+    const updatedTrackingUrl = String(updated.tracking_url || "").trim();
+
+    if (shippingInfoSubmitted && (updatedCourierName || updatedTrackingNumber)) {
+      let shippingCustomer = existing.customer;
+      if (typeof shippingCustomer === "string") {
+        try {
+          shippingCustomer = JSON.parse(shippingCustomer);
+        } catch {
+          shippingCustomer = null;
+        }
+      }
+      if (existing.customer_id) {
+        const { data: customerData, error: customerError } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", existing.customer_id)
+          .maybeSingle();
+        if (customerError) console.error("SHIPPING EMAIL CUSTOMER LOOKUP ERROR:", customerError);
+        if (customerData) shippingCustomer = { ...customerData, ...(shippingCustomer || {}) };
+      }
+
+      sendShippingUpdateEmail({
+        to: (shippingCustomer && shippingCustomer.email) || "",
+        customerName: (shippingCustomer && shippingCustomer.name) || "",
+        orderReference: updated.order_number || String(updated.id),
+        status: updated.status || existing.status || "Shipped",
+        courierName: updatedCourierName,
+        trackingNumber: updatedTrackingNumber,
+        trackingUrl: updatedTrackingUrl
+      }).catch((error) => {
+        console.error("SHIPPING EMAIL ERROR:", error);
+      });
     }
 
     return res.json({ success: true, message: "Order updated successfully.", order: formatOrder(updated) });
