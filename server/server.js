@@ -9,13 +9,6 @@ const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
 const { createClient } = require("@supabase/supabase-js");
 
-let sharp = null;
-try {
-  sharp = require("sharp");
-} catch (err) {
-  console.warn("sharp not available - premium photo clean-up will be disabled:", err.message);
-}
-
 dotenv.config();
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
@@ -290,6 +283,36 @@ function normalizeColors(colors) {
   return [];
 }
 
+/*
+ * COLOR -> PHOTO MAP
+ * { "Black": "https://.../black.jpg", "Tan": "https://.../tan.jpg" }
+ * Only keeps entries whose value is a real, non-empty string url -
+ * anything else (null, numbers, nested objects) is dropped rather
+ * than stored, since this is written straight into the product's
+ * public API response.
+ */
+function normalizeColorImages(raw) {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+  const result = {};
+  for (const key of Object.keys(parsed)) {
+    const color = String(key).trim();
+    const url = parsed[key];
+    if (color && typeof url === "string" && url.trim()) {
+      result[color] = url.trim();
+    }
+  }
+  return result;
+}
+
 function normalizeImages(images) {
   if (Array.isArray(images)) return uniqueImages(images);
   if (typeof images === "string" && images.trim()) {
@@ -348,6 +371,7 @@ function formatProduct(product) {
     stock: Math.max(0, Math.floor(safeNumber(product.stock))),
     description: product.description || "",
     colors: normalizeColors(product.colors),
+    colorImages: normalizeColorImages(product.color_images),
     images,
     image: mainImage,
     createdAt: product.created_at || product.createdAt || null,
@@ -536,7 +560,11 @@ async function calculateCart(items, couponCode) {
   if (!Array.isArray(items) || items.length === 0) throw new Error("Cart is empty.");
 
   const normalizedItems = items.map(function (item) {
-    return { id: Number(item.id), quantity: Math.floor(Number(item.quantity)) };
+    return {
+      id: Number(item.id),
+      quantity: Math.floor(Number(item.quantity)),
+      color: item.color !== undefined && item.color !== null ? String(item.color).trim() : ""
+    };
   });
 
   for (const item of normalizedItems) {
@@ -573,12 +601,32 @@ async function calculateCart(items, couponCode) {
 
     const images = normalizeImages(product.images);
 
+    /*
+     * COLOR VALIDATION
+     * If the product has a colors list, the requested color must
+     * be one of them - this stops a tampered request from writing
+     * an arbitrary string into the order. If the product has no
+     * colors configured, we ignore whatever was sent.
+     */
+    const availableColors = normalizeColors(product.colors);
+    let selectedColor = "";
+    if (availableColors.length > 0) {
+      const requestedColor = requestedItem.color || "";
+      const match = availableColors.find(
+        (c) => c.toLowerCase() === requestedColor.toLowerCase()
+      );
+      if (!match) {
+        throw new Error(`Please select a valid color for ${product.name}.`);
+      }
+      selectedColor = match;
+    }
+
     cartItems.push({
       productId: product.id,
       name: product.name,
       price,
       quantity: requestedItem.quantity,
-      selectedColor: "",
+      selectedColor,
       image: images[0] || "",
       lineTotal
     });
@@ -929,17 +977,36 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       return res.status(400).json({ success: false, message: "Valid product price is required." });
     }
 
-    const files = Array.isArray(req.files) ? req.files : [];
-    if (files.length === 0) {
+    const allFiles = Array.isArray(req.files) ? req.files : [];
+    /*
+     * COLOR PHOTOS
+     * A file for a specific color's swatch photo is sent with
+     * fieldname "colorImage__<Color Name>" (e.g. "colorImage__Black"),
+     * separate from the regular gallery files (fieldname "images").
+     */
+    const galleryFiles = allFiles.filter((file) => file.fieldname === "images");
+    const colorFiles = allFiles.filter((file) => file.fieldname.startsWith("colorImage__"));
+
+    if (galleryFiles.length === 0) {
       return res.status(400).json({ success: false, message: "Please upload at least one product image." });
     }
 
-    for (const file of files) {
+    for (const file of galleryFiles) {
       const url = await uploadImage(file);
       uploadedUrls.push(url);
     }
 
+    const colorImages = normalizeColorImages(body.colorImages);
+    for (const file of colorFiles) {
+      const color = decodeURIComponent(file.fieldname.slice("colorImage__".length)).trim();
+      if (!color) continue;
+      const url = await uploadImage(file);
+      uploadedUrls.push(url); // tracked for cleanup-on-error, NOT part of the main gallery
+      colorImages[color] = url;
+    }
+
     const productId = Date.now();
+    const galleryImageUrls = uploadedUrls.slice(0, galleryFiles.length);
 
     const { data, error } = await supabase
       .from("products")
@@ -952,7 +1019,8 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
         stock,
         description,
         colors,
-        images: uniqueImages(uploadedUrls),
+        images: uniqueImages(galleryImageUrls),
+        color_images: colorImages,
         active: true,
         supplier_name: supplierName,
         supplier_product_id: supplierProductId,
@@ -973,410 +1041,6 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
   }
 });
 
-/*
- * MEESHO / SUPPLIER IMPORTER
- * Takes a manually-copied supplier listing (Meesho or any other
- * source) and creates a product row that starts life as a
- * "draft" - it is NEVER visible on the public storefront
- * (active stays false) until you deliberately move its status
- * to "published" via PATCH /api/admin/products/:id/status.
- * This lets you review photos/pricing/wording calmly before
- * anything goes live.
- */
-app.post("/api/admin/products/import", requireAdmin, upload.any(), async function (req, res) {
-  const uploadedUrls = [];
-  try {
-    const body = req.body || {};
-    const name = String(body.name || "").trim();
-    const category = String(body.category || "Bags").trim();
-    const costPrice = safeNumber(body.costPrice);
-    const marginType = body.marginType === "percent" ? "percent" : "fixed";
-    const marginValue = safeNumber(body.margin);
-    const sourceUrl = body.sourceUrl !== undefined ? String(body.sourceUrl).trim() : "";
-    const stock = Math.max(0, Math.floor(safeNumber(body.stock)));
-    const description = String(body.description || "");
-    const colors = normalizeColors(body.colors);
-
-    if (!name) return res.status(400).json({ success: false, message: "Product name is required." });
-    if (!Number.isFinite(costPrice) || costPrice <= 0) {
-      return res.status(400).json({ success: false, message: "Valid cost price is required." });
-    }
-
-    const price =
-      marginType === "percent"
-        ? Math.round(costPrice * (1 + marginValue / 100))
-        : Math.round(costPrice + marginValue);
-
-    if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({ success: false, message: "Selling price came out invalid - check cost price and margin." });
-    }
-
-    const files = Array.isArray(req.files) ? req.files : [];
-    let extraImageUrls = [];
-    if (body.imageUrls) {
-      try {
-        const parsedUrls = JSON.parse(body.imageUrls);
-        if (Array.isArray(parsedUrls)) {
-          extraImageUrls = parsedUrls.filter((url) => typeof url === "string" && url.trim());
-        }
-      } catch (parseError) {
-        extraImageUrls = [];
-      }
-    }
-    if (files.length === 0 && extraImageUrls.length === 0) {
-      return res.status(400).json({ success: false, message: "Please add at least one product image (upload a file, or fetch/paste one from the link)." });
-    }
-
-    for (const file of files) {
-      const url = await uploadImage(file);
-      uploadedUrls.push(url);
-    }
-
-    const allImportImages = uniqueImages([...uploadedUrls, ...extraImageUrls]);
-    const productId = Date.now();
-    const requestedStatus = body.status === "published" || body.status === "review" ? body.status : "draft";
-
-    const { data, error } = await supabase
-      .from("products")
-      .insert({
-        id: productId,
-        name,
-        category,
-        price,
-        old_price: null,
-        stock,
-        description,
-        colors,
-        images: allImportImages,
-        active: requestedStatus === "published",
-        status: requestedStatus,
-        margin: marginValue,
-        supplier_cost: costPrice,
-        supplier_link: sourceUrl || null
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    return res.status(201).json({
-      success: true,
-      message:
-        requestedStatus === "published"
-          ? "Product imported and published."
-          : "Product imported as draft. Review it, then publish whenever ready.",
-      product: formatProductAdmin(data)
-    });
-  } catch (error) {
-    console.error("IMPORT PRODUCT ERROR:", error);
-    if (uploadedUrls.length) await deleteStorageImages(uploadedUrls);
-    return res.status(500).json({ success: false, message: error.message || "Unable to import product." });
-  }
-});
-
-/*
- * BEST-EFFORT LINK PREVIEW HELPERS
- * These read the same public <meta> tags a site publishes so
- * WhatsApp/Facebook/Google can show a link preview - nothing here
- * fakes being a browser beyond a normal identifying User-Agent, no
- * captcha-solving, no IP rotation. If a site (Meesho included)
- * blocks the request, fetchProductPreview() below simply reports
- * that and the admin pastes details manually - this is NOT a
- * scraper built to defeat anti-bot protection, and it never tries
- * a second/different approach if the first plain request fails.
- */
-function decodeHtmlEntities(str) {
-  return String(str)
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, "\"")
-    .replace(/&#0?39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
-}
-
-function extractMeta(html, key) {
-  const patterns = [
-    new RegExp(`<meta[^>]+property=["']og:${key}["'][^>]*content=["']([^"']*)["']`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*property=["']og:${key}["']`, "i"),
-    new RegExp(`<meta[^>]+name=["']${key}["'][^>]*content=["']([^"']*)["']`, "i"),
-    new RegExp(`<meta[^>]+content=["']([^"']*)["'][^>]*name=["']${key}["']`, "i")
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match && match[1]) return decodeHtmlEntities(match[1].trim());
-  }
-  return "";
-}
-
-async function fetchProductPreview(url) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml"
-      },
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      return { ok: false, reason: `Site returned status ${response.status}.` };
-    }
-    const html = await response.text();
-    const title = extractMeta(html, "title") || (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || "";
-    const description = extractMeta(html, "description");
-    const image = extractMeta(html, "image");
-    if (!title && !description && !image) {
-      return { ok: false, reason: "No readable product info found on this page." };
-    }
-    return { ok: true, title: decodeHtmlEntities(title), description: decodeHtmlEntities(description), image };
-  } catch (error) {
-    return { ok: false, reason: error.name === "AbortError" ? "The site took too long to respond." : "Could not reach this link." };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/*
- * BEST-EFFORT AUTO-FILL FROM LINK
- * Admin pastes a Meesho (or any) product URL and this tries to
- * read its public preview info. Works for many sites; fails
- * gracefully (and says so) when the source blocks automated
- * requests - always safe to call, never breaks the manual flow.
- */
-app.post("/api/admin/products/fetch-url", requireAdmin, async function (req, res) {
-  const url = String((req.body || {}).url || "").trim();
-  if (!/^https?:\/\//i.test(url)) {
-    return res.status(400).json({ success: false, message: "Please paste a valid product URL." });
-  }
-  const preview = await fetchProductPreview(url);
-  if (!preview.ok) {
-    return res.json({
-      success: false,
-      message: `Couldn't auto-fill from this link (${preview.reason}). This is usually the supplier site's own protection - please paste the title/description manually.`
-    });
-  }
-  return res.json({ success: true, title: preview.title, description: preview.description, image: preview.image });
-});
-
-/*
- * Downloads one image from a direct image URL (e.g. one you
- * copied with "Copy Image Address" on a Meesho photo) and stores
- * it in Supabase Storage exactly like an uploaded file. Fails
- * gracefully if the source blocks the request.
- */
-app.post("/api/admin/products/fetch-image", requireAdmin, async function (req, res) {
-  try {
-    const imageUrl = String((req.body || {}).imageUrl || "").trim();
-    if (!/^https?:\/\//i.test(imageUrl)) {
-      return res.status(400).json({ success: false, message: "Please provide a valid image URL." });
-    }
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
-    let response;
-    try {
-      response = await fetch(imageUrl, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" },
-        signal: controller.signal
-      });
-    } finally {
-      clearTimeout(timer);
-    }
-    if (!response.ok) {
-      return res.json({ success: false, message: `Couldn't download this image (status ${response.status}).` });
-    }
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.startsWith("image/")) {
-      return res.json({ success: false, message: "That link didn't point to a direct image file." });
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const extension = (contentType.split("/")[1] || "jpg").split(";")[0];
-    const uploadedUrl = await uploadImage({ originalname: `image.${extension}`, buffer, mimetype: contentType });
-    return res.json({ success: true, url: uploadedUrl });
-  } catch (error) {
-    console.error("FETCH IMAGE ERROR:", error.message);
-    return res.json({ success: false, message: "Couldn't download this image - please upload it as a file instead." });
-  }
-});
-
-/*
- * PREMIUM PHOTO CLEAN-UP (free, unlimited - no AI API, no billing)
- * Takes a real product photo and standardizes it onto a clean
- * cream studio backdrop with a soft floor shadow, the way premium
- * fashion/e-commerce catalogs present products - centered, evenly
- * padded, consistent size. This does NOT invent a new image or
- * remove/replace the product itself; it only reframes the real
- * photo you gave it. Runs entirely on this server using "sharp" -
- * no external API, no per-image cost, no rate limit.
- */
-async function buildPremiumPhoto(inputBuffer) {
-  const CANVAS = 1600;
-  const PADDING = 180;
-  const productSize = CANVAS - PADDING * 2;
-
-  const productBuffer = await sharp(inputBuffer)
-    .rotate() // auto-orient using EXIF
-    .resize(productSize, productSize, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
-    .png()
-    .toBuffer();
-
-  const shadowSvg = `
-    <svg width="${CANVAS}" height="${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="26" />
-        </filter>
-      </defs>
-      <ellipse cx="${CANVAS / 2}" cy="${CANVAS - PADDING + 40}" rx="${productSize * 0.38}" ry="34"
-        fill="#1a1208" opacity="0.22" filter="url(#blur)" />
-    </svg>`;
-  const shadowBuffer = await sharp(Buffer.from(shadowSvg)).png().toBuffer();
-
-  const outputBuffer = await sharp({
-    create: {
-      width: CANVAS,
-      height: CANVAS,
-      channels: 3,
-      background: { r: 246, g: 241, b: 233 } // warm cream studio backdrop
-    }
-  })
-    .composite([
-      { input: shadowBuffer, top: 0, left: 0 },
-      { input: productBuffer, top: PADDING, left: PADDING }
-    ])
-    .jpeg({ quality: 92 })
-    .toBuffer();
-
-  return outputBuffer;
-}
-
-app.post(
-  "/api/admin/products/clean-photo",
-  requireAdmin,
-  upload.single("sourceImage"),
-  async function (req, res) {
-    try {
-      if (!sharp) {
-        return res.json({
-          success: false,
-          message: "Photo clean-up isn't available on the server right now - upload the photo as-is."
-        });
-      }
-      if (!req.file) {
-        return res.status(400).json({ success: false, message: "Please choose a photo first." });
-      }
-      const cleanedBuffer = await buildPremiumPhoto(req.file.buffer);
-      const url = await uploadImage({
-        originalname: `premium-${Date.now()}.jpg`,
-        buffer: cleanedBuffer,
-        mimetype: "image/jpeg"
-      });
-      return res.json({ success: true, url });
-    } catch (error) {
-      console.error("CLEAN PHOTO ERROR:", error.message);
-      return res.json({
-        success: false,
-        message: "Couldn't clean up this photo - please upload the original instead."
-      });
-    }
-  }
-);
-
-/*
- * AI PREMIUM CONTENT WRITER (Google Gemini - free tier, no card)
- * Rewrites a raw (auto-fetched or manually pasted) title/
- * description into a SHRIMOH-branded premium version specific to
- * THAT product - not a generic template. Requires GEMINI_API_KEY
- * to be set in the environment; returns a clear error (not a
- * crash) if it isn't. Get a free key at aistudio.google.com.
- */
-app.post("/api/admin/products/generate-premium", requireAdmin, async function (req, res) {
-  try {
-    if (!GEMINI_API_KEY) {
-      return res.status(400).json({
-        success: false,
-        message: "AI content generation isn't set up yet - add GEMINI_API_KEY in Render's environment variables and redeploy."
-      });
-    }
-    const body = req.body || {};
-    const rawTitle = String(body.title || "").trim();
-    const rawDescription = String(body.description || "").trim();
-    const category = String(body.category || "Bags").trim();
-
-    if (!rawTitle && !rawDescription) {
-      return res.status(400).json({ success: false, message: "Paste at least a title or description first." });
-    }
-
-    const prompt = [
-      "Tum SHRIMOH ke liye product content likhte ho - ek premium luxury leather bags/accessories brand",
-      "(near-black + antique-gold aesthetic, editorial branding). Neeche ek supplier listing ka raw",
-      "title/description diya gaya hai. Isi product ke actual details (material, size, colour, use-case)",
-      "ko preserve karte hue ek premium SHRIMOH-style version banao.",
-      "",
-      `Raw title: ${rawTitle || "(not provided)"}`,
-      `Raw description: ${rawDescription || "(not provided)"}`,
-      `Category: ${category}`,
-      "",
-      "Return JSON with exactly two keys, \"title\" and \"description\".",
-      "\"title\" = short elegant premium title, max 7 words.",
-      "\"description\" = plain text in this structure:",
-      "Highlights:\\n- point 1\\n- point 2\\n- point 3\\n\\nMaterial: ...\\n\\nSize: ...\\n\\nWhat's Included: ...",
-      "\\n\\nShipping & Returns: Pan-India Shipping (dot) Easy 7-Day Returns (dot) Authentic & Handcrafted",
-      "",
-      "Tone hamesha confident, aspirational, premium honi chahiye - kabhi \"cheap\"/\"sasta\"/\"best price\" jaisi",
-      "language mat use karo. Agar raw description mein size/material clearly nahi diya, to reasonable",
-      "category-appropriate placeholder do, aisa mat likho jo bilkul diya hi nahi gaya."
-    ].join("\n");
-
-    const aiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                title: { type: "STRING" },
-                description: { type: "STRING" }
-              },
-              required: ["title", "description"]
-            }
-          }
-        })
-      }
-    );
-
-    if (!aiResponse.ok) {
-      const errText = await aiResponse.text();
-      console.error("GEMINI API ERROR:", aiResponse.status, errText);
-      return res.status(502).json({ success: false, message: "AI content generation failed. Please try again in a moment." });
-    }
-
-    const aiData = await aiResponse.json();
-    const rawOutput = aiData?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-
-    let parsed;
-    try {
-      parsed = JSON.parse(rawOutput);
-    } catch (parseError) {
-      console.error("AI JSON PARSE ERROR:", parseError.message, rawOutput);
-      return res.status(502).json({ success: false, message: "AI returned an unexpected format. Please try again." });
-    }
-
-    return res.json({
-      success: true,
-      title: String(parsed.title || "").trim(),
-      description: String(parsed.description || "").trim()
-    });
-  } catch (error) {
-    console.error("GENERATE PREMIUM ERROR:", error.message);
-    return res.status(500).json({ success: false, message: "Unable to generate premium content right now." });
-  }
-});
 
 /*
  * AI PRODUCT PHOTOGRAPHY (Google Gemini image generation)
@@ -1596,16 +1260,42 @@ async function updateProduct(req, res) {
     if (body.supplierCost !== undefined) updateData.supplier_cost = safeNumber(body.supplierCost);
     if (body.shippingTime !== undefined) updateData.shipping_time = String(body.shippingTime).trim();
 
-    const files = Array.isArray(req.files) ? req.files : [];
+    const allFiles = Array.isArray(req.files) ? req.files : [];
+    const galleryFiles = allFiles.filter((file) => file.fieldname === "images");
+    const colorFiles = allFiles.filter((file) => file.fieldname.startsWith("colorImage__"));
     let oldImages = [];
 
-    if (files.length > 0) {
+    if (galleryFiles.length > 0) {
       oldImages = normalizeImages(existing.images);
-      for (const file of files) {
+      const galleryUrls = [];
+      for (const file of galleryFiles) {
         const url = await uploadImage(file);
         newUploadedUrls.push(url);
+        galleryUrls.push(url);
       }
-      updateData.images = uniqueImages(newUploadedUrls);
+      updateData.images = uniqueImages(galleryUrls);
+    }
+
+    /*
+     * COLOR PHOTOS
+     * Starts from whatever color photos the product already has,
+     * then layers on any URL overrides sent in body.colorImages
+     * and finally any freshly-uploaded colorImage__<Color> files -
+     * so editing one color's photo never wipes out the others.
+     */
+    if (body.colorImages !== undefined || colorFiles.length > 0) {
+      const colorImages = {
+        ...normalizeColorImages(existing.color_images),
+        ...normalizeColorImages(body.colorImages)
+      };
+      for (const file of colorFiles) {
+        const color = decodeURIComponent(file.fieldname.slice("colorImage__".length)).trim();
+        if (!color) continue;
+        const url = await uploadImage(file);
+        newUploadedUrls.push(url);
+        colorImages[color] = url;
+      }
+      updateData.color_images = colorImages;
     }
 
     updateData.updated_at = new Date().toISOString();
@@ -1618,7 +1308,7 @@ async function updateProduct(req, res) {
       .single();
     if (error) throw error;
 
-    if (files.length > 0 && oldImages.length) {
+    if (galleryFiles.length > 0 && oldImages.length) {
       await deleteStorageImages(oldImages);
     }
 
@@ -2288,6 +1978,120 @@ app.post("/api/orders", async function (req, res) {
   } catch (error) {
     console.error("CREATE ORDER ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to create order." });
+  }
+});
+
+/*
+ * PUBLIC ORDER TRACKING
+ * Lets a customer check their own order's status without logging in.
+ * Requires the order reference PLUS the mobile number or email they
+ * placed the order with, so knowing/guessing just the reference
+ * (which is shown on-screen and emailed after checkout) is not
+ * enough to look up someone else's order. Never returns the full
+ * saved address - only what's needed to show a status timeline.
+ */
+app.get("/api/track-order", async function (req, res) {
+  try {
+    const reference = String(req.query.reference || req.query.orderReference || "").trim();
+    const mobileInput = String(req.query.mobile || "").replace(/\D/g, "");
+    const emailInput = String(req.query.email || "").trim().toLowerCase();
+
+    if (!reference) {
+      return res.status(400).json({ success: false, message: "Order reference is required." });
+    }
+    if (!mobileInput && !emailInput) {
+      return res.status(400).json({ success: false, message: "Enter the mobile number or email used for this order." });
+    }
+
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("order_number", reference)
+      .maybeSingle();
+    if (error) throw error;
+    if (!order) {
+      return res.status(404).json({ success: false, message: "No order found for that reference. Please check and try again." });
+    }
+
+    let customer = order.customer;
+    if (typeof customer === "string") {
+      try {
+        customer = JSON.parse(customer);
+      } catch {
+        customer = null;
+      }
+    }
+    if (order.customer_id) {
+      const { data: customerData, error: customerError } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", order.customer_id)
+        .maybeSingle();
+      if (customerError) throw customerError;
+      if (customerData) customer = { ...customerData, ...(customer || {}) };
+    }
+
+    const orderMobile = String((customer && customer.mobile) || "").replace(/\D/g, "");
+    const orderEmail = String((customer && customer.email) || "").trim().toLowerCase();
+
+    const mobileMatches = Boolean(mobileInput) && Boolean(orderMobile) && mobileInput === orderMobile;
+    const emailMatches = Boolean(emailInput) && Boolean(orderEmail) && emailInput === orderEmail;
+
+    if (!mobileMatches && !emailMatches) {
+      return res.status(404).json({ success: false, message: "No order found for that reference. Please check and try again." });
+    }
+
+    const { data: items, error: itemsError } = await supabase
+      .from("order_items")
+      .select("*")
+      .eq("order_id", order.id);
+    if (itemsError) throw itemsError;
+
+    const formattedItems = (Array.isArray(items) ? items : []).map(function (item) {
+      const price = safeNumber(item.price);
+      const quantity = Math.max(1, Math.floor(safeNumber(item.quantity, 1)));
+      return {
+        id: item.product_id,
+        name: item.product_name || "Product",
+        price,
+        quantity,
+        selectedColor: item.color || "",
+        image: item.product_image || "",
+        lineTotal: safeNumber(item.line_total, price * quantity)
+      };
+    });
+
+    const { data: history, error: historyError } = await supabase
+      .from("order_status_history")
+      .select("*")
+      .eq("order_id", order.id)
+      .order("created_at", { ascending: true });
+    if (historyError) console.error("STATUS HISTORY READ ERROR:", historyError);
+
+    const calculatedTotal = formattedItems.reduce((sum, item) => sum + safeNumber(item.lineTotal), 0);
+    const storedTotal = safeNumber(order.total_amount);
+    const finalTotal = storedTotal > 0 ? storedTotal : calculatedTotal;
+    const storedSubtotal = safeNumber(order.subtotal);
+    const finalSubtotal = storedSubtotal > 0 ? storedSubtotal : calculatedTotal;
+
+    return res.json({
+      success: true,
+      order: formatOrder({
+        ...order,
+        customer: null,
+        items: formattedItems,
+        total: finalTotal,
+        subtotal: finalSubtotal
+      }),
+      customerName: (customer && customer.name) || "",
+      statusHistory: (Array.isArray(history) ? history : []).map((row) => ({
+        status: row.status,
+        at: row.created_at
+      }))
+    });
+  } catch (error) {
+    console.error("TRACK ORDER ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to look up this order right now. Please try again shortly." });
   }
 });
 
