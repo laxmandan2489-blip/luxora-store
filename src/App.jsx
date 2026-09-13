@@ -406,6 +406,16 @@ function App() {
     ? decodeURIComponent(location.pathname.replace("/category/", "").split("/")[0])
     : null;
 
+  /*
+   * TRACK ORDER PAGE
+   * A real, full page at its own URL (/track-order) instead of a
+   * small popup/modal - this is what makes it feel like a page on
+   * a proper e-commerce site rather than a cramped overlay, and it
+   * also completely sidesteps any stacking/overlap with other
+   * on-page popups (e.g. the welcome offer).
+   */
+  const isTrackOrderPage = location.pathname === "/track-order" || location.pathname.startsWith("/track-order/");
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("featured");
@@ -676,19 +686,11 @@ function App() {
      at checkout (enforced server-side in /api/track-order).
   ========================================================= */
 
-  const ORDER_TRACKING_STEPS = ["Received", "Confirmed", "Processing", "Shipped", "Delivered"];
-
-  const [trackOpen, setTrackOpen] = useState(false);
   const [trackReference, setTrackReference] = useState("");
   const [trackContact, setTrackContact] = useState("");
   const [trackLoading, setTrackLoading] = useState(false);
   const [trackError, setTrackError] = useState("");
   const [trackResult, setTrackResult] = useState(null); // { order, customerName, statusHistory }
-
-  function closeTrackOrder() {
-    setTrackOpen(false);
-    document.body.style.overflow = "";
-  }
 
   function resetTrackSearch() {
     setTrackResult(null);
@@ -1714,10 +1716,7 @@ function App() {
 
             <button
               type="button"
-              onClick={() => {
-                setTrackOpen(true);
-                document.body.style.overflow = "hidden";
-              }}
+              onClick={() => navigate("/track-order")}
               className="lux-track-icon"
               aria-label="Track order"
               title="Track your order"
@@ -1800,6 +1799,24 @@ function App() {
           </div>
         )}
       </header>
+
+      {isTrackOrderPage && (
+        <TrackOrderPage
+          trackReference={trackReference}
+          setTrackReference={setTrackReference}
+          trackContact={trackContact}
+          setTrackContact={setTrackContact}
+          trackLoading={trackLoading}
+          trackError={trackError}
+          trackResult={trackResult}
+          lookupOrder={lookupOrder}
+          resetTrackSearch={resetTrackSearch}
+          navigate={navigate}
+        />
+      )}
+
+      {!isTrackOrderPage && (
+      <>
 
       {/*
         HOMEPAGE-ONLY SECTIONS
@@ -2284,6 +2301,9 @@ function App() {
         </div>
       </section>
 
+      </>
+      )}
+
       {/* FOOTER */}
       <footer className="lux-footer">
         <div className="lux-footer-top">
@@ -2368,8 +2388,8 @@ function App() {
         </a>
       )}
 
-      {/* NEW CUSTOMER WELCOME OFFER (small corner popup, first visit only) */}
-      {showWelcomeOffer && (
+      {/* NEW CUSTOMER WELCOME OFFER (small corner popup, first visit only) - hidden on the Track Order page, where it just gets in the way */}
+      {showWelcomeOffer && !isTrackOrderPage && (
         <div className="lux-welcome-offer" role="dialog" aria-label="New customer offer">
           <button
             type="button"
@@ -3008,8 +3028,7 @@ function App() {
                 type="button"
                 onClick={() => {
                   closeMobileMenu();
-                  setTrackOpen(true);
-                  document.body.style.overflow = "hidden";
+                  navigate("/track-order");
                 }}
               >
                 📦 TRACK ORDER
@@ -3038,159 +3057,6 @@ function App() {
               </button>
             </div>
           </aside>
-        </div>
-      )}
-
-      {/* ORDER TRACKING */}
-      {trackOpen && (
-        <div
-          className="lux-track-overlay"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) closeTrackOrder();
-          }}
-        >
-          <div className="lux-track-modal">
-            <div className="lux-track-header">
-              <div>
-                <span>WHERE'S MY ORDER</span>
-                <h2>Track Order</h2>
-              </div>
-              <button type="button" onClick={closeTrackOrder} aria-label="Close">
-                ×
-              </button>
-            </div>
-
-            {!trackResult ? (
-              <form className="lux-track-form" onSubmit={lookupOrder}>
-                <p className="lux-track-intro">
-                  Enter your order reference and the mobile number or email you used at checkout.
-                </p>
-
-                <label>
-                  Order Reference
-                  <input
-                    type="text"
-                    value={trackReference}
-                    onChange={(e) => setTrackReference(e.target.value)}
-                    placeholder="e.g. LUX-172..."
-                    autoFocus
-                  />
-                </label>
-
-                <label>
-                  Mobile Number or Email
-                  <input
-                    type="text"
-                    value={trackContact}
-                    onChange={(e) => setTrackContact(e.target.value)}
-                    placeholder="9876543210 or you@email.com"
-                  />
-                </label>
-
-                {trackError && <p className="lux-track-error">{trackError}</p>}
-
-                <button type="submit" disabled={trackLoading}>
-                  {trackLoading ? "SEARCHING..." : "TRACK ORDER"}
-                </button>
-              </form>
-            ) : (
-              <div className="lux-track-result">
-                <button type="button" className="lux-track-back" onClick={resetTrackSearch}>
-                  ← Track another order
-                </button>
-
-                <div className="lux-track-summary">
-                  <span>ORDER #{trackResult.order.orderReference}</span>
-                  {trackResult.customerName && <strong>Hi {trackResult.customerName},</strong>}
-                  {trackResult.order.createdAt && (
-                    <em>
-                      Placed on{" "}
-                      {new Date(trackResult.order.createdAt).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </em>
-                  )}
-                </div>
-
-                {trackResult.order.status === "Cancelled" ? (
-                  <div className="lux-track-cancelled">This order has been cancelled.</div>
-                ) : (
-                  <div className="lux-track-timeline">
-                    {ORDER_TRACKING_STEPS.map((step, index) => {
-                      const currentIndex = ORDER_TRACKING_STEPS.indexOf(trackResult.order.status);
-                      const isDone = index <= currentIndex;
-                      const isCurrent = index === currentIndex;
-                      const historyEntry = trackResult.statusHistory.find((h) => h.status === step);
-                      return (
-                        <div
-                          key={step}
-                          className={`lux-track-step${isDone ? " done" : ""}${isCurrent ? " current" : ""}`}
-                        >
-                          <span className="lux-track-dot" />
-                          <div className="lux-track-step-info">
-                            <strong>{step}</strong>
-                            {historyEntry?.at && (
-                              <em>
-                                {new Date(historyEntry.at).toLocaleDateString("en-IN", {
-                                  day: "numeric",
-                                  month: "short",
-                                })}
-                              </em>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {(trackResult.order.courierName || trackResult.order.trackingNumber) && (
-                  <div className="lux-track-courier">
-                    {trackResult.order.courierName && (
-                      <span>
-                        Courier: <strong>{trackResult.order.courierName}</strong>
-                      </span>
-                    )}
-                    {trackResult.order.trackingNumber && (
-                      <span>
-                        Tracking No: <strong>{trackResult.order.trackingNumber}</strong>
-                      </span>
-                    )}
-                    {trackResult.order.trackingUrl && (
-                      <a href={trackResult.order.trackingUrl} target="_blank" rel="noopener noreferrer">
-                        TRACK WITH COURIER →
-                      </a>
-                    )}
-                  </div>
-                )}
-
-                <div className="lux-track-items">
-                  {trackResult.order.items.map((item, index) => (
-                    <div className="lux-track-item" key={index}>
-                      <div className="lux-track-item-image">
-                        {item.image && <img src={item.image} alt={item.name} />}
-                      </div>
-                      <div className="lux-track-item-info">
-                        <strong>{item.name}</strong>
-                        {item.selectedColor && <em>Color: {item.selectedColor}</em>}
-                        <span>Qty {item.quantity}</span>
-                      </div>
-                      <div className="lux-track-item-price">
-                        ₹{Number(item.lineTotal || item.price * item.quantity).toLocaleString("en-IN")}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="lux-track-total">
-                  <span>Order Total</span>
-                  <strong>₹{Number(trackResult.order.total).toLocaleString("en-IN")}</strong>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -3249,7 +3115,11 @@ function App() {
                         resetTrackSearch();
                         setTrackReference(orderReference);
                         setTrackContact(customer.mobile || customer.email || "");
-                        setTrackOpen(true);
+                        setOrderPlaced(false);
+                        setCheckoutOpen(false);
+                        setDirectBuyItem(null);
+                        document.body.style.overflow = "";
+                        navigate("/track-order");
                       }}
                     >
                       TRACK YOUR ORDER
@@ -3523,6 +3393,211 @@ function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/*
+ * TRACK ORDER PAGE
+ * A real, full page (rendered at /track-order) rather than a
+ * popup/modal - gives it room to be as detailed as a proper
+ * e-commerce order-tracking page, and can never visually clash
+ * with other on-page popups the way an overlay can.
+ */
+const ORDER_TRACKING_STEPS = ["Received", "Confirmed", "Processing", "Shipped", "Delivered"];
+
+function TrackOrderPage({
+  trackReference,
+  setTrackReference,
+  trackContact,
+  setTrackContact,
+  trackLoading,
+  trackError,
+  trackResult,
+  lookupOrder,
+  resetTrackSearch,
+  navigate,
+}) {
+  return (
+    <div className="lux-track-page">
+      <section className="lux-track-page-hero">
+        <span className="lux-track-page-kicker">WHERE'S MY ORDER</span>
+        <h1>Track Your Order</h1>
+        <p>
+          Enter your order reference and the mobile number or email you used at checkout to see
+          live status, courier details and tracking.
+        </p>
+      </section>
+
+      <div className="lux-track-page-body">
+        <div className="lux-track-page-form-card">
+          <h2>Find Your Order</h2>
+
+          <form onSubmit={lookupOrder}>
+            <label>
+              Order Reference
+              <input
+                type="text"
+                value={trackReference}
+                onChange={(e) => setTrackReference(e.target.value)}
+                placeholder="e.g. LUX-172..."
+              />
+            </label>
+
+            <label>
+              Mobile Number or Email
+              <input
+                type="text"
+                value={trackContact}
+                onChange={(e) => setTrackContact(e.target.value)}
+                placeholder="9876543210 or you@email.com"
+              />
+            </label>
+
+            {trackError && <p className="lux-track-page-error">{trackError}</p>}
+
+            <button type="submit" disabled={trackLoading}>
+              {trackLoading ? "SEARCHING..." : "TRACK ORDER"}
+            </button>
+          </form>
+
+          <div className="lux-track-page-help">
+            <span>NEED HELP?</span>
+            <p>
+              Your order reference was emailed to you when you placed the order, and was also
+              shown on the order confirmation screen.
+            </p>
+          </div>
+        </div>
+
+        <div className="lux-track-page-results">
+          {!trackResult ? (
+            <div className="lux-track-page-empty">
+              <div className="lux-track-page-steps">
+                <div>
+                  <span>01</span>
+                  <strong>Enter Your Details</strong>
+                  <p>Your order reference, plus the mobile number or email used at checkout.</p>
+                </div>
+                <div>
+                  <span>02</span>
+                  <strong>See Live Status</strong>
+                  <p>Received, Confirmed, Processing, Shipped or Delivered - kept up to date by our team.</p>
+                </div>
+                <div>
+                  <span>03</span>
+                  <strong>Track With Courier</strong>
+                  <p>Once it ships, get the courier name, tracking number and a direct tracking link.</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="lux-track-page-result">
+              <button type="button" className="lux-track-page-back" onClick={resetTrackSearch}>
+                ← Track another order
+              </button>
+
+              <div className="lux-track-page-summary">
+                <div>
+                  <span>ORDER #{trackResult.order.orderReference}</span>
+                  {trackResult.customerName && <h2>Hi {trackResult.customerName},</h2>}
+                </div>
+                {trackResult.order.createdAt && (
+                  <em>
+                    Placed on{" "}
+                    {new Date(trackResult.order.createdAt).toLocaleDateString("en-IN", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </em>
+                )}
+              </div>
+
+              {trackResult.order.status === "Cancelled" ? (
+                <div className="lux-track-page-cancelled">This order has been cancelled.</div>
+              ) : (
+                <div className="lux-track-page-timeline">
+                  {ORDER_TRACKING_STEPS.map((step, index) => {
+                    const currentIndex = ORDER_TRACKING_STEPS.indexOf(trackResult.order.status);
+                    const isDone = index <= currentIndex;
+                    const isCurrent = index === currentIndex;
+                    const historyEntry = trackResult.statusHistory.find((h) => h.status === step);
+                    return (
+                      <div
+                        key={step}
+                        className={`lux-track-page-step${isDone ? " done" : ""}${isCurrent ? " current" : ""}`}
+                      >
+                        <span className="lux-track-page-dot" />
+                        <strong>{step}</strong>
+                        {historyEntry?.at && (
+                          <em>
+                            {new Date(historyEntry.at).toLocaleDateString("en-IN", {
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </em>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {(trackResult.order.courierName || trackResult.order.trackingNumber) && (
+                <div className="lux-track-page-courier">
+                  <div>
+                    {trackResult.order.courierName && (
+                      <span>
+                        Courier <strong>{trackResult.order.courierName}</strong>
+                      </span>
+                    )}
+                    {trackResult.order.trackingNumber && (
+                      <span>
+                        Tracking No. <strong>{trackResult.order.trackingNumber}</strong>
+                      </span>
+                    )}
+                  </div>
+                  {trackResult.order.trackingUrl && (
+                    <a href={trackResult.order.trackingUrl} target="_blank" rel="noopener noreferrer">
+                      TRACK WITH COURIER →
+                    </a>
+                  )}
+                </div>
+              )}
+
+              <h3>Order Summary</h3>
+
+              <div className="lux-track-page-items">
+                {trackResult.order.items.map((item, index) => (
+                  <div className="lux-track-page-item" key={index}>
+                    <div className="lux-track-page-item-image">
+                      {item.image && <img src={item.image} alt={item.name} />}
+                    </div>
+                    <div className="lux-track-page-item-info">
+                      <strong>{item.name}</strong>
+                      {item.selectedColor && <em>Color: {item.selectedColor}</em>}
+                      <span>Qty {item.quantity}</span>
+                    </div>
+                    <div className="lux-track-page-item-price">
+                      ₹{Number(item.lineTotal || item.price * item.quantity).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="lux-track-page-total">
+                <span>Order Total</span>
+                <strong>₹{Number(trackResult.order.total).toLocaleString("en-IN")}</strong>
+              </div>
+
+              <button type="button" className="lux-track-page-continue" onClick={() => navigate("/")}>
+                CONTINUE SHOPPING
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

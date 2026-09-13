@@ -3616,86 +3616,78 @@ a {
 }
 
 /* =========================================================
-   ORDER TRACKING MODAL
+   TRACK ORDER PAGE (full page at /track-order)
 ========================================================= */
 
-.lux-track-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 30000;
-  background: rgba(17, 13, 8, 0.55);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.lux-track-modal {
-  width: min(520px, 100%);
-  max-height: 88vh;
-  overflow-y: auto;
-  background: var(--lux-bg);
-  border-radius: 8px;
-  animation: luxCartIn 0.25s ease;
-}
-
-.lux-track-header {
-  min-height: 90px;
-  padding: 22px 26px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--lux-line);
-  position: sticky;
-  top: 0;
+.lux-track-page {
+  min-height: calc(100vh - 85px);
   background: var(--lux-bg);
 }
 
-.lux-track-header span {
-  color: #a1907c;
-  font-size: 8px;
-  letter-spacing: 2px;
+.lux-track-page-hero {
+  width: min(700px, 90vw);
+  margin: 0 auto;
+  padding: 90px 0 40px;
+  text-align: center;
 }
 
-.lux-track-header h2 {
-  margin: 6px 0 0;
+.lux-track-page-kicker {
+  color: #a08e6a;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 2.5px;
+}
+
+.lux-track-page-hero h1 {
+  margin: 14px 0 0;
+  color: #1d1710;
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 25px;
+  font-size: clamp(38px, 5vw, 58px);
   font-weight: 400;
+  line-height: 1.05;
 }
 
-.lux-track-header button {
-  width: 40px;
-  height: 40px;
-  border: 1px solid #dccdaa;
-  border-radius: 50%;
-  background: transparent;
-  font-size: 20px;
-  flex-shrink: 0;
-  transition: all 0.2s ease;
+.lux-track-page-hero p {
+  margin: 18px 0 0;
+  color: #7d6c4f;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
-.lux-track-header button:hover {
-  background: #1c150d;
-  color: #fff;
+.lux-track-page-body {
+  width: min(1200px, 90vw);
+  margin: 0 auto;
+  padding-bottom: 110px;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 40px;
+  align-items: start;
 }
 
-.lux-track-form {
-  padding: 26px;
+.lux-track-page-form-card {
+  position: sticky;
+  top: 24px;
+  background: #ffffff;
+  border: 1px solid var(--lux-line);
+  border-radius: 10px;
+  padding: 32px;
+}
+
+.lux-track-page-form-card h2 {
+  margin: 0 0 22px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 22px;
+  font-weight: 400;
+  color: #1d1710;
+}
+
+.lux-track-page-form-card form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
 }
 
-.lux-track-intro {
-  margin: 0;
-  font-size: 12px;
-  color: #7d6c4f;
-  line-height: 1.6;
-}
-
-.lux-track-form label {
+.lux-track-page-form-card label {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -3704,8 +3696,8 @@ a {
   color: #8a7a5c;
 }
 
-.lux-track-form input {
-  min-height: 46px;
+.lux-track-page-form-card input {
+  min-height: 48px;
   padding: 0 14px;
   border: 1px solid #d8c8a4;
   background: transparent;
@@ -3714,40 +3706,98 @@ a {
   border-radius: 4px;
 }
 
-.lux-track-form input:focus {
+.lux-track-page-form-card input:focus {
   outline: none;
   border-color: var(--lux-text);
 }
 
-.lux-track-error {
+.lux-track-page-error {
   margin: 0;
   color: #a8442f;
   font-size: 12px;
+  line-height: 1.5;
 }
 
-.lux-track-form button {
-  min-height: 50px;
+.lux-track-page-form-card button {
+  min-height: 52px;
   border: 1px solid var(--lux-text);
   background: var(--lux-text);
   color: white;
   font-size: 9px;
   letter-spacing: 1.8px;
   border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
 }
 
-.lux-track-form button:disabled {
+.lux-track-page-form-card button:disabled {
   opacity: 0.6;
 }
 
-.lux-track-result {
-  padding: 26px;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+.lux-track-page-help {
+  margin-top: 26px;
+  padding-top: 22px;
+  border-top: 1px solid var(--lux-line);
 }
 
-.lux-track-back {
-  align-self: flex-start;
+.lux-track-page-help span {
+  color: #a1907c;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+
+.lux-track-page-help p {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #7d6c4f;
+}
+
+/* Empty state ("how it works") - shown before a search is made */
+.lux-track-page-empty {
+  background: #ffffff;
+  border: 1px solid var(--lux-line);
+  border-radius: 10px;
+  padding: 48px 40px;
+}
+
+.lux-track-page-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+}
+
+.lux-track-page-steps > div span {
+  display: block;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 30px;
+  color: #d8c8a4;
+  margin-bottom: 14px;
+}
+
+.lux-track-page-steps > div strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: #1d1710;
+}
+
+.lux-track-page-steps > div p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #7d6c4f;
+}
+
+/* Result state */
+.lux-track-page-result {
+  background: #ffffff;
+  border: 1px solid var(--lux-line);
+  border-radius: 10px;
+  padding: 40px;
+}
+
+.lux-track-page-back {
   border: 0;
   background: transparent;
   color: #8a7a5c;
@@ -3755,206 +3805,250 @@ a {
   letter-spacing: 0.5px;
   cursor: pointer;
   padding: 0;
+  margin-bottom: 26px;
 }
 
-.lux-track-back:hover {
+.lux-track-page-back:hover {
   color: var(--lux-text);
 }
 
-.lux-track-summary {
+.lux-track-page-summary {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 34px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid var(--lux-line);
 }
 
-.lux-track-summary span {
+.lux-track-page-summary span {
+  display: block;
   color: #a1907c;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 1.5px;
 }
 
-.lux-track-summary strong {
+.lux-track-page-summary h2 {
+  margin: 10px 0 0;
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 400;
+  color: #1d1710;
 }
 
-.lux-track-summary em {
+.lux-track-page-summary em {
   font-style: normal;
   font-size: 12px;
   color: #7d6c4f;
 }
 
-.lux-track-cancelled {
-  padding: 14px 16px;
+.lux-track-page-cancelled {
+  padding: 16px 20px;
   background: #f7e6e2;
   color: #a8442f;
   font-size: 13px;
-  border-radius: 4px;
+  border-radius: 6px;
+  margin-bottom: 30px;
 }
 
-.lux-track-timeline {
+.lux-track-page-timeline {
   display: flex;
-  flex-direction: column;
-}
-
-.lux-track-step {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 34px;
   position: relative;
-  padding-bottom: 22px;
 }
 
-.lux-track-step:last-child {
-  padding-bottom: 0;
-}
-
-.lux-track-step::before {
+.lux-track-page-timeline::before {
   content: "";
   position: absolute;
-  left: 5px;
-  top: 16px;
-  bottom: 0;
-  width: 1px;
+  top: 7px;
+  left: 7px;
+  right: 7px;
+  height: 1px;
   background: #e2d6b8;
+  z-index: 0;
 }
 
-.lux-track-step:last-child::before {
-  display: none;
-}
-
-.lux-track-step.done::before {
-  background: #b1a181;
-}
-
-.lux-track-dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: #e2d6b8;
-  flex-shrink: 0;
-  margin-top: 3px;
-}
-
-.lux-track-step.done .lux-track-dot {
-  background: #b1a181;
-}
-
-.lux-track-step.current .lux-track-dot {
-  background: var(--lux-text);
-  box-shadow: 0 0 0 4px rgba(28, 21, 13, 0.12);
-}
-
-.lux-track-step-info {
+.lux-track-page-step {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  text-align: center;
 }
 
-.lux-track-step-info strong {
-  font-size: 13px;
+.lux-track-page-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #e2d6b8;
+  border: 3px solid var(--lux-bg);
+  box-shadow: 0 0 0 1px #e2d6b8;
+}
+
+.lux-track-page-step.done .lux-track-page-dot {
+  background: #b1a181;
+  box-shadow: 0 0 0 1px #b1a181;
+}
+
+.lux-track-page-step.current .lux-track-page-dot {
+  background: var(--lux-text);
+  box-shadow: 0 0 0 5px rgba(28, 21, 13, 0.12);
+}
+
+.lux-track-page-step strong {
+  font-size: 12px;
   font-weight: 500;
   color: #b1a181;
 }
 
-.lux-track-step.done .lux-track-step-info strong {
+.lux-track-page-step.done strong {
   color: var(--lux-text);
 }
 
-.lux-track-step-info em {
+.lux-track-page-step em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 10.5px;
   color: #a1907c;
 }
 
-.lux-track-courier {
+.lux-track-page-courier {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 20px 24px;
+  background: #f5f0e2;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #7d6c4f;
+  margin-bottom: 34px;
+}
+
+.lux-track-page-courier > div {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 14px 16px;
-  background: #f5f0e2;
-  border-radius: 4px;
-  font-size: 12px;
-  color: #7d6c4f;
 }
 
-.lux-track-courier a {
-  margin-top: 4px;
+.lux-track-page-courier strong {
   color: var(--lux-text);
-  font-size: 11px;
-  letter-spacing: 0.5px;
-  text-decoration: underline;
 }
 
-.lux-track-items {
+.lux-track-page-courier a {
+  display: inline-block;
+  padding: 12px 22px;
+  background: var(--lux-text);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-decoration: none;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.lux-track-page-result h3 {
+  margin: 0 0 18px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 18px;
+  font-weight: 400;
+  color: #1d1710;
+}
+
+.lux-track-page-items {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   border-top: 1px solid var(--lux-line);
-  padding-top: 18px;
+  padding-top: 22px;
 }
 
-.lux-track-item {
+.lux-track-page-item {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
-.lux-track-item-image {
-  width: 50px;
-  height: 50px;
+.lux-track-page-item-image {
+  width: 64px;
+  height: 64px;
   flex-shrink: 0;
   background: #f5f0e2;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
 }
 
-.lux-track-item-image img {
+.lux-track-page-item-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.lux-track-item-info {
+.lux-track-page-item-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
-.lux-track-item-info strong {
-  font-size: 13px;
+.lux-track-page-item-info strong {
+  font-size: 14px;
   font-weight: 500;
 }
 
-.lux-track-item-info em {
+.lux-track-page-item-info em {
   font-style: normal;
-  font-size: 11px;
+  font-size: 11.5px;
   color: #8a7a5c;
 }
 
-.lux-track-item-info span {
-  font-size: 11px;
+.lux-track-page-item-info span {
+  font-size: 11.5px;
   color: #a1907c;
 }
 
-.lux-track-item-price {
-  font-size: 13px;
+.lux-track-page-item-price {
+  font-size: 14px;
   color: #7d6c4f;
 }
 
-.lux-track-total {
+.lux-track-page-total {
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-top: 1px solid var(--lux-line);
-  padding-top: 16px;
-  font-size: 13px;
+  margin-top: 22px;
+  padding-top: 20px;
+  font-size: 14px;
 }
 
-.lux-track-total strong {
-  font-size: 17px;
+.lux-track-page-total strong {
+  font-size: 19px;
+}
+
+.lux-track-page-continue {
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  margin-top: 30px;
+  border: 1px solid var(--lux-text);
+  background: transparent;
+  color: var(--lux-text);
+  font-size: 9px;
+  letter-spacing: 1.8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lux-track-page-continue:hover {
+  background: var(--lux-text);
+  color: #fff;
 }
 
 /* =========================================================
@@ -4013,6 +4107,19 @@ a {
 @media (max-width: 850px) {
   .lux-announcement-center {
     display: none;
+  }
+
+  .lux-track-page-body {
+    grid-template-columns: 1fr;
+  }
+
+  .lux-track-page-form-card {
+    position: static;
+  }
+
+  .lux-track-page-steps {
+    grid-template-columns: 1fr;
+    gap: 26px;
   }
 
   .lux-header-inner {
@@ -4113,6 +4220,38 @@ a {
     justify-content: center;
     font-size: 7px;
     letter-spacing: 1.2px;
+  }
+
+  .lux-track-page-hero {
+    padding: 60px 0 30px;
+  }
+
+  .lux-track-page-form-card,
+  .lux-track-page-empty,
+  .lux-track-page-result {
+    padding: 26px 22px;
+  }
+
+  .lux-track-page-summary {
+    align-items: flex-start;
+  }
+
+  .lux-track-page-timeline {
+    flex-wrap: wrap;
+    row-gap: 20px;
+  }
+
+  .lux-track-page-timeline::before {
+    display: none;
+  }
+
+  .lux-track-page-step {
+    flex: 0 0 33%;
+  }
+
+  .lux-track-page-courier {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .lux-offer-banner {
