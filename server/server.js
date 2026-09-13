@@ -8,6 +8,7 @@ const fs = require("fs");
 const dotenv = require("dotenv");
 const nodemailer = require("nodemailer");
 const { createClient } = require("@supabase/supabase-js");
+const sharp = require("sharp");
 
 dotenv.config();
 
@@ -530,15 +531,65 @@ function getStoragePathFromUrl(imageUrl) {
   return imageUrl.slice(index + marker.length).split("?")[0];
 }
 
+/*
+ * Shrinks a product photo's FILE SIZE without a visible quality
+ * drop: only downscales if it's larger than a normal e-commerce
+ * photo needs to be (2000px on the long edge is already bigger
+ * than most screens will ever display), and re-encodes at a high
+ * quality setting (JPEG 88 / PNG for anything with transparency).
+ * This is what actually cuts a 5MB phone/AI photo down to a few
+ * hundred KB while still looking sharp - the resize step matters
+ * far more for size than the quality number does.
+ * Falls back to the original, uncompressed file if anything about
+ * this goes wrong, so a bad/corrupt image never blocks an upload.
+ */
+async function compressImageForWeb(buffer, mimetype) {
+  try {
+    const image = sharp(buffer, { failOn: "none" });
+    const metadata = await image.metadata();
+    const resized = image.resize({
+      width: 2000,
+      height: 2000,
+      fit: "inside",
+      withoutEnlargement: true
+    });
+
+    if (metadata.hasAlpha) {
+      // Has real transparency (e.g. a logo/graphic) - keep it as PNG so
+      // transparency isn't lost, just compress it as much as PNG allows.
+      const outBuffer = await resized.png({ quality: 90, compressionLevel: 9 }).toBuffer();
+      return { buffer: outBuffer, mimetype: "image/png", extension: ".png" };
+    }
+
+    // Real photos (studio + lifestyle shots) have no transparency, so JPEG
+    // at a high quality setting gives by far the best size-for-quality result.
+    const outBuffer = await resized.jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+    return { buffer: outBuffer, mimetype: "image/jpeg", extension: ".jpg" };
+  } catch (error) {
+    console.error("IMAGE COMPRESSION SKIPPED (uploading original instead):", error.message);
+    return null;
+  }
+}
+
 async function uploadImage(file) {
-  const extension = path.extname(file.originalname || "") || ".jpg";
-  const originalName = path.basename(file.originalname || "product", extension);
+  let buffer = file.buffer;
+  let mimetype = file.mimetype;
+  let extension = path.extname(file.originalname || "") || ".jpg";
+
+  const compressed = await compressImageForWeb(file.buffer, file.mimetype);
+  if (compressed) {
+    buffer = compressed.buffer;
+    mimetype = compressed.mimetype;
+    extension = compressed.extension;
+  }
+
+  const originalName = path.basename(file.originalname || "product", path.extname(file.originalname || ""));
   const safeName = originalName.replace(/[^a-zA-Z0-9-_]/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
   const filename = `${Date.now()}-${Math.round(Math.random() * 1000000)}-${safeName || "product"}${extension}`;
   const storagePath = `products/${filename}`;
 
-  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, file.buffer, {
-    contentType: file.mimetype,
+  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
+    contentType: mimetype,
     upsert: true
   });
   if (error) throw error;
