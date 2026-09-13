@@ -126,10 +126,27 @@ const razorpay = RAZORPAY_KEY_ID && RAZORPAY_KEY_SECRET
 const GMAIL_USER = process.env.GMAIL_USER;
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD;
 
+/*
+ * IMPORTANT: use an explicit host/port here instead of the
+ * "service: gmail" shorthand, and force IPv4 with `family: 4`.
+ *
+ * Render (and several other hosts) route outbound connections over
+ * IPv6 by default, and Gmail's SMTP server frequently hangs/times
+ * out on that route ("Connection timeout" / ETIMEDOUT), even with a
+ * completely correct account + App Password. Forcing IPv4 is the
+ * standard fix for this - the account/password are never the
+ * problem in that error.
+ */
 const mailTransporter =
   GMAIL_USER && GMAIL_APP_PASSWORD
     ? nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        family: 4,
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 15000,
         auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD }
       })
     : null;
