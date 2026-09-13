@@ -481,12 +481,15 @@ function normalizeColors(colors) {
 }
 
 /*
- * COLOR -> PHOTO MAP
- * { "Black": "https://.../black.jpg", "Tan": "https://.../tan.jpg" }
- * Only keeps entries whose value is a real, non-empty string url -
- * anything else (null, numbers, nested objects) is dropped rather
- * than stored, since this is written straight into the product's
- * public API response.
+ * COLOR -> PHOTO GALLERY MAP
+ * { "Black": ["https://.../black-1.jpg", "https://.../black-2.jpg"], "Tan": [...] }
+ * Each color maps to an ARRAY of photo URLs (a full mini-gallery for
+ * that variant), not just one photo - lets the storefront show the
+ * variant "like its own product" instead of swapping a single hero
+ * image. Also accepts a plain string per color for backwards
+ * compatibility with color photos saved before this was an array
+ * (those just come back as a 1-item array). Anything that isn't a
+ * real, non-empty URL string is dropped rather than stored.
  */
 function normalizeColorImages(raw) {
   let parsed = raw;
@@ -502,10 +505,17 @@ function normalizeColorImages(raw) {
   const result = {};
   for (const key of Object.keys(parsed)) {
     const color = String(key).trim();
-    const url = parsed[key];
-    if (color && typeof url === "string" && url.trim()) {
-      result[color] = url.trim();
+    if (!color) continue;
+    const value = parsed[key];
+
+    let urls = [];
+    if (Array.isArray(value)) {
+      urls = value.filter((url) => typeof url === "string" && url.trim()).map((url) => url.trim());
+    } else if (typeof value === "string" && value.trim()) {
+      urls = [value.trim()];
     }
+    urls = uniqueImages(urls);
+    if (urls.length) result[color] = urls;
   }
   return result;
 }
@@ -1244,12 +1254,24 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     }
 
     const colorImages = normalizeColorImages(body.colorImages);
+    // Multiple files can arrive under the same "colorImage__<Color>" fieldname
+    // (one color can have several photos) - group them first so every photo
+    // for a color lands in that color's array instead of overwriting the last.
+    const colorFilesByColor = {};
     for (const file of colorFiles) {
       const color = decodeURIComponent(file.fieldname.slice("colorImage__".length)).trim();
       if (!color) continue;
-      const url = await uploadImage(file);
-      uploadedUrls.push(url); // tracked for cleanup-on-error, NOT part of the main gallery
-      colorImages[color] = url;
+      if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
+      colorFilesByColor[color].push(file);
+    }
+    for (const color of Object.keys(colorFilesByColor)) {
+      const urls = [];
+      for (const file of colorFilesByColor[color]) {
+        const url = await uploadImage(file);
+        uploadedUrls.push(url); // tracked for cleanup-on-error, NOT part of the main gallery
+        urls.push(url);
+      }
+      colorImages[color] = urls;
     }
 
     const productId = Date.now();
@@ -1633,22 +1655,35 @@ async function updateProduct(req, res) {
 
     /*
      * COLOR PHOTOS
-     * Starts from whatever color photos the product already has,
-     * then layers on any URL overrides sent in body.colorImages
-     * and finally any freshly-uploaded colorImage__<Color> files -
-     * so editing one color's photo never wipes out the others.
+     * Starts from whatever color photos the product already has, then
+     * layers on body.colorImages - which the admin panel now sends as
+     * "here's exactly which of the EXISTING photos to keep for each
+     * color" (any the admin removed with the ✕ button are simply left
+     * out) - and finally APPENDS any freshly-uploaded colorImage__<Color>
+     * files on top of whatever was kept, so adding new photos for one
+     * color never wipes out the others, and no longer wipes out that
+     * color's own kept photos either.
      */
     if (body.colorImages !== undefined || colorFiles.length > 0) {
       const colorImages = {
         ...normalizeColorImages(existing.color_images),
         ...normalizeColorImages(body.colorImages)
       };
+      const colorFilesByColor = {};
       for (const file of colorFiles) {
         const color = decodeURIComponent(file.fieldname.slice("colorImage__".length)).trim();
         if (!color) continue;
-        const url = await uploadImage(file);
-        newUploadedUrls.push(url);
-        colorImages[color] = url;
+        if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
+        colorFilesByColor[color].push(file);
+      }
+      for (const color of Object.keys(colorFilesByColor)) {
+        const urls = [];
+        for (const file of colorFilesByColor[color]) {
+          const url = await uploadImage(file);
+          newUploadedUrls.push(url);
+          urls.push(url);
+        }
+        colorImages[color] = uniqueImages([...(colorImages[color] || []), ...urls]);
       }
       updateData.color_images = colorImages;
     }
