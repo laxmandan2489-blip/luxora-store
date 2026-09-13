@@ -1186,6 +1186,10 @@ function Admin() {
     });
   }
 
+  function removeImage(index) {
+    setImages((previous) => previous.filter((_, i) => i !== index));
+  }
+
   /* =====================================================
      ADD PRODUCT
      ===================================================== */
@@ -1828,6 +1832,10 @@ function Admin() {
       [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
       return next;
     });
+  }
+
+  function removeEditImage(index) {
+    setEditImages((previous) => previous.filter((_, i) => i !== index));
   }
   async function updateProduct(event) {
     event.preventDefault();
@@ -2849,6 +2857,21 @@ function Admin() {
         .image-reorder-button:disabled {
           opacity: 0.35;
           cursor: not-allowed;
+        }
+        .image-remove-button {
+          display: block;
+          width: 100%;
+          padding: 5px 0 8px;
+          font-size: 11px;
+          font-weight: 600;
+          color: #b91c1c;
+          background: none;
+          border: 0;
+          border-top: 1px solid #eee;
+          cursor: pointer;
+        }
+        .image-remove-button:hover {
+          background: #fef2f2;
         }
         .add-button {
           margin-top: 22px;
@@ -4427,6 +4450,14 @@ function Admin() {
                                   ▶
                                 </button>
                               </div>
+                              <button
+                                type="button"
+                                className="image-remove-button"
+                                onClick={() => removeImage(index)}
+                                title="Remove this image"
+                              >
+                                ✕ Remove
+                              </button>
                             </div>
                           )
                         )}
@@ -5521,6 +5552,14 @@ function Admin() {
                                 ▶
                               </button>
                             </div>
+                            <button
+                              type="button"
+                              className="image-remove-button"
+                              onClick={() => removeEditImage(index)}
+                              title="Remove this image"
+                            >
+                              ✕ Remove
+                            </button>
                           </div>
                         )
                       )}
