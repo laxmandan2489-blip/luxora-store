@@ -1248,10 +1248,12 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       return res.status(400).json({ success: false, message: "Please upload at least one product image." });
     }
 
-    for (const file of galleryFiles) {
-      const url = await uploadImage(file);
-      uploadedUrls.push(url);
-    }
+    // Upload every gallery photo AT THE SAME TIME instead of one after another -
+    // with several photos per product (and several products to add), waiting
+    // for each upload to finish before starting the next one made this feel
+    // very slow. Promise.all keeps the original order.
+    const galleryUploadedUrls = await Promise.all(galleryFiles.map((file) => uploadImage(file)));
+    uploadedUrls.push(...galleryUploadedUrls);
 
     const colorImages = normalizeColorImages(body.colorImages);
     // Multiple files can arrive under the same "colorImage__<Color>" fieldname
@@ -1264,13 +1266,16 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
       colorFilesByColor[color].push(file);
     }
-    for (const color of Object.keys(colorFilesByColor)) {
-      const urls = [];
-      for (const file of colorFilesByColor[color]) {
-        const url = await uploadImage(file);
-        uploadedUrls.push(url); // tracked for cleanup-on-error, NOT part of the main gallery
-        urls.push(url);
-      }
+    // Same speed-up as the gallery above - every color's photos (and every
+    // color itself) upload in parallel rather than one file at a time.
+    const colorUploadEntries = await Promise.all(
+      Object.keys(colorFilesByColor).map(async (color) => {
+        const urls = await Promise.all(colorFilesByColor[color].map((file) => uploadImage(file)));
+        return [color, urls];
+      })
+    );
+    for (const [color, urls] of colorUploadEntries) {
+      uploadedUrls.push(...urls); // tracked for cleanup-on-error, NOT part of the main gallery
       colorImages[color] = urls;
     }
 
@@ -1644,12 +1649,10 @@ async function updateProduct(req, res) {
 
     if (galleryFiles.length > 0) {
       oldImages = normalizeImages(existing.images);
-      const galleryUrls = [];
-      for (const file of galleryFiles) {
-        const url = await uploadImage(file);
-        newUploadedUrls.push(url);
-        galleryUrls.push(url);
-      }
+      // Upload every replacement photo in parallel rather than one at a
+      // time - same speed-up as the "Add Product" route.
+      const galleryUrls = await Promise.all(galleryFiles.map((file) => uploadImage(file)));
+      newUploadedUrls.push(...galleryUrls);
       updateData.images = uniqueImages(galleryUrls);
     }
 
@@ -1676,13 +1679,16 @@ async function updateProduct(req, res) {
         if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
         colorFilesByColor[color].push(file);
       }
-      for (const color of Object.keys(colorFilesByColor)) {
-        const urls = [];
-        for (const file of colorFilesByColor[color]) {
-          const url = await uploadImage(file);
-          newUploadedUrls.push(url);
-          urls.push(url);
-        }
+      // Same speed-up here too - every color's new photos (and every color
+      // itself) upload in parallel instead of one file at a time.
+      const colorUploadEntries = await Promise.all(
+        Object.keys(colorFilesByColor).map(async (color) => {
+          const urls = await Promise.all(colorFilesByColor[color].map((file) => uploadImage(file)));
+          return [color, urls];
+        })
+      );
+      for (const [color, urls] of colorUploadEntries) {
+        newUploadedUrls.push(...urls);
         colorImages[color] = uniqueImages([...(colorImages[color] || []), ...urls]);
       }
       updateData.color_images = colorImages;
