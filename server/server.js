@@ -454,7 +454,9 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 const storage = multer.memoryStorage();
 const upload = multer({
   storage,
-  limits: { files: 20, fileSize: 10 * 1024 * 1024 },
+  // No cap on how many images can be uploaded at once (admin asked for unlimited photos per product).
+  // fileSize keeps a per-photo ceiling only so one giant file can't crash the server's memory.
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: function (req, file, cb) {
     if (file.mimetype && file.mimetype.startsWith("image/")) cb(null, true);
     else cb(new Error("Only image files are allowed."));
