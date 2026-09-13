@@ -24,6 +24,113 @@ const ORDER_STATUSES = [
   "Cancelled",
 ];
 
+/*
+ * BULK UPLOAD (CSV) HELPERS
+ * Everything below is used only by the "Bulk Upload" section of
+ * the Products tab, to let the admin add many products at once
+ * from a CSV file instead of filling the form one product at a
+ * time. Kept at module scope since none of it depends on component
+ * state - it's pure parsing/formatting.
+ */
+const BULK_TEMPLATE_HEADERS = [
+  "Product Name",
+  "Category",
+  "Price",
+  "Old Price",
+  "Stock",
+  "Description",
+  "Colors",
+  "Image URLs",
+];
+
+const BULK_COLUMN_ALIASES = {
+  name: ["product name", "name"],
+  category: ["category"],
+  price: ["price"],
+  oldPrice: ["old price", "oldprice", "mrp"],
+  stock: ["stock", "quantity"],
+  description: ["description", "desc"],
+  colors: ["colors", "color"],
+  images: ["image urls", "images", "image url", "photo urls", "photos"],
+};
+
+// A small hand-written CSV parser (not a library) so it handles the
+// normal Excel-exported CSV cases correctly: quoted fields, commas
+// or newlines inside a quoted cell, and escaped ("") quotes.
+function parseCsvText(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        field += char;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n" || char === "\r") {
+      if (char === "\r" && next === "\n") i++;
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  return rows.filter((cells) => cells.some((cell) => String(cell || "").trim() !== ""));
+}
+
+function findBulkColumnIndex(headerRow, aliases) {
+  const normalized = headerRow.map((header) => String(header || "").trim().toLowerCase());
+  for (const alias of aliases) {
+    const index = normalized.indexOf(alias);
+    if (index !== -1) return index;
+  }
+  return -1;
+}
+
+function csvEscapeCell(value) {
+  const text = String(value ?? "");
+  if (/["\n,]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+// Labels for the AI Photo Studio's 5 generated shots - matches the
+// fixed order the backend generates them in (4 premium studio shots,
+// then 1 lifestyle shot).
+const AI_STUDIO_SHOT_LABELS = [
+  "Studio Shot 1 (Hero)",
+  "Studio Shot 2 (3/4 Angle)",
+  "Studio Shot 3 (Close-up)",
+  "Studio Shot 4 (Flat Lay)",
+];
+function labelForAiImage(image, index) {
+  if (image.type === "lifestyle") return "Lifestyle Shot";
+  return AI_STUDIO_SHOT_LABELS[index] || `Studio Shot ${index + 1}`;
+}
+
 function getImageUrl(image) {
   if (!image) return "";
   const value = String(image).trim();
@@ -366,6 +473,38 @@ function Admin() {
     useState(false);
   const [message, setMessage] =
     useState("");
+
+  /* =====================================================
+     BULK UPLOAD (CSV) STATE
+     ===================================================== */
+  const [bulkRows, setBulkRows] = useState([]);
+  const [bulkFileName, setBulkFileName] = useState("");
+  const [bulkParseError, setBulkParseError] = useState("");
+  const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkResults, setBulkResults] = useState(null);
+
+  /* =====================================================
+     AI PHOTO STUDIO STATE
+     (helper for Bulk Upload - generates premium product
+     photos with Gemini and hands back copyable URLs to
+     paste into the CSV's "Image URLs" column)
+     ===================================================== */
+  const [aiSourceFile, setAiSourceFile] = useState(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiGenerateError, setAiGenerateError] = useState("");
+  const [aiGeneratedImages, setAiGeneratedImages] = useState([]);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiHistory, setAiHistory] = useState([]);
+  const [aiCopiedId, setAiCopiedId] = useState("");
+
+  // Manual path (no AI/Gemini involved, free): admin already has
+  // finished photos on their device and just wants public links to
+  // paste into the CSV. Shares the same "aiHistory" results list
+  // above, since both paths end in the same "links ready to copy"
+  // outcome.
+  const [manualFiles, setManualFiles] = useState([]);
+  const [manualUploading, setManualUploading] = useState(false);
+  const [manualUploadError, setManualUploadError] = useState("");
 
   const [orderSearch, setOrderSearch] =
     useState("");
@@ -1137,6 +1276,348 @@ function Admin() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  /* =====================================================
+     BULK UPLOAD (CSV)
+     ===================================================== */
+  function downloadBulkTemplate() {
+    const exampleRow = [
+      "Tan Leather Tote Bag",
+      "Tote Bags",
+      "2999",
+      "3999",
+      "15",
+      "Premium leather tote bag with an adjustable strap.",
+      "Tan|Black",
+      "https://example.com/image1.jpg|https://example.com/image2.jpg",
+    ];
+    const csvContent = [BULK_TEMPLATE_HEADERS, exampleRow]
+      .map((row) => row.map(csvEscapeCell).join(","))
+      .join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "shrimoh-bulk-products-template.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  function handleBulkFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setBulkResults(null);
+    setBulkParseError("");
+    setBulkFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const allRows = parseCsvText(String(reader.result || ""));
+        if (allRows.length < 2) {
+          setBulkParseError("This file has no product rows below the header row.");
+          setBulkRows([]);
+          return;
+        }
+
+        const headerRow = allRows[0];
+        const dataRows = allRows.slice(1);
+
+        const columnIndex = {
+          name: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.name),
+          category: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.category),
+          price: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.price),
+          oldPrice: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.oldPrice),
+          stock: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.stock),
+          description: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.description),
+          colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
+          images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
+        };
+
+        if (columnIndex.name === -1 || columnIndex.price === -1 || columnIndex.images === -1) {
+          setBulkParseError(
+            "Couldn't find the required columns. Please use the downloaded template - it needs 'Product Name', 'Price' and 'Image URLs' columns."
+          );
+          setBulkRows([]);
+          return;
+        }
+
+        const cell = (row, index) => (index === -1 ? "" : String(row[index] ?? "").trim());
+
+        const parsedRows = dataRows.map((row, index) => {
+          const name = cell(row, columnIndex.name);
+          const priceRaw = cell(row, columnIndex.price);
+          const price = Number(priceRaw);
+          const oldPriceRaw = cell(row, columnIndex.oldPrice);
+          const stockRaw = cell(row, columnIndex.stock);
+          const images = cell(row, columnIndex.images)
+            .split("|")
+            .map((url) => url.trim())
+            .filter(Boolean);
+          const colors = cell(row, columnIndex.colors)
+            .split("|")
+            .map((color) => color.trim())
+            .filter(Boolean);
+
+          const errors = [];
+          if (!name) errors.push("Product name is missing.");
+          if (!priceRaw || !Number.isFinite(price) || price <= 0) errors.push("A valid price is missing.");
+          if (images.length === 0) errors.push("At least one image URL is missing.");
+
+          return {
+            rowNumber: index + 2, // spreadsheet row number: row 1 is the header
+            name,
+            category: cell(row, columnIndex.category) || "Bags",
+            price,
+            oldPrice: oldPriceRaw ? Number(oldPriceRaw) : 0,
+            stock: stockRaw ? Math.max(0, Math.floor(Number(stockRaw))) : 0,
+            description: cell(row, columnIndex.description),
+            colors,
+            images,
+            valid: errors.length === 0,
+            errors,
+          };
+        });
+
+        setBulkRows(parsedRows);
+      } catch (error) {
+        console.error("BULK CSV PARSE ERROR:", error);
+        setBulkParseError("Could not read this file. Please make sure it's a valid CSV file.");
+        setBulkRows([]);
+      }
+    };
+    reader.onerror = () => {
+      setBulkParseError("Could not read this file.");
+      setBulkRows([]);
+    };
+    reader.readAsText(file);
+  }
+
+  async function bulkUploadProducts() {
+    const validRows = bulkRows.filter((row) => row.valid);
+    if (validRows.length === 0) {
+      alert("No valid rows to upload. Please fix the errors shown below first.");
+      return;
+    }
+    try {
+      setBulkUploading(true);
+      setBulkResults(null);
+      const response = await adminFetch(`${API}/api/products/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          products: validRows.map((row) => ({
+            name: row.name,
+            category: row.category,
+            price: row.price,
+            oldPrice: row.oldPrice,
+            stock: row.stock,
+            description: row.description,
+            colors: row.colors,
+            images: row.images,
+          })),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+      setBulkResults(data);
+      loadProducts();
+    } catch (error) {
+      console.error("BULK UPLOAD ERROR:", error);
+      setBulkResults({
+        success: false,
+        addedCount: 0,
+        failedCount: validRows.length,
+        results: [],
+        errorMessage: error.message || "Bulk upload failed.",
+      });
+    } finally {
+      setBulkUploading(false);
+    }
+  }
+
+  function resetBulkUpload() {
+    setBulkRows([]);
+    setBulkFileName("");
+    setBulkParseError("");
+    setBulkResults(null);
+  }
+
+  /* =====================================================
+     AI PHOTO STUDIO
+     Helper for Bulk Upload - takes one real source photo,
+     asks the backend (Gemini) to generate 4 premium studio
+     shots + 1 lifestyle shot, lets the admin pick which to
+     keep, saves the picked ones to Supabase Storage, and
+     hands back copyable "|"-joined URLs ready to paste
+     straight into the CSV's Image URLs column.
+     ===================================================== */
+  function handleAiSourceFileChange(event) {
+    const file = event.target.files?.[0] || null;
+    setAiSourceFile(file);
+    setAiGeneratedImages([]);
+    setAiGenerateError("");
+  }
+
+  async function generateAiPhotos() {
+    if (!aiSourceFile) {
+      alert("Please choose a source photo first.");
+      return;
+    }
+    try {
+      setAiGenerating(true);
+      setAiGenerateError("");
+      setAiGeneratedImages([]);
+      const formData = new FormData();
+      formData.append("sourceImage", aiSourceFile);
+      const response = await adminFetch(`${API}/api/admin/products/generate-images`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+      setAiGeneratedImages(
+        (data.images || []).map((image, index) => ({
+          ...image,
+          id: `${Date.now()}-${index}`,
+          selected: image.success,
+        }))
+      );
+    } catch (error) {
+      console.error("AI GENERATE ERROR:", error);
+      setAiGenerateError(error.message || "Could not generate photos.");
+    } finally {
+      setAiGenerating(false);
+    }
+  }
+
+  function toggleAiImageSelected(id) {
+    setAiGeneratedImages((previous) =>
+      previous.map((image) => (image.id === id ? { ...image, selected: !image.selected } : image))
+    );
+  }
+
+  async function saveSelectedAiPhotos() {
+    const toSave = aiGeneratedImages.filter((image) => image.success && image.selected);
+    if (toSave.length === 0) {
+      alert("Select at least one photo to save first.");
+      return;
+    }
+    try {
+      setAiSaving(true);
+      const savedUrls = [];
+      for (const image of toSave) {
+        const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: image.dataUrl }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data?.message || `Server error ${response.status}`);
+        }
+        savedUrls.push(data.url);
+      }
+      setAiHistory((previous) => [
+        {
+          id: `${Date.now()}`,
+          sourceFileName: aiSourceFile?.name || "photo",
+          urls: savedUrls,
+          thumbnail: toSave[0]?.dataUrl || "",
+        },
+        ...previous,
+      ]);
+      setAiSourceFile(null);
+      setAiGeneratedImages([]);
+    } catch (error) {
+      console.error("AI SAVE ERROR:", error);
+      alert(error.message || "Could not save the selected photos.");
+    } finally {
+      setAiSaving(false);
+    }
+  }
+
+  async function copyAiUrls(id, urls) {
+    const text = urls.join("|");
+    try {
+      await navigator.clipboard.writeText(text);
+      setAiCopiedId(id);
+      setTimeout(() => setAiCopiedId((current) => (current === id ? "" : current)), 2000);
+    } catch (error) {
+      console.error("CLIPBOARD ERROR:", error);
+      alert("Could not copy automatically - please select and copy the text manually.");
+    }
+  }
+
+  /* =====================================================
+     MANUAL PHOTO UPLOAD (no AI, free)
+     For photos the admin already has ready on their device
+     (e.g. made elsewhere, like Gemini's own free app) - just
+     uploads them as-is and hands back public links, same as
+     the AI path above but without generating anything.
+     ===================================================== */
+  function handleManualFilesChange(event) {
+    setManualFiles(Array.from(event.target.files || []));
+    setManualUploadError("");
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Could not read this file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function uploadManualPhotos() {
+    if (manualFiles.length === 0) {
+      alert("Please choose at least one photo first.");
+      return;
+    }
+    try {
+      setManualUploading(true);
+      setManualUploadError("");
+      const savedUrls = [];
+      for (const file of manualFiles) {
+        const dataUrl = await readFileAsDataUrl(file);
+        const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data?.message || `Server error ${response.status}`);
+        }
+        savedUrls.push(data.url);
+      }
+      const thumbnail = await readFileAsDataUrl(manualFiles[0]);
+      setAiHistory((previous) => [
+        {
+          id: `${Date.now()}`,
+          sourceFileName:
+            manualFiles.length === 1 ? manualFiles[0].name : `${manualFiles.length} photos`,
+          urls: savedUrls,
+          thumbnail,
+        },
+        ...previous,
+      ]);
+      setManualFiles([]);
+    } catch (error) {
+      console.error("MANUAL PHOTO UPLOAD ERROR:", error);
+      setManualUploadError(error.message || "Could not upload these photos.");
+    } finally {
+      setManualUploading(false);
     }
   }
 
@@ -2212,6 +2693,166 @@ function Admin() {
           margin-top: 15px;
           font-weight: 700;
           color: #166534;
+        }
+        .error-message {
+          margin-top: 15px;
+          font-weight: 700;
+          color: #b91c1c;
+        }
+        .secondary-button {
+          padding: 11px 20px;
+          background: white;
+          color: #111;
+          border: 1px solid #ccc;
+          border-radius: 9px;
+          cursor: pointer;
+          font-weight: 700;
+          font-size: 13px;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .secondary-button:hover {
+          background: #f4f5f7;
+        }
+        .bulk-upload-actions {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 12px;
+          margin-top: 10px;
+        }
+        .bulk-file-label {
+          cursor: pointer;
+        }
+        .bulk-file-name {
+          font-size: 12px;
+          color: #555;
+        }
+        .bulk-summary-line {
+          font-size: 13px;
+          font-weight: 600;
+          margin-top: 18px;
+          margin-bottom: 10px;
+        }
+        .bulk-preview-table-wrap {
+          overflow-x: auto;
+          border: 1px solid #e5e5e5;
+          border-radius: 10px;
+        }
+        .bulk-preview-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+        }
+        .bulk-preview-table th,
+        .bulk-preview-table td {
+          padding: 8px 10px;
+          text-align: left;
+          border-bottom: 1px solid #eee;
+          white-space: nowrap;
+        }
+        .bulk-preview-table th {
+          background: #fafafa;
+          font-size: 11px;
+          letter-spacing: 0.4px;
+          color: #666;
+        }
+        .bulk-row-error {
+          background: #fef2f2;
+        }
+        .bulk-status-ok {
+          color: #166534;
+          font-weight: 700;
+        }
+        .bulk-status-error {
+          color: #b91c1c;
+          font-weight: 600;
+          white-space: normal;
+        }
+        .bulk-fail-list {
+          margin: 8px 0 0;
+          padding-left: 18px;
+          font-weight: 400;
+          font-size: 13px;
+        }
+        .ai-photo-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 14px;
+          margin-top: 16px;
+        }
+        .ai-photo-card {
+          border: 2px solid #e5e5e5;
+          border-radius: 10px;
+          overflow: hidden;
+          background: white;
+        }
+        .ai-photo-card.ai-photo-selected {
+          border-color: #111;
+        }
+        .ai-photo-card img {
+          width: 100%;
+          height: 130px;
+          object-fit: cover;
+          display: block;
+        }
+        .ai-photo-check {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 8px 10px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+        .ai-photo-failed {
+          padding: 14px 10px;
+          min-height: 130px;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+          gap: 6px;
+          text-align: center;
+        }
+        .ai-photo-failed span {
+          font-weight: 700;
+          font-size: 12px;
+          color: #b91c1c;
+        }
+        .ai-photo-failed p {
+          font-size: 11px;
+          color: #777;
+          margin: 0;
+        }
+        .ai-history {
+          margin-top: 20px;
+          border-top: 1px solid #eee;
+          padding-top: 16px;
+        }
+        .ai-history-row {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 0;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        .ai-history-row img {
+          width: 48px;
+          height: 48px;
+          object-fit: cover;
+          border-radius: 8px;
+          flex-shrink: 0;
+        }
+        .ai-history-info {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          flex: 1;
+          font-size: 12px;
+        }
+        .ai-history-info span {
+          color: #777;
         }
         .product-grid {
           display: grid;
@@ -3608,6 +4249,252 @@ function Admin() {
                 )}
               </form>
             </div>
+
+            <div className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">Get Image Links for Your CSV</h2>
+              </div>
+              <p className="form-hint">
+                Your bulk CSV needs a public link for each photo, not an uploaded file. If you
+                already have your product photos ready (however you made them), upload them here
+                and get back a link for each one to paste into that product's "Image URLs" column
+                - no AI, nothing generated, just hosting your own photos so they have a link.
+              </p>
+
+              <div className="bulk-upload-actions">
+                <label className="secondary-button bulk-file-label">
+                  🖼 Choose Photo(s)
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleManualFilesChange}
+                    hidden
+                  />
+                </label>
+                {manualFiles.length > 0 && (
+                  <span className="bulk-file-name">
+                    {manualFiles.length} photo{manualFiles.length === 1 ? "" : "s"} selected
+                  </span>
+                )}
+                <button
+                  type="button"
+                  className="add-button"
+                  disabled={manualFiles.length === 0 || manualUploading}
+                  onClick={uploadManualPhotos}
+                >
+                  {manualUploading ? "UPLOADING..." : "UPLOAD & GET LINKS"}
+                </button>
+              </div>
+
+              {manualUploadError && <div className="error-message">{manualUploadError}</div>}
+
+              <p className="form-hint" style={{ marginTop: 22 }}>
+                Don't have photos ready yet? This optional tool can generate 4 premium studio
+                shots plus 1 lifestyle shot from one real photo using AI (uses your Gemini API
+                usage on Render, separate from this site's own cost) - only use it if you want
+                that.
+              </p>
+
+              <div className="bulk-upload-actions">
+                <label className="secondary-button bulk-file-label">
+                  📷 Choose Source Photo
+                  <input type="file" accept="image/*" onChange={handleAiSourceFileChange} hidden />
+                </label>
+                {aiSourceFile && <span className="bulk-file-name">{aiSourceFile.name}</span>}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={!aiSourceFile || aiGenerating}
+                  onClick={generateAiPhotos}
+                >
+                  {aiGenerating ? "GENERATING..." : "✨ GENERATE PREMIUM PHOTOS (AI)"}
+                </button>
+              </div>
+
+              {aiGenerateError && <div className="error-message">{aiGenerateError}</div>}
+
+              {aiGeneratedImages.length > 0 && (
+                <>
+                  <div className="ai-photo-grid">
+                    {aiGeneratedImages.map((image, index) => (
+                      <div
+                        key={image.id}
+                        className={`ai-photo-card${image.selected ? " ai-photo-selected" : ""}`}
+                      >
+                        {image.success ? (
+                          <>
+                            <img src={image.dataUrl} alt={labelForAiImage(image, index)} />
+                            <label className="ai-photo-check">
+                              <input
+                                type="checkbox"
+                                checked={image.selected}
+                                onChange={() => toggleAiImageSelected(image.id)}
+                              />
+                              {labelForAiImage(image, index)}
+                            </label>
+                          </>
+                        ) : (
+                          <div className="ai-photo-failed">
+                            <span>⚠ {labelForAiImage(image, index)}</span>
+                            <p>{image.message || "Could not generate this shot."}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="bulk-upload-actions">
+                    <button
+                      type="button"
+                      className="add-button"
+                      disabled={aiSaving || aiGeneratedImages.every((image) => !image.selected)}
+                      onClick={saveSelectedAiPhotos}
+                    >
+                      {aiSaving ? "SAVING..." : "SAVE SELECTED PHOTOS"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {aiHistory.length > 0 && (
+                <div className="ai-history">
+                  <p className="bulk-summary-line">Saved photo links (newest first)</p>
+                  {aiHistory.map((entry) => (
+                    <div className="ai-history-row" key={entry.id}>
+                      {entry.thumbnail && <img src={entry.thumbnail} alt="" />}
+                      <div className="ai-history-info">
+                        <strong>{entry.sourceFileName}</strong>
+                        <span>{entry.urls.length} photo{entry.urls.length === 1 ? "" : "s"} saved</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => copyAiUrls(entry.id, entry.urls)}
+                      >
+                        {aiCopiedId === entry.id ? "✅ Copied!" : "📋 Copy for CSV"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">Bulk Upload Products (CSV)</h2>
+              </div>
+              <p className="form-hint">
+                Add many products at once from a CSV file instead of filling the form above one
+                by one. Each row needs a product name, a price, and at least one image URL (a
+                real public photo link - a spreadsheet cell can't hold an uploaded photo file
+                directly, so paste a link to each photo instead, for example from your supplier's
+                page or a photo you've already uploaded).
+              </p>
+              <div className="bulk-upload-actions">
+                <button type="button" className="secondary-button" onClick={downloadBulkTemplate}>
+                  ⬇ Download CSV Template
+                </button>
+                <label className="secondary-button bulk-file-label">
+                  📄 Choose CSV File
+                  <input type="file" accept=".csv,text/csv" onChange={handleBulkFileChange} hidden />
+                </label>
+                {bulkFileName && <span className="bulk-file-name">{bulkFileName}</span>}
+              </div>
+
+              {bulkParseError && <div className="error-message">{bulkParseError}</div>}
+
+              {bulkRows.length > 0 && (
+                <>
+                  <p className="bulk-summary-line">
+                    {bulkRows.filter((row) => row.valid).length} of {bulkRows.length} row
+                    {bulkRows.length === 1 ? "" : "s"} ready to upload
+                    {bulkRows.some((row) => !row.valid) &&
+                      ` - ${bulkRows.filter((row) => !row.valid).length} need fixing (see below)`}
+                    .
+                  </p>
+                  <div className="bulk-preview-table-wrap">
+                    <table className="bulk-preview-table">
+                      <thead>
+                        <tr>
+                          <th>Row</th>
+                          <th>Name</th>
+                          <th>Category</th>
+                          <th>Price</th>
+                          <th>Stock</th>
+                          <th>Images</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkRows.map((row) => (
+                          <tr key={row.rowNumber} className={row.valid ? "" : "bulk-row-error"}>
+                            <td>{row.rowNumber}</td>
+                            <td>{row.name || "—"}</td>
+                            <td>{row.category}</td>
+                            <td>{Number.isFinite(row.price) ? formatMoney(row.price) : "—"}</td>
+                            <td>{row.stock}</td>
+                            <td>{row.images.length}</td>
+                            <td>
+                              {row.valid ? (
+                                <span className="bulk-status-ok">✅ Ready</span>
+                              ) : (
+                                <span className="bulk-status-error">⚠ {row.errors.join(" ")}</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="bulk-upload-actions">
+                    <button
+                      type="button"
+                      className="add-button"
+                      disabled={bulkUploading || bulkRows.every((row) => !row.valid)}
+                      onClick={bulkUploadProducts}
+                    >
+                      {bulkUploading
+                        ? "UPLOADING..."
+                        : `UPLOAD ${bulkRows.filter((row) => row.valid).length} PRODUCT${
+                            bulkRows.filter((row) => row.valid).length === 1 ? "" : "S"
+                          }`}
+                    </button>
+                    <button type="button" className="secondary-button" onClick={resetBulkUpload}>
+                      Clear
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {bulkResults && (
+                <div className={bulkResults.success ? "success-message" : "error-message"}>
+                  {bulkResults.success ? (
+                    <>
+                      <p>
+                        ✅ Added {bulkResults.addedCount} product{bulkResults.addedCount === 1 ? "" : "s"}
+                        {bulkResults.failedCount > 0 &&
+                          `, ${bulkResults.failedCount} failed (see reasons below)`}
+                        .
+                      </p>
+                      {bulkResults.failedCount > 0 && (
+                        <ul className="bulk-fail-list">
+                          {bulkResults.results
+                            .filter((result) => !result.success)
+                            .map((result) => (
+                              <li key={result.row}>
+                                Row {result.row} ({result.name}): {result.message}
+                              </li>
+                            ))}
+                        </ul>
+                      )}
+                    </>
+                  ) : (
+                    <p>{bulkResults.errorMessage || "Bulk upload failed."}</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="panel">
               <div className="panel-header">
                 <h2 className="panel-title">
