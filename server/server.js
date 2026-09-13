@@ -1235,6 +1235,114 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
   }
 });
 
+/*
+ * BULK PRODUCT IMPORT
+ * Lets the admin add many products at once - e.g. from a CSV they
+ * filled in via the admin panel's "Bulk Upload" section - instead
+ * of one at a time through the form above. Unlike the single-add
+ * route, this one takes plain JSON (no file upload): each row
+ * supplies image URLs (real public links) rather than an image
+ * file, since a spreadsheet cell can't hold an attached photo.
+ * Every row is validated and inserted independently, so one bad
+ * row never blocks the rest - the response reports a clear
+ * success/failure per row for the admin panel to display.
+ */
+app.post("/api/products/bulk", requireAdmin, async function (req, res) {
+  const rows = Array.isArray((req.body || {}).products) ? req.body.products : [];
+  if (!rows.length) {
+    return res.status(400).json({ success: false, message: "No products were sent." });
+  }
+  if (rows.length > 500) {
+    return res.status(400).json({ success: false, message: "Please upload 500 products or fewer at a time." });
+  }
+
+  const results = [];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index] || {};
+    const rowNumber = index + 1;
+    const name = String(row.name || "").trim();
+    try {
+      const price = safeNumber(row.price);
+      if (!name) throw new Error("Product name is required.");
+      if (!Number.isFinite(price) || price <= 0) throw new Error("A valid price is required.");
+
+      const category = String(row.category || "Bags").trim() || "Bags";
+      const oldPrice = row.oldPrice !== undefined && row.oldPrice !== "" ? safeNumber(row.oldPrice) : 0;
+      const stock = Math.max(0, Math.floor(safeNumber(row.stock)));
+      const description = String(row.description || "");
+      const colors = normalizeColors(row.colors);
+      const images = uniqueImages(normalizeImages(row.images));
+      // row.colorImages arrives as { "Black": "https://...", "Brown": "https://..." }
+      // (built client-side from the CSV's "Color Images" column) - same shape the
+      // single-add form already sends, so the same normalizer applies here.
+      const colorImages = normalizeColorImages(row.colorImages);
+
+      // Supplier/dropshipping fields - admin-only, mirrors the
+      // single-add route below. A blank cell stores null, same as
+      // that route treats a field the admin left untouched.
+      const strOrNull = (value) => {
+        const text = String(value || "").trim();
+        return text || null;
+      };
+      const supplierName = strOrNull(row.supplierName);
+      const supplierProductId = strOrNull(row.supplierProductId);
+      const supplierLink = strOrNull(row.supplierLink);
+      const supplierCost =
+        row.supplierCost !== null && row.supplierCost !== undefined && row.supplierCost !== ""
+          ? safeNumber(row.supplierCost)
+          : null;
+      const shippingTime = strOrNull(row.shippingTime);
+
+      if (images.length === 0) throw new Error("At least one image URL is required.");
+
+      // Offset by row index so a fast loop never produces duplicate
+      // millisecond-timestamp IDs across rows in the same request.
+      const productId = Date.now() + index;
+
+      const { data, error } = await supabase
+        .from("products")
+        .insert({
+          id: productId,
+          name,
+          category,
+          price,
+          old_price: oldPrice,
+          stock,
+          description,
+          colors,
+          images,
+          color_images: colorImages,
+          active: true,
+          supplier_name: supplierName,
+          supplier_product_id: supplierProductId,
+          supplier_link: supplierLink,
+          supplier_cost: supplierCost,
+          shipping_time: shippingTime
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      results.push({ row: rowNumber, name, success: true, product: formatProductAdmin(data) });
+    } catch (error) {
+      results.push({
+        row: rowNumber,
+        name: name || `Row ${rowNumber}`,
+        success: false,
+        message: error.message || "Could not add this product."
+      });
+    }
+  }
+
+  const addedCount = results.filter((result) => result.success).length;
+  return res.json({
+    success: true,
+    addedCount,
+    failedCount: results.length - addedCount,
+    results
+  });
+});
 
 /*
  * AI PRODUCT PHOTOGRAPHY (Google Gemini image generation)
