@@ -598,15 +598,57 @@ async function uploadImage(file) {
   const filename = `${Date.now()}-${Math.round(Math.random() * 1000000)}-${safeName || "product"}${extension}`;
   const storagePath = `products/${filename}`;
 
-  const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
-    contentType: mimetype,
-    upsert: true
-  });
-  if (error) throw error;
+  // Uploading to Supabase Storage is a network call and can occasionally
+  // fail with a transient "fetch failed" (a dropped/reset connection,
+  // not a real problem with the file or the account) - retry a couple of
+  // times with a short pause before giving up, instead of failing the
+  // whole "Add Product" for one flaky request.
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const { error } = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
+        contentType: mimetype,
+        upsert: true
+      });
+      if (error) throw error;
 
-  const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
-  return data.publicUrl;
+      const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(storagePath);
+      return data.publicUrl;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+      }
+    }
+  }
+  throw lastError;
 }
+
+/*
+ * Runs async work over a list with at most `limit` items in flight at
+ * once, instead of either one-at-a-time (slow) or all-at-once (which
+ * can overwhelm Supabase/Render's connection limits when a product has
+ * many photos and briefly show up as a generic "fetch failed"). Order
+ * of the returned results always matches the order of `items`.
+ */
+async function mapWithConcurrencyLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await fn(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+const IMAGE_UPLOAD_CONCURRENCY = 4;
 
 async function deleteStorageImages(images) {
   const paths = uniqueImages(images).map(getStoragePathFromUrl).filter(Boolean);
@@ -1248,11 +1290,15 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       return res.status(400).json({ success: false, message: "Please upload at least one product image." });
     }
 
-    // Upload every gallery photo AT THE SAME TIME instead of one after another -
-    // with several photos per product (and several products to add), waiting
-    // for each upload to finish before starting the next one made this feel
-    // very slow. Promise.all keeps the original order.
-    const galleryUploadedUrls = await Promise.all(galleryFiles.map((file) => uploadImage(file)));
+    // Upload gallery photos with a few in flight at once instead of one at a
+    // time (much faster) or all at once (which can overwhelm Supabase/Render's
+    // connection limit and show up as a generic "fetch failed"). Order is
+    // preserved either way.
+    const galleryUploadedUrls = await mapWithConcurrencyLimit(
+      galleryFiles,
+      IMAGE_UPLOAD_CONCURRENCY,
+      (file) => uploadImage(file)
+    );
     uploadedUrls.push(...galleryUploadedUrls);
 
     const colorImages = normalizeColorImages(body.colorImages);
@@ -1266,17 +1312,25 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
       if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
       colorFilesByColor[color].push(file);
     }
-    // Same speed-up as the gallery above - every color's photos (and every
-    // color itself) upload in parallel rather than one file at a time.
-    const colorUploadEntries = await Promise.all(
-      Object.keys(colorFilesByColor).map(async (color) => {
-        const urls = await Promise.all(colorFilesByColor[color].map((file) => uploadImage(file)));
-        return [color, urls];
-      })
+    // Flatten every color's files into ONE list (tagged with their color) so
+    // the concurrency limit applies across ALL of them together, not per
+    // color - otherwise 3 colors x 4 photos could still mean 12 uploads
+    // in flight at once.
+    const colorFileEntries = [];
+    for (const color of Object.keys(colorFilesByColor)) {
+      for (const file of colorFilesByColor[color]) {
+        colorFileEntries.push({ color, file });
+      }
+    }
+    const colorUploadResults = await mapWithConcurrencyLimit(
+      colorFileEntries,
+      IMAGE_UPLOAD_CONCURRENCY,
+      async ({ color, file }) => ({ color, url: await uploadImage(file) })
     );
-    for (const [color, urls] of colorUploadEntries) {
-      uploadedUrls.push(...urls); // tracked for cleanup-on-error, NOT part of the main gallery
-      colorImages[color] = urls;
+    for (const { color, url } of colorUploadResults) {
+      uploadedUrls.push(url); // tracked for cleanup-on-error, NOT part of the main gallery
+      if (!colorImages[color]) colorImages[color] = [];
+      colorImages[color].push(url);
     }
 
     const productId = Date.now();
@@ -1649,9 +1703,13 @@ async function updateProduct(req, res) {
 
     if (galleryFiles.length > 0) {
       oldImages = normalizeImages(existing.images);
-      // Upload every replacement photo in parallel rather than one at a
-      // time - same speed-up as the "Add Product" route.
-      const galleryUrls = await Promise.all(galleryFiles.map((file) => uploadImage(file)));
+      // Upload a few replacement photos at a time - same speed-up (and
+      // same connection-limit safety) as the "Add Product" route.
+      const galleryUrls = await mapWithConcurrencyLimit(
+        galleryFiles,
+        IMAGE_UPLOAD_CONCURRENCY,
+        (file) => uploadImage(file)
+      );
       newUploadedUrls.push(...galleryUrls);
       updateData.images = uniqueImages(galleryUrls);
     }
@@ -1679,17 +1737,28 @@ async function updateProduct(req, res) {
         if (!colorFilesByColor[color]) colorFilesByColor[color] = [];
         colorFilesByColor[color].push(file);
       }
-      // Same speed-up here too - every color's new photos (and every color
-      // itself) upload in parallel instead of one file at a time.
-      const colorUploadEntries = await Promise.all(
-        Object.keys(colorFilesByColor).map(async (color) => {
-          const urls = await Promise.all(colorFilesByColor[color].map((file) => uploadImage(file)));
-          return [color, urls];
-        })
+      // Flatten every color's files into one list (tagged with their color)
+      // so the concurrency limit applies across ALL of them together - same
+      // connection-limit safety as the "Add Product" route above.
+      const colorFileEntries = [];
+      for (const color of Object.keys(colorFilesByColor)) {
+        for (const file of colorFilesByColor[color]) {
+          colorFileEntries.push({ color, file });
+        }
+      }
+      const colorUploadResults = await mapWithConcurrencyLimit(
+        colorFileEntries,
+        IMAGE_UPLOAD_CONCURRENCY,
+        async ({ color, file }) => ({ color, url: await uploadImage(file) })
       );
-      for (const [color, urls] of colorUploadEntries) {
-        newUploadedUrls.push(...urls);
-        colorImages[color] = uniqueImages([...(colorImages[color] || []), ...urls]);
+      const newUrlsByColor = {};
+      for (const { color, url } of colorUploadResults) {
+        newUploadedUrls.push(url);
+        if (!newUrlsByColor[color]) newUrlsByColor[color] = [];
+        newUrlsByColor[color].push(url);
+      }
+      for (const color of Object.keys(newUrlsByColor)) {
+        colorImages[color] = uniqueImages([...(colorImages[color] || []), ...newUrlsByColor[color]]);
       }
       updateData.color_images = colorImages;
     }
