@@ -2254,8 +2254,7 @@ a {
 
 .lux-option-section,
 .lux-color-options,
-.lux-color,
-.lux-color-swatch {
+.lux-color {
   display: none;
 }
 
