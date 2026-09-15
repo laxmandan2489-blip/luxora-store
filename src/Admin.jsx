@@ -506,6 +506,8 @@ function Admin() {
   const [bulkParseError, setBulkParseError] = useState("");
   const [bulkUploading, setBulkUploading] = useState(false);
   const [bulkResults, setBulkResults] = useState(null);
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetImporting, setSheetImporting] = useState(false);
 
   /* =====================================================
      AI PHOTO STUDIO STATE
@@ -1414,56 +1416,53 @@ function Admin() {
     URL.revokeObjectURL(url);
   }
 
-  function handleBulkFileChange(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  /*
+   * Shared CSV-row parser used by BOTH the "Choose CSV File" path
+   * (reads a File the admin picked) and the "Import from Google
+   * Sheet" path (reads text fetched from a published Google Sheet
+   * link via the server) - same column logic, same validation, same
+   * preview-table shape either way. Returns { error, rows }: error
+   * is a user-facing message (or null), rows is the parsed row list
+   * (empty when error is set).
+   */
+  function parseBulkCsvRows(csvText) {
+    const allRows = parseCsvText(String(csvText || ""));
+    if (allRows.length < 2) {
+      return { error: "This file has no product rows below the header row.", rows: [] };
+    }
 
-    setBulkResults(null);
-    setBulkParseError("");
-    setBulkFileName(file.name);
+    const headerRow = allRows[0];
+    const dataRows = allRows.slice(1);
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const allRows = parseCsvText(String(reader.result || ""));
-        if (allRows.length < 2) {
-          setBulkParseError("This file has no product rows below the header row.");
-          setBulkRows([]);
-          return;
-        }
+    const columnIndex = {
+      name: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.name),
+      category: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.category),
+      price: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.price),
+      oldPrice: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.oldPrice),
+      stock: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.stock),
+      description: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.description),
+      colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
+      images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
+      colorImages: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorImages),
+      supplierName: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierName),
+      supplierCost: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierCost),
+      marginPercent: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.marginPercent),
+      supplierProductId: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierProductId),
+      supplierLink: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierLink),
+      shippingTime: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.shippingTime),
+    };
 
-        const headerRow = allRows[0];
-        const dataRows = allRows.slice(1);
+    if (columnIndex.name === -1 || columnIndex.price === -1 || columnIndex.images === -1) {
+      return {
+        error:
+          "Couldn't find the required columns. Please use the downloaded template - it needs 'Product Name', 'Price' and 'Image URLs' columns.",
+        rows: [],
+      };
+    }
 
-        const columnIndex = {
-          name: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.name),
-          category: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.category),
-          price: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.price),
-          oldPrice: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.oldPrice),
-          stock: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.stock),
-          description: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.description),
-          colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
-          images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
-          colorImages: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorImages),
-          supplierName: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierName),
-          supplierCost: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierCost),
-          marginPercent: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.marginPercent),
-          supplierProductId: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierProductId),
-          supplierLink: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierLink),
-          shippingTime: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.shippingTime),
-        };
+    const cell = (row, index) => (index === -1 ? "" : String(row[index] ?? "").trim());
 
-        if (columnIndex.name === -1 || columnIndex.price === -1 || columnIndex.images === -1) {
-          setBulkParseError(
-            "Couldn't find the required columns. Please use the downloaded template - it needs 'Product Name', 'Price' and 'Image URLs' columns."
-          );
-          setBulkRows([]);
-          return;
-        }
-
-        const cell = (row, index) => (index === -1 ? "" : String(row[index] ?? "").trim());
-
-        const parsedRows = dataRows.map((row, index) => {
+    const parsedRows = dataRows.map((row, index) => {
           const name = cell(row, columnIndex.name);
           const priceRaw = cell(row, columnIndex.price);
           let price = Number(priceRaw);
@@ -1567,7 +1566,27 @@ function Admin() {
           };
         });
 
-        setBulkRows(parsedRows);
+    return { error: null, rows: parsedRows };
+  }
+
+  function handleBulkFileChange(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setBulkResults(null);
+    setBulkParseError("");
+    setBulkFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const { error, rows } = parseBulkCsvRows(String(reader.result || ""));
+        if (error) {
+          setBulkParseError(error);
+          setBulkRows([]);
+          return;
+        }
+        setBulkRows(rows);
       } catch (error) {
         console.error("BULK CSV PARSE ERROR:", error);
         setBulkParseError("Could not read this file. Please make sure it's a valid CSV file.");
@@ -1579,6 +1598,50 @@ function Admin() {
       setBulkRows([]);
     };
     reader.readAsText(file);
+  }
+
+  /*
+   * "Import from Google Sheet" - the admin pastes a sheet's
+   * "Publish to web" CSV link, the server fetches that link's raw
+   * CSV text (a browser fetch would normally be blocked by CORS),
+   * and it's parsed with the exact same column logic as a CSV file
+   * upload above. Re-clicking this after editing the sheet just
+   * re-fetches it fresh - no download/upload step needed.
+   */
+  async function importFromGoogleSheet() {
+    const url = sheetUrl.trim();
+    if (!url) {
+      setBulkParseError("Please paste your Google Sheet's published CSV link first.");
+      return;
+    }
+    setSheetImporting(true);
+    setBulkResults(null);
+    setBulkParseError("");
+    try {
+      const response = await adminFetch(`${API}/api/admin/fetch-sheet-csv`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+      const { error, rows } = parseBulkCsvRows(data.csv);
+      if (error) {
+        setBulkParseError(error);
+        setBulkRows([]);
+        return;
+      }
+      setBulkFileName("Imported from Google Sheet");
+      setBulkRows(rows);
+    } catch (error) {
+      console.error("GOOGLE SHEET IMPORT ERROR:", error);
+      setBulkParseError(error.message || "Could not import that Google Sheet.");
+      setBulkRows([]);
+    } finally {
+      setSheetImporting(false);
+    }
   }
 
   async function bulkUploadProducts() {
@@ -3045,6 +3108,27 @@ function Admin() {
         }
         .secondary-button:hover {
           background: #f4f5f7;
+        }
+        .sheet-import-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 10px;
+          margin-top: 14px;
+        }
+        .sheet-import-input {
+          flex: 1 1 320px;
+          min-width: 220px;
+          padding: 10px 12px;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          font-size: 13px;
+        }
+        .bulk-or-divider {
+          font-size: 12px;
+          color: #888;
+          text-align: center;
+          margin: 14px 0 0;
         }
         .bulk-upload-actions {
           display: flex;
@@ -4799,6 +4883,34 @@ function Admin() {
                 Cost" and "Margin %" calculates it for you automatically (cost plus that % on
                 top), just like the "Fill Price" button in the form above.
               </p>
+              <div className="sheet-import-row">
+                <input
+                  type="text"
+                  className="sheet-import-input"
+                  placeholder="Paste your Google Sheet's published CSV link here"
+                  value={sheetUrl}
+                  onChange={(event) => setSheetUrl(event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={importFromGoogleSheet}
+                  disabled={sheetImporting}
+                >
+                  {sheetImporting ? "Importing..." : "📥 Import from Google Sheet"}
+                </button>
+              </div>
+              <p className="form-hint">
+                To get this link: in your Google Sheet go to File → Share → Publish to web, choose
+                the sheet and "Comma-separated values (.csv)", click Publish, then copy the link
+                shown and paste it above. The sheet needs the exact same columns as the CSV
+                template below (download it once to see the column names). Every click on
+                "Import from Google Sheet" re-reads the sheet fresh - so update the sheet, click
+                this again, and the new rows show up below, no downloading or uploading a file
+                needed.
+              </p>
+              <p className="bulk-or-divider">— or upload a CSV file instead —</p>
+
               <div className="bulk-upload-actions">
                 <button type="button" className="secondary-button" onClick={downloadBulkTemplate}>
                   ⬇ Download CSV Template
