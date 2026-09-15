@@ -508,6 +508,8 @@ function Admin() {
   const [bulkResults, setBulkResults] = useState(null);
   const [sheetUrl, setSheetUrl] = useState("");
   const [sheetImporting, setSheetImporting] = useState(false);
+  const [quickAddText, setQuickAddText] = useState("");
+  const [quickAddParsing, setQuickAddParsing] = useState(false);
 
   /* =====================================================
      AI PHOTO STUDIO STATE
@@ -1641,6 +1643,109 @@ function Admin() {
       setBulkRows([]);
     } finally {
       setSheetImporting(false);
+    }
+  }
+
+  /*
+   * "Quick Add with AI" - the admin pastes raw, unformatted product
+   * details (name, price, colors, image links, description - however
+   * they have it, e.g. copied from WhatsApp) and the server asks
+   * Gemini to pull out the structured fields. The parsed row(s) are
+   * appended to the SAME bulkRows preview list used by the CSV file
+   * and Google Sheet paths above, so the admin reviews them in the
+   * exact same table (and gets the same duplicate-skip protection)
+   * before clicking "Upload" - nothing is added to the site directly
+   * from this step.
+   */
+  async function quickAddParseProducts() {
+    const text = quickAddText.trim();
+    if (!text) {
+      setBulkParseError("Please paste some product details first.");
+      return;
+    }
+    setQuickAddParsing(true);
+    setBulkResults(null);
+    setBulkParseError("");
+    try {
+      const response = await adminFetch(`${API}/api/admin/quick-add-parse`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data?.message || `Server error ${response.status}`);
+      }
+
+      const startRowNumber =
+        bulkRows.length > 0 ? Math.max(...bulkRows.map((row) => row.rowNumber)) + 1 : 1;
+
+      const newRows = (Array.isArray(data.products) ? data.products : []).map((product, index) => {
+        const name = String(product.name || "").trim();
+        const price = Number(product.price);
+        const colors = Array.isArray(product.colors)
+          ? product.colors.map((color) => String(color || "").trim()).filter(Boolean)
+          : [];
+        const looseImages = Array.isArray(product.images)
+          ? product.images.map((url) => String(url || "").trim()).filter(Boolean)
+          : [];
+
+        const colorImages = {};
+        if (product.colorImages && typeof product.colorImages === "object") {
+          Object.entries(product.colorImages).forEach(([color, urls]) => {
+            const list = (Array.isArray(urls) ? urls : [urls])
+              .map((url) => String(url || "").trim())
+              .filter(Boolean);
+            if (list.length === 0) return;
+            colorImages[color] = list;
+            if (!colors.some((c) => c.toLowerCase() === color.toLowerCase())) colors.push(color);
+          });
+        }
+
+        const images = looseImages.length > 0 ? looseImages : Object.values(colorImages).flat();
+
+        const errors = [];
+        if (!name) errors.push("Product name is missing.");
+        if (!Number.isFinite(price) || price <= 0) errors.push("A valid price is missing.");
+        if (images.length === 0) {
+          errors.push("No image link was found for this product in the text you pasted.");
+        }
+
+        return {
+          rowNumber: startRowNumber + index,
+          name,
+          category: String(product.category || "Bags").trim() || "Bags",
+          price,
+          oldPrice: Number.isFinite(Number(product.oldPrice)) ? Number(product.oldPrice) : 0,
+          stock: Number.isFinite(Number(product.stock)) ? Math.max(0, Math.floor(Number(product.stock))) : 0,
+          description: String(product.description || ""),
+          colors,
+          images,
+          colorImages,
+          supplierName: product.supplierName || "",
+          supplierCost: Number.isFinite(Number(product.supplierCost)) ? Number(product.supplierCost) : null,
+          supplierProductId: product.supplierProductId || "",
+          supplierLink: product.supplierLink || "",
+          shippingTime: product.shippingTime || "",
+          valid: errors.length === 0,
+          errors,
+          warnings: [],
+        };
+      });
+
+      if (newRows.length === 0) {
+        setBulkParseError("AI couldn't find any product details in that text. Please check it and try again.");
+        return;
+      }
+
+      setBulkFileName((previous) => previous || "Added via AI Quick Add");
+      setBulkRows((previous) => [...previous, ...newRows]);
+      setQuickAddText("");
+    } catch (error) {
+      console.error("QUICK ADD PARSE ERROR:", error);
+      setBulkParseError(error.message || "Could not parse that text.");
+    } finally {
+      setQuickAddParsing(false);
     }
   }
 
@@ -3108,6 +3213,29 @@ function Admin() {
         }
         .secondary-button:hover {
           background: #f4f5f7;
+        }
+        .quick-add-section {
+          margin-top: 14px;
+          padding: 14px;
+          border: 1px solid #e7ddc4;
+          border-radius: 10px;
+          background: #fbf8f0;
+        }
+        .quick-add-label {
+          font-size: 12px;
+          color: #555;
+          margin: 0 0 10px;
+          line-height: 1.6;
+        }
+        .quick-add-textarea {
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          resize: vertical;
+          box-sizing: border-box;
         }
         .sheet-import-row {
           display: flex;
@@ -4886,6 +5014,37 @@ function Admin() {
                 automatically skipped instead of being added again - so you can keep adding new
                 rows to the same sheet/file and re-import it anytime without creating duplicates.
               </p>
+
+              <div className="quick-add-section">
+                <p className="quick-add-label">
+                  ✨ Quick Add with AI - paste product details however you have them (name, price,
+                  colors, image links, description - copied from WhatsApp, a supplier list,
+                  anything) and AI will read it and add row(s) below for you to review. It only
+                  uses image links that are actually in your text - it never makes up a photo link.
+                </p>
+                <textarea
+                  className="quick-add-textarea"
+                  rows={5}
+                  placeholder={
+                    "Example:\nBrown Tote Bag, price 1499, colors Brown and Black\nBrown photo: https://...\nBlack photo: https://...\nSpacious everyday tote with adjustable strap."
+                  }
+                  value={quickAddText}
+                  onChange={(event) => setQuickAddText(event.target.value)}
+                />
+                <div className="bulk-upload-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={quickAddParseProducts}
+                    disabled={quickAddParsing}
+                  >
+                    {quickAddParsing ? "Reading..." : "✨ Add to Preview with AI"}
+                  </button>
+                </div>
+              </div>
+
+              <p className="bulk-or-divider">— or import from a Google Sheet —</p>
+
               <div className="sheet-import-row">
                 <input
                   type="text"
