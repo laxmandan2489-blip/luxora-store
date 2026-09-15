@@ -1409,6 +1409,34 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
     return res.status(400).json({ success: false, message: "Please upload 500 products or fewer at a time." });
   }
 
+  /*
+   * DUPLICATE PROTECTION
+   * A Google Sheet import (or a re-uploaded CSV) is normally run again
+   * and again as new rows get added below the old ones - without this,
+   * every earlier row would get inserted as a brand new product every
+   * single time. A row is treated as "already added" - and skipped
+   * rather than re-inserted - when either its Supplier Product ID
+   * matches an existing product's, or (when it has no Supplier Product
+   * ID) its name matches an existing product's name exactly
+   * (case-insensitive, ignoring extra spaces). Both sets also get
+   * updated as rows in THIS batch are added, so two duplicate rows
+   * pasted in the same sheet don't create two copies of each other.
+   */
+  const { data: existingProducts, error: existingError } = await supabase
+    .from("products")
+    .select("name, supplier_product_id");
+  if (existingError) console.error("BULK DUPLICATE CHECK ERROR:", existingError);
+  const seenNames = new Set(
+    (existingProducts || [])
+      .map((product) => String(product.name || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+  const seenSupplierIds = new Set(
+    (existingProducts || [])
+      .map((product) => String(product.supplier_product_id || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
   const results = [];
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index] || {};
@@ -1448,6 +1476,20 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
 
       if (images.length === 0) throw new Error("At least one image URL is required.");
 
+      const nameKey = name.toLowerCase();
+      const supplierIdKey = supplierProductId ? supplierProductId.toLowerCase() : null;
+      const isDuplicate = (supplierIdKey && seenSupplierIds.has(supplierIdKey)) || seenNames.has(nameKey);
+      if (isDuplicate) {
+        results.push({
+          row: rowNumber,
+          name,
+          success: false,
+          skipped: true,
+          message: "Already added earlier - skipped so it wouldn't be listed twice."
+        });
+        continue;
+      }
+
       // Offset by row index so a fast loop never produces duplicate
       // millisecond-timestamp IDs across rows in the same request.
       const productId = Date.now() + index;
@@ -1477,6 +1519,9 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
 
       if (error) throw error;
 
+      seenNames.add(nameKey);
+      if (supplierIdKey) seenSupplierIds.add(supplierIdKey);
+
       results.push({ row: rowNumber, name, success: true, product: formatProductAdmin(data) });
     } catch (error) {
       results.push({
@@ -1489,10 +1534,12 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
   }
 
   const addedCount = results.filter((result) => result.success).length;
+  const skippedCount = results.filter((result) => result.skipped).length;
   return res.json({
     success: true,
     addedCount,
-    failedCount: results.length - addedCount,
+    skippedCount,
+    failedCount: results.length - addedCount - skippedCount,
     results
   });
 });
