@@ -10,6 +10,21 @@ const nodemailer = require("nodemailer");
 const { createClient } = require("@supabase/supabase-js");
 const sharp = require("sharp");
 
+/*
+ * MEMORY SAFETY (small Render instances have very little RAM)
+ * sharp/libvips by default caches decoded image data in memory and can
+ * spin up one native worker thread per CPU core, both of which add up
+ * fast when several photo uploads are being compressed around the same
+ * time - exactly what got much more likely once uploads were sped up
+ * to run several at once. Turning the cache off and capping libvips to
+ * a couple of threads keeps peak memory well below a small instance's
+ * limit, at the cost of a little raw CPU throughput (not something a
+ * small server has much of anyway).
+ */
+sharp.cache(false);
+sharp.concurrency(2);
+
+
 dotenv.config();
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
@@ -648,7 +663,11 @@ async function mapWithConcurrencyLimit(items, limit, fn) {
   return results;
 }
 
-const IMAGE_UPLOAD_CONCURRENCY = 4;
+// Kept modest on purpose - each in-flight upload holds a full-size photo
+// buffer (up to 25MB) in memory while it's being compressed, so this is a
+// speed/memory trade-off, not just a speed knob. 2 is a safe default for
+// a small Render instance; still much faster than one at a time.
+const IMAGE_UPLOAD_CONCURRENCY = 2;
 
 async function deleteStorageImages(images) {
   const paths = uniqueImages(images).map(getStoragePathFromUrl).filter(Boolean);
@@ -1476,6 +1495,86 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
     failedCount: results.length - addedCount,
     results
   });
+});
+
+/*
+ * IMPORT FROM GOOGLE SHEET (published CSV link)
+ * Lets the admin paste a Google Sheet's "Publish to web" CSV link
+ * instead of downloading + re-uploading a .csv file every time they
+ * change the sheet. A browser fetch of that link would usually be
+ * blocked by CORS, so this route fetches the CSV text server-side
+ * and just hands it back - the admin panel then parses it with the
+ * exact same column logic as the "Bulk Upload" CSV file feature, so
+ * the sheet needs the same columns as the downloadable template.
+ */
+app.post("/api/admin/fetch-sheet-csv", requireAdmin, async function (req, res) {
+  const rawUrl = String((req.body || {}).url || "").trim();
+  if (!rawUrl) {
+    return res.status(400).json({ success: false, message: "Please paste a Google Sheet link." });
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(rawUrl);
+  } catch {
+    return res.status(400).json({ success: false, message: "That doesn't look like a valid link." });
+  }
+
+  if (parsedUrl.protocol !== "https:") {
+    return res.status(400).json({ success: false, message: "The link must start with https://." });
+  }
+  const allowedHosts = ["docs.google.com", "spreadsheets.google.com"];
+  if (!allowedHosts.includes(parsedUrl.hostname)) {
+    return res.status(400).json({
+      success: false,
+      message:
+        "This only accepts a Google Sheets link (docs.google.com). In your sheet use File > Share > Publish to web, choose 'Comma-separated values (.csv)', then paste that link here."
+    });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    let response;
+    try {
+      response = await fetch(parsedUrl.toString(), { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+      return res.status(400).json({
+        success: false,
+        message: `Google Sheets returned an error (${response.status}). Make sure the sheet is published to the web as CSV and the link is correct.`
+      });
+    }
+
+    const csvText = await response.text();
+    if (csvText.length > 5 * 1024 * 1024) {
+      return res.status(400).json({ success: false, message: "This sheet is too large to import (over 5MB)." });
+    }
+    // A "Publish to web" link that wasn't actually set to CSV output
+    // often still returns an HTML page (Google's normal viewer) with
+    // a 200 status - catch that here with a clear message instead of
+    // a confusing parse error later.
+    const trimmed = csvText.trim().toLowerCase();
+    if (trimmed.startsWith("<!doctype html") || trimmed.startsWith("<html")) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "That link returned a web page, not CSV data. In Google Sheets use File > Share > Publish to web, choose your sheet and 'Comma-separated values (.csv)', click Publish, then copy that link."
+      });
+    }
+
+    return res.json({ success: true, csv: csvText });
+  } catch (error) {
+    console.error("FETCH SHEET CSV ERROR:", error);
+    const message =
+      error.name === "AbortError"
+        ? "Google Sheets took too long to respond. Please try again."
+        : "Could not fetch that link. Please check it and try again.";
+    return res.status(500).json({ success: false, message });
+  }
 });
 
 /*
