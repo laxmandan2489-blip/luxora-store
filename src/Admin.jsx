@@ -4881,7 +4881,10 @@ function Admin() {
                 (never shown to customers) for tracking dropshipping details - same as the single
                 form's Supplier section above. If you leave "Price" blank, filling in "Supplier
                 Cost" and "Margin %" calculates it for you automatically (cost plus that % on
-                top), just like the "Fill Price" button in the form above.
+                top), just like the "Fill Price" button in the form above. Safe to re-run: if a
+                row's product name (or Supplier Product ID) already exists on the site, it's
+                automatically skipped instead of being added again - so you can keep adding new
+                rows to the same sheet/file and re-import it anytime without creating duplicates.
               </p>
               <div className="sheet-import-row">
                 <input
@@ -5006,11 +5009,13 @@ function Admin() {
                     <>
                       <p>
                         ✅ Added {bulkResults.addedCount} product{bulkResults.addedCount === 1 ? "" : "s"}
+                        {bulkResults.skippedCount > 0 &&
+                          `, ${bulkResults.skippedCount} already existed (skipped, not added again)`}
                         {bulkResults.failedCount > 0 &&
                           `, ${bulkResults.failedCount} failed (see reasons below)`}
                         .
                       </p>
-                      {bulkResults.failedCount > 0 && (
+                      {(bulkResults.failedCount > 0 || bulkResults.skippedCount > 0) && (
                         <ul className="bulk-fail-list">
                           {bulkResults.results
                             .filter((result) => !result.success)
