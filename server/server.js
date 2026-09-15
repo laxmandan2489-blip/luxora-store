@@ -1545,6 +1545,109 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
 });
 
 /*
+ * QUICK ADD WITH AI (parses pasted, unstructured product text)
+ * Lets the admin paste a raw, messy description of one or more
+ * products - copied from WhatsApp, a supplier catalog, anything -
+ * instead of typing a CSV row by hand. Gemini pulls out the
+ * structured fields (name, price, colors, image links, description,
+ * etc.). This route only EXTRACTS what is already in the text - it
+ * must never invent details, especially image links, that aren't
+ * actually present - and it never inserts a product itself; the
+ * parsed rows just get added to the same Bulk Upload preview table
+ * for the admin to review before clicking "Upload".
+ */
+app.post("/api/admin/quick-add-parse", requireAdmin, async function (req, res) {
+  const text = String((req.body || {}).text || "").trim();
+  if (!text) {
+    return res.status(400).json({ success: false, message: "Please paste some product details first." });
+  }
+  if (text.length > 20000) {
+    return res.status(400).json({
+      success: false,
+      message: "That's too much text for one go - please paste fewer products at a time."
+    });
+  }
+  if (!GEMINI_API_KEY) {
+    return res.status(400).json({
+      success: false,
+      message: "AI parsing isn't set up yet - add GEMINI_API_KEY in Render's environment variables and redeploy."
+    });
+  }
+
+  const prompt = `You extract structured product data from raw, messy text (copy-pasted from WhatsApp, a supplier catalog, or notes) for an e-commerce bags/accessories store.
+
+Read the text below and return a JSON array, one object per distinct product mentioned. Each object must have exactly these fields:
+- "name": string (product name/title)
+- "category": string (one of: Bags, Handbags, Sling Bags, Tote Bags, Backpacks, Laptop Bags, Travel Bags, Clutches, Wallets, Accessories - pick the closest match, default "Bags" if unclear)
+- "price": number (selling price; if only one price is mentioned, use it; if a supplier cost and a margin/markup percent are both mentioned, compute price = cost + that % of cost)
+- "oldPrice": number or null (a "before"/MRP/strike-through price if mentioned, else null)
+- "stock": number (quantity available; default 10 if not mentioned)
+- "description": string (a short description if mentioned, else "")
+- "colors": array of strings (color names mentioned)
+- "images": array of strings (any image URLs that are NOT tied to one specific color)
+- "colorImages": object mapping each color name to an array of its image URL(s) - ONLY include a color here if the text actually ties a URL to that color
+- "supplierName": string or null
+- "supplierProductId": string or null
+- "supplierLink": string or null
+- "supplierCost": number or null
+- "shippingTime": string or null
+
+CRITICAL RULES:
+- Only use image URLs that literally appear in the text. NEVER invent, guess, or complete a URL. If a product has no image URL in the text, "images" and "colorImages" must be empty.
+- Only report a color under "colorImages" if its URL is clearly stated in the text next to it - do not assume or guess which photo belongs to which color.
+- If nothing in the text indicates a field, use an empty string, empty array, or null as appropriate (never omit the key).
+- Return ONLY the JSON array, no markdown code fences, no commentary.
+
+TEXT:
+"""
+${text}
+"""`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => "");
+      console.error("QUICK ADD PARSE ERROR:", response.status, errText);
+      return res.status(500).json({ success: false, message: "AI couldn't process that text. Please try again." });
+    }
+
+    const data = await response.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      const match = rawText.match(/\[[\s\S]*\]/);
+      parsed = match ? JSON.parse(match[0]) : null;
+    }
+
+    if (!Array.isArray(parsed)) {
+      return res.status(500).json({
+        success: false,
+        message: "AI response wasn't in the expected format. Please try rephrasing and try again."
+      });
+    }
+
+    return res.json({ success: true, products: parsed });
+  } catch (error) {
+    console.error("QUICK ADD PARSE ERROR:", error);
+    return res.status(500).json({ success: false, message: "Could not reach the AI service. Please try again." });
+  }
+});
+
+/*
  * IMPORT FROM GOOGLE SHEET (published CSV link)
  * Lets the admin paste a Google Sheet's "Publish to web" CSV link
  * instead of downloading + re-uploading a .csv file every time they
