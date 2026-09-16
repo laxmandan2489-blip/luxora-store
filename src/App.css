@@ -2756,6 +2756,10 @@ a {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 1.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 /* =========================================================
@@ -4236,6 +4240,7 @@ a {
     min-height: 31px;
     padding: 0 14px;
     justify-content: center;
+    gap: 14px;
     font-size: 7px;
     letter-spacing: 1.2px;
   }

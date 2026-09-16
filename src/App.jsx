@@ -4,6 +4,70 @@ import "./App.css";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
 
 /*
+ * LUX ICON SET
+ * Header/menu icons (search, track order, wishlist, shopping bag) used
+ * to mix plain text glyphs (⌕ ♥) with full-colour emoji (📦 🛍). Text
+ * glyphs pick up the site's text color, but emoji render in their own
+ * fixed OS colours no matter what CSS says - so on the header row two
+ * icons looked like the elegant cream/gold/black brand and two looked
+ * like generic colourful clip-art. This is one small line-art icon set
+ * (single stroke, no fill by default) so every icon in the header and
+ * mobile menu shares the exact same premium look.
+ */
+function LuxIcon({ name, size = 18, filled = false, style }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    style: { verticalAlign: "-4px", flexShrink: 0, ...style },
+    "aria-hidden": true,
+  };
+
+  if (name === "search") {
+    return (
+      <svg {...common}>
+        <circle cx="11" cy="11" r="7.5" />
+        <line x1="21" y1="21" x2="16.2" y2="16.2" />
+      </svg>
+    );
+  }
+
+  if (name === "box") {
+    return (
+      <svg {...common}>
+        <path d="M21 7.5 12 3 3 7.5v9L12 21l9-4.5v-9Z" />
+        <path d="M3 7.5 12 12l9-4.5" />
+        <path d="M12 12v9" />
+      </svg>
+    );
+  }
+
+  if (name === "heart") {
+    return (
+      <svg {...common} fill={filled ? "currentColor" : "none"}>
+        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78Z" />
+      </svg>
+    );
+  }
+
+  if (name === "bag") {
+    return (
+      <svg {...common}>
+        <path d="M6 8h12l1 12H5L6 8Z" />
+        <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      </svg>
+    );
+  }
+
+  return null;
+}
+
+/*
  * CATEGORY URL SLUGS
  * Turns a category name like "Ladies Bags" into a URL-safe
  * slug like "ladies-bags", so every category gets its own
@@ -1765,7 +1829,7 @@ function App() {
 
           <div className="lux-header-actions">
             <button type="button" onClick={() => setSearchOpen(!searchOpen)} aria-label="Search">
-              ⌕
+              <LuxIcon name="search" />
             </button>
 
             <button
@@ -1775,7 +1839,7 @@ function App() {
               aria-label="Track order"
               title="Track your order"
             >
-              📦
+              <LuxIcon name="box" />
             </button>
 
             <button
@@ -1784,7 +1848,8 @@ function App() {
               className={`lux-wishlist-icon${wishlist.length > 0 ? " has-items" : ""}`}
               aria-label="Wishlist"
             >
-              ♥{wishlist.length > 0 && <span>{wishlist.length}</span>}
+              <LuxIcon name="heart" filled={wishlist.length > 0} />
+              {wishlist.length > 0 && <span>{wishlist.length}</span>}
             </button>
 
             <button
@@ -1793,7 +1858,8 @@ function App() {
               className="lux-cart-icon"
               aria-label="Shopping bag"
             >
-              🛍{totalItems > 0 && <span>{totalItems}</span>}
+              <LuxIcon name="bag" />
+              {totalItems > 0 && <span>{totalItems}</span>}
             </button>
           </div>
         </div>
@@ -3158,7 +3224,7 @@ function App() {
                   navigate("/track-order");
                 }}
               >
-                📦 TRACK ORDER
+                <LuxIcon name="box" size={16} /> TRACK ORDER
               </button>
 
               <button
@@ -3169,7 +3235,8 @@ function App() {
                   document.body.style.overflow = "hidden";
                 }}
               >
-                ♡ WISHLIST{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
+                <LuxIcon name="heart" size={16} filled={wishlist.length > 0} /> WISHLIST
+                {wishlist.length > 0 ? ` (${wishlist.length})` : ""}
               </button>
 
               <button
@@ -3180,7 +3247,8 @@ function App() {
                   document.body.style.overflow = "hidden";
                 }}
               >
-                🛍 SHOPPING BAG{totalItems > 0 ? ` (${totalItems})` : ""}
+                <LuxIcon name="bag" size={16} /> SHOPPING BAG
+                {totalItems > 0 ? ` (${totalItems})` : ""}
               </button>
             </div>
           </aside>
