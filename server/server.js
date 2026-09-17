@@ -496,6 +496,25 @@ function normalizeColors(colors) {
 }
 
 /*
+ * GENERIC STRING LIST NORMALIZER
+ * Same shape as normalizeColors (array, or a delimited string, ->
+ * trimmed non-empty strings) but used for Key Features / Trust
+ * Signals, which come in as a JS array from the admin form, a
+ * "|"-separated string from a CSV cell, or a newline-separated
+ * string from the AI Quick Add textarea - all three are accepted.
+ */
+function normalizeStringList(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") {
+    return value
+      .split(/[|\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/*
  * COLOR -> PHOTO GALLERY MAP
  * { "Black": ["https://.../black-1.jpg", "https://.../black-2.jpg"], "Tan": [...] }
  * Each color maps to an ARRAY of photo URLs (a full mini-gallery for
@@ -690,6 +709,11 @@ function formatProduct(product) {
     description: product.description || "",
     colors: normalizeColors(product.colors),
     colorImages: normalizeColorImages(product.color_images),
+    keyFeatures: normalizeStringList(product.key_features),
+    dimensions: product.dimensions || "",
+    materials: product.materials || "",
+    careInstructions: product.care_instructions || "",
+    trustSignals: normalizeStringList(product.trust_signals),
     images,
     image: mainImage,
     createdAt: product.created_at || product.createdAt || null,
@@ -1277,6 +1301,11 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     const stock = Math.max(0, Math.floor(safeNumber(body.stock)));
     const description = String(body.description || "");
     const colors = normalizeColors(body.colors);
+    const keyFeatures = normalizeStringList(body.keyFeatures);
+    const dimensions = String(body.dimensions || "").trim();
+    const materials = String(body.materials || "").trim();
+    const careInstructions = String(body.careInstructions || "").trim();
+    const trustSignals = normalizeStringList(body.trustSignals);
 
     /*
      * Dropshipping / supplier fields. ADMIN-ONLY - these are
@@ -1368,6 +1397,11 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
         colors,
         images: uniqueImages(galleryImageUrls),
         color_images: colorImages,
+        key_features: keyFeatures,
+        dimensions,
+        materials,
+        care_instructions: careInstructions,
+        trust_signals: trustSignals,
         active: true,
         supplier_name: supplierName,
         supplier_product_id: supplierProductId,
@@ -1457,6 +1491,11 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
       // (built client-side from the CSV's "Color Images" column) - same shape the
       // single-add form already sends, so the same normalizer applies here.
       const colorImages = normalizeColorImages(row.colorImages);
+      const keyFeatures = normalizeStringList(row.keyFeatures);
+      const dimensions = String(row.dimensions || "").trim();
+      const materials = String(row.materials || "").trim();
+      const careInstructions = String(row.careInstructions || "").trim();
+      const trustSignals = normalizeStringList(row.trustSignals);
 
       // Supplier/dropshipping fields - admin-only, mirrors the
       // single-add route below. A blank cell stores null, same as
@@ -1507,6 +1546,11 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
           colors,
           images,
           color_images: colorImages,
+          key_features: keyFeatures,
+          dimensions,
+          materials,
+          care_instructions: careInstructions,
+          trust_signals: trustSignals,
           active: true,
           supplier_name: supplierName,
           supplier_product_id: supplierProductId,
@@ -1582,10 +1626,15 @@ Read the text below and return a JSON array, one object per distinct product men
 - "price": number (selling price; if only one price is mentioned, use it; if a supplier cost and a margin/markup percent are both mentioned, compute price = cost + that % of cost)
 - "oldPrice": number or null (a "before"/MRP/strike-through price if mentioned, else null)
 - "stock": number (quantity available; default 10 if not mentioned)
-- "description": string (a short description if mentioned, else "")
+- "description": string (an opening/mood line plus a 2-4 sentence description, combined into one flowing paragraph if both are present, else just whatever description text is given, else "")
 - "colors": array of strings (color names mentioned)
 - "images": array of strings (any image URLs that are NOT tied to one specific color)
 - "colorImages": object mapping each color name to an array of its image URL(s) - ONLY include a color here if the text actually ties a URL to that color
+- "keyFeatures": array of strings (one short phrase per bullet/feature mentioned, e.g. under a "Key Features" heading; empty array if none)
+- "dimensions": string (measurements as given, e.g. "Width 12in · Height 9in · Depth 4.5in"; else "")
+- "materials": string (materials/composition as given, e.g. "Vegan leather (PU) exterior · Polyester lining"; else "")
+- "careInstructions": string (care instructions as given; else "")
+- "trustSignals": array of strings (short trust/warranty/return/certification lines, e.g. "100% Vegan & Cruelty-Free", "7-Day Easy Returns"; empty array if none)
 - "supplierName": string or null
 - "supplierProductId": string or null
 - "supplierLink": string or null
@@ -1928,6 +1977,14 @@ async function updateProduct(req, res) {
     if (body.description !== undefined) updateData.description = String(body.description);
 
     if (body.colors !== undefined) updateData.colors = normalizeColors(body.colors);
+
+    if (body.keyFeatures !== undefined) updateData.key_features = normalizeStringList(body.keyFeatures);
+    if (body.dimensions !== undefined) updateData.dimensions = String(body.dimensions).trim();
+    if (body.materials !== undefined) updateData.materials = String(body.materials).trim();
+    if (body.careInstructions !== undefined) {
+      updateData.care_instructions = String(body.careInstructions).trim();
+    }
+    if (body.trustSignals !== undefined) updateData.trust_signals = normalizeStringList(body.trustSignals);
 
     if (body.active !== undefined) {
       if (typeof body.active === "string") {
