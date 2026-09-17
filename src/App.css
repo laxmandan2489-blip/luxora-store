@@ -2507,6 +2507,50 @@ a {
   font-size: 9px;
 }
 
+.lux-key-features {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.lux-key-features li {
+  position: relative;
+  padding-left: 16px;
+  margin-bottom: 8px;
+  color: #7d6c4f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.lux-key-features li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 5px;
+  height: 5px;
+  background: #96772a;
+  border-radius: 50%;
+}
+
+.lux-trust-signals {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lux-trust-badge {
+  padding: 6px 12px;
+  background: #ece2c9;
+  color: #5a4a26;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  border-radius: 20px;
+  border: 1px solid #d9c99a;
+}
+
 /* =========================================================
    PRODUCT DETAIL REVIEWS
 ========================================================= */

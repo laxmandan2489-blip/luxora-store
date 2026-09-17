@@ -2668,6 +2668,16 @@ function App() {
                 </button>
               </div>
 
+              {Array.isArray(selectedProduct.trustSignals) && selectedProduct.trustSignals.length > 0 && (
+                <div className="lux-trust-signals">
+                  {selectedProduct.trustSignals.map((signal, index) => (
+                    <span className="lux-trust-badge" key={index}>
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               <div className="lux-service-list">
                 <div className="lux-service-item">
                   <span>01</span>
@@ -2707,6 +2717,14 @@ function App() {
                         "A refined SHRIMOH piece designed for everyday elegance."}
                     </p>
 
+                    {Array.isArray(selectedProduct.keyFeatures) && selectedProduct.keyFeatures.length > 0 && (
+                      <ul className="lux-key-features">
+                        {selectedProduct.keyFeatures.map((feature, index) => (
+                          <li key={index}>{feature}</li>
+                        ))}
+                      </ul>
+                    )}
+
                     <div className="lux-specs">
                       <div>
                         <span>Category</span>
@@ -2722,6 +2740,20 @@ function App() {
                         <span>Product ID</span>
                         <strong>#{selectedProduct.id}</strong>
                       </div>
+
+                      {selectedProduct.dimensions && (
+                        <div>
+                          <span>Dimensions</span>
+                          <strong>{selectedProduct.dimensions}</strong>
+                        </div>
+                      )}
+
+                      {selectedProduct.materials && (
+                        <div>
+                          <span>Materials</span>
+                          <strong>{selectedProduct.materials}</strong>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </details>
@@ -2746,8 +2778,8 @@ function App() {
 
                   <div className="lux-details-content">
                     <p>
-                      Keep your product away from moisture and direct sunlight. Clean gently using
-                      a soft cloth.
+                      {selectedProduct.careInstructions ||
+                        "Keep your product away from moisture and direct sunlight. Clean gently using a soft cloth."}
                     </p>
                   </div>
                 </details>

@@ -42,6 +42,11 @@ const BULK_TEMPLATE_HEADERS = [
   "Colors",
   "Image URLs",
   "Color Images",
+  "Key Features",
+  "Dimensions",
+  "Materials",
+  "Care Instructions",
+  "Trust Signals",
   "Supplier Name",
   "Supplier Cost",
   "Margin %",
@@ -65,6 +70,16 @@ const BULK_COLUMN_ALIASES = {
   // convention as multi-value cells elsewhere), "=" pairs a color name
   // to its photos, and "," separates multiple photos for that color.
   colorImages: ["color images", "colorimages", "color photos", "photo per color"],
+  // Rich product-detail fields shown on the product page (Key Features
+  // as bullet list, Dimensions/Materials as single lines, Care
+  // Instructions as its own guide text, Trust Signals as short badges).
+  // Key Features and Trust Signals accept multiple lines in one cell,
+  // "|"-separated (same convention as Colors/Images above).
+  keyFeatures: ["key features", "features", "keyfeatures"],
+  dimensions: ["dimensions", "size", "dimension"],
+  materials: ["materials", "material"],
+  careInstructions: ["care instructions", "care", "care guide"],
+  trustSignals: ["trust signals", "trustsignals", "trust badges"],
   // Supplier/dropshipping fields - admin-only, never shown to
   // customers, same as the single "Add Product" form's own section.
   supplierName: ["supplier name"],
@@ -487,6 +502,16 @@ function Admin() {
     useState("");
   const [description, setDescription] =
     useState("");
+  const [keyFeatures, setKeyFeatures] =
+    useState("");
+  const [dimensions, setDimensions] =
+    useState("");
+  const [materials, setMaterials] =
+    useState("");
+  const [careInstructions, setCareInstructions] =
+    useState("");
+  const [trustSignals, setTrustSignals] =
+    useState("");
   const [colors, setColors] =
     useState("Black");
   const [colorImageFiles, setColorImageFiles] =
@@ -574,6 +599,16 @@ function Admin() {
   const [editStock, setEditStock] =
     useState("");
   const [editDescription, setEditDescription] =
+    useState("");
+  const [editKeyFeatures, setEditKeyFeatures] =
+    useState("");
+  const [editDimensions, setEditDimensions] =
+    useState("");
+  const [editMaterials, setEditMaterials] =
+    useState("");
+  const [editCareInstructions, setEditCareInstructions] =
+    useState("");
+  const [editTrustSignals, setEditTrustSignals] =
     useState("");
   const [editColors, setEditColors] =
     useState("");
@@ -1289,6 +1324,11 @@ function Admin() {
         "colors",
         colors
       );
+      formData.append("keyFeatures", keyFeatures);
+      formData.append("dimensions", dimensions);
+      formData.append("materials", materials);
+      formData.append("careInstructions", careInstructions);
+      formData.append("trustSignals", trustSignals);
       formData.append("supplierName", supplierName);
       formData.append("supplierProductId", supplierProductId);
       formData.append("supplierLink", supplierLink);
@@ -1336,6 +1376,11 @@ function Admin() {
       setOldPrice("");
       setStock("");
       setDescription("");
+      setKeyFeatures("");
+      setDimensions("");
+      setMaterials("");
+      setCareInstructions("");
+      setTrustSignals("");
       setColors("Black");
       setColorImageFiles({});
       setImages([]);
@@ -1379,6 +1424,11 @@ function Admin() {
         "Tan|Black",
         "https://example.com/image1.jpg|https://example.com/image2.jpg",
         "Tan=https://example.com/tan-photo1.jpg,https://example.com/tan-photo2.jpg|Black=https://example.com/black-photo.jpg",
+        "Genuine top-grain leather|Adjustable & detachable strap|Fits a 14-inch laptop|Reinforced stitched handles",
+        "32cm (W) x 28cm (H) x 12cm (D)",
+        "Top-grain genuine leather, brass-tone hardware",
+        "Wipe with a soft dry cloth. Avoid water & direct sunlight. Store in the dust bag when not in use.",
+        "100% Genuine Leather|7-Day Easy Returns|1-Year Warranty",
         "",
         "",
         "",
@@ -1396,6 +1446,11 @@ function Admin() {
         "Black",
         "https://example.com/image3.jpg",
         "",
+        "Lightweight & water-resistant canvas|Adjustable sling strap|Zippered main compartment",
+        "24cm (W) x 20cm (H) x 8cm (D)",
+        "Durable canvas fabric, matte gold hardware",
+        "Spot clean with a damp cloth. Do not machine wash.",
+        "7-Day Easy Returns",
         "AliExpress Seller XYZ",
         "800",
         "40",
@@ -1446,6 +1501,11 @@ function Admin() {
       colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
       images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
       colorImages: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorImages),
+      keyFeatures: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.keyFeatures),
+      dimensions: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.dimensions),
+      materials: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.materials),
+      careInstructions: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.careInstructions),
+      trustSignals: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.trustSignals),
       supplierName: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierName),
       supplierCost: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.supplierCost),
       marginPercent: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.marginPercent),
@@ -1485,6 +1545,17 @@ function Admin() {
           const colors = cell(row, columnIndex.colors)
             .split("|")
             .map((color) => color.trim())
+            .filter(Boolean);
+          const dimensions = cell(row, columnIndex.dimensions);
+          const materials = cell(row, columnIndex.materials);
+          const careInstructions = cell(row, columnIndex.careInstructions);
+          const keyFeatures = cell(row, columnIndex.keyFeatures)
+            .split("|")
+            .map((line) => line.trim())
+            .filter(Boolean);
+          const trustSignals = cell(row, columnIndex.trustSignals)
+            .split("|")
+            .map((line) => line.trim())
             .filter(Boolean);
 
           // "Color Images" cell format: "Black=<url1>,<url2>|Brown=<url1>"
@@ -1557,6 +1628,11 @@ function Admin() {
             colors,
             images,
             colorImages,
+            keyFeatures,
+            dimensions,
+            materials,
+            careInstructions,
+            trustSignals,
             supplierName,
             supplierCost,
             supplierProductId,
@@ -1722,6 +1798,15 @@ function Admin() {
           colors,
           images,
           colorImages,
+          keyFeatures: Array.isArray(product.keyFeatures)
+            ? product.keyFeatures.map((item) => String(item || "").trim()).filter(Boolean)
+            : [],
+          dimensions: String(product.dimensions || "").trim(),
+          materials: String(product.materials || "").trim(),
+          careInstructions: String(product.careInstructions || "").trim(),
+          trustSignals: Array.isArray(product.trustSignals)
+            ? product.trustSignals.map((item) => String(item || "").trim()).filter(Boolean)
+            : [],
           supplierName: product.supplierName || "",
           supplierCost: Number.isFinite(Number(product.supplierCost)) ? Number(product.supplierCost) : null,
           supplierProductId: product.supplierProductId || "",
@@ -1772,6 +1857,11 @@ function Admin() {
             colors: row.colors,
             images: row.images,
             colorImages: row.colorImages,
+            keyFeatures: row.keyFeatures,
+            dimensions: row.dimensions,
+            materials: row.materials,
+            careInstructions: row.careInstructions,
+            trustSignals: row.trustSignals,
             supplierName: row.supplierName,
             supplierCost: row.supplierCost,
             supplierProductId: row.supplierProductId,
@@ -2001,6 +2091,15 @@ function Admin() {
     setEditDescription(
       product?.description || ""
     );
+    setEditKeyFeatures(
+      Array.isArray(product?.keyFeatures) ? product.keyFeatures.join("\n") : ""
+    );
+    setEditDimensions(product?.dimensions || "");
+    setEditMaterials(product?.materials || "");
+    setEditCareInstructions(product?.careInstructions || "");
+    setEditTrustSignals(
+      Array.isArray(product?.trustSignals) ? product.trustSignals.join("\n") : ""
+    );
     setEditColors(
       Array.isArray(product?.colors)
         ? product.colors.join(", ")
@@ -2149,6 +2248,11 @@ function Admin() {
         "colors",
         editColors
       );
+      formData.append("keyFeatures", editKeyFeatures);
+      formData.append("dimensions", editDimensions);
+      formData.append("materials", editMaterials);
+      formData.append("careInstructions", editCareInstructions);
+      formData.append("trustSignals", editTrustSignals);
       formData.append("supplierName", editSupplierName);
       formData.append("supplierProductId", editSupplierProductId);
       formData.append("supplierLink", editSupplierLink);
@@ -4679,6 +4783,60 @@ function Admin() {
 
                   <div className="form-group full">
                     <label className="form-label">
+                      ✨ Product Detail Page Content (shown to customers on the product page)
+                    </label>
+                  </div>
+                  <div className="form-group full">
+                    <label className="form-label">Key Features (one per line)</label>
+                    <textarea
+                      className="form-textarea"
+                      rows="4"
+                      value={keyFeatures}
+                      onChange={(event) => setKeyFeatures(event.target.value)}
+                      placeholder={"Genuine top-grain leather\nAdjustable & detachable strap\nFits a 14-inch laptop"}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Dimensions</label>
+                    <input
+                      className="form-input"
+                      value={dimensions}
+                      onChange={(event) => setDimensions(event.target.value)}
+                      placeholder="e.g. 32cm (W) x 28cm (H) x 12cm (D)"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Materials</label>
+                    <input
+                      className="form-input"
+                      value={materials}
+                      onChange={(event) => setMaterials(event.target.value)}
+                      placeholder="e.g. Top-grain genuine leather, brass-tone hardware"
+                    />
+                  </div>
+                  <div className="form-group full">
+                    <label className="form-label">Care Instructions</label>
+                    <textarea
+                      className="form-textarea"
+                      rows="3"
+                      value={careInstructions}
+                      onChange={(event) => setCareInstructions(event.target.value)}
+                      placeholder="Wipe with a soft dry cloth. Avoid water & direct sunlight."
+                    />
+                  </div>
+                  <div className="form-group full">
+                    <label className="form-label">Trust Signals (one per line, e.g. warranty/returns)</label>
+                    <textarea
+                      className="form-textarea"
+                      rows="3"
+                      value={trustSignals}
+                      onChange={(event) => setTrustSignals(event.target.value)}
+                      placeholder={"100% Genuine Leather\n7-Day Easy Returns\n1-Year Warranty"}
+                    />
+                  </div>
+
+                  <div className="form-group full">
+                    <label className="form-label">
                       🔒 Supplier / Dropshipping Info (internal only - never shown to customers)
                     </label>
                   </div>
@@ -5895,6 +6053,60 @@ function Admin() {
                         event.target.value
                       )
                     }
+                  />
+                </div>
+
+                <div className="form-group full">
+                  <label className="form-label">
+                    ✨ Product Detail Page Content (shown to customers on the product page)
+                  </label>
+                </div>
+                <div className="form-group full">
+                  <label className="form-label">Key Features (one per line)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows="4"
+                    value={editKeyFeatures}
+                    onChange={(event) => setEditKeyFeatures(event.target.value)}
+                    placeholder={"Genuine top-grain leather\nAdjustable & detachable strap\nFits a 14-inch laptop"}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Dimensions</label>
+                  <input
+                    className="form-input"
+                    value={editDimensions}
+                    onChange={(event) => setEditDimensions(event.target.value)}
+                    placeholder="e.g. 32cm (W) x 28cm (H) x 12cm (D)"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Materials</label>
+                  <input
+                    className="form-input"
+                    value={editMaterials}
+                    onChange={(event) => setEditMaterials(event.target.value)}
+                    placeholder="e.g. Top-grain genuine leather, brass-tone hardware"
+                  />
+                </div>
+                <div className="form-group full">
+                  <label className="form-label">Care Instructions</label>
+                  <textarea
+                    className="form-textarea"
+                    rows="3"
+                    value={editCareInstructions}
+                    onChange={(event) => setEditCareInstructions(event.target.value)}
+                    placeholder="Wipe with a soft dry cloth. Avoid water & direct sunlight."
+                  />
+                </div>
+                <div className="form-group full">
+                  <label className="form-label">Trust Signals (one per line)</label>
+                  <textarea
+                    className="form-textarea"
+                    rows="3"
+                    value={editTrustSignals}
+                    onChange={(event) => setEditTrustSignals(event.target.value)}
+                    placeholder={"100% Genuine Leather\n7-Day Easy Returns\n1-Year Warranty"}
                   />
                 </div>
 
