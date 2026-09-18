@@ -1649,6 +1649,7 @@ Read the text below and return a JSON array, one object per distinct product men
 CRITICAL RULES:
 - Only use image URLs that literally appear in the text. NEVER invent, guess, or complete a URL. If a product has no image URL in the text, "images" and "colorImages" must be empty.
 - Only report a color under "colorImages" if its URL is clearly stated in the text next to it - do not assume or guess which photo belongs to which color.
+- If the text has a line starting with "Color Images:" (or very close to it) in the exact format "ColorA=url1,url2|ColorB=url1,url2" - parse this line MECHANICALLY, character by character, like a machine, not by "understanding" the product: split the line on "|" to get one segment per color; for each segment, split on the FIRST "=" only - everything before it is that segment's color name (use it verbatim, do not rename/reorder/normalize it), everything after it is that color's own url list, split on ",". NEVER let one color's URLs end up under a different color's key, and NEVER change the order colors appear in. This is the single most common and most costly mistake to make - re-check your own colorImages object against this line before finalizing your answer.
 - If nothing in the text indicates a field, use an empty string, empty array, or null as appropriate (never omit the key).
 - Return ONLY the JSON array, no markdown code fences, no commentary.
 
