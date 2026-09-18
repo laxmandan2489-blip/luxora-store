@@ -2330,7 +2330,7 @@ function Admin() {
     }
     const confirmed =
       window.confirm(
-        `Delete "${product.name}"?\n\nThis product will be removed from the store.`
+        `Delete "${product.name}"?\n\nThis PERMANENTLY erases the product and its uploaded photos - this cannot be undone. (If it has past orders, it'll be hidden instead so that order history stays intact.)`
       );
     if (!confirmed) {
       return;
@@ -2368,7 +2368,7 @@ function Admin() {
           )
       );
       alert(
-        "Product successfully deleted."
+        data?.message || "Product successfully deleted."
       );
     } catch (error) {
       console.error(

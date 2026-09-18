@@ -1902,7 +1902,7 @@ function App() {
                         }}
                       >
                         <span className="lux-search-suggestion-image">
-                          {image ? <img src={image} alt={product.name} /> : null}
+                          {image ? <img src={image} alt={product.name} loading="lazy" decoding="async" /> : null}
                         </span>
                         <span className="lux-search-suggestion-info">
                           <strong>{product.name}</strong>
@@ -2073,7 +2073,7 @@ function App() {
                 >
                   <div className="lux-card-image">
                     {image ? (
-                      <img src={image} alt={product.name} loading="lazy" />
+                      <img src={image} alt={product.name} loading="lazy" decoding="async" />
                     ) : (
                       <div className="lux-card-placeholder">SHRIMOH</div>
                     )}
@@ -2143,7 +2143,7 @@ function App() {
                 >
                   <div className="lux-card-image">
                     {image ? (
-                      <img src={image} alt={product.name} loading="lazy" />
+                      <img src={image} alt={product.name} loading="lazy" decoding="async" />
                     ) : (
                       <div className="lux-card-placeholder">SHRIMOH</div>
                     )}
@@ -2279,6 +2279,7 @@ function App() {
                       src={image}
                       alt={product.name}
                       loading={index < 4 ? "eager" : "lazy"}
+                      decoding="async"
                     />
                   ) : (
                     <div className="lux-card-placeholder">SHRIMOH</div>
@@ -2481,6 +2482,7 @@ function App() {
                             src={selectedImage}
                             alt={selectedProduct.name}
                             draggable="false"
+                            decoding="async"
                             onError={(e) => {
                               e.currentTarget.style.opacity = "0.25";
                             }}
@@ -2815,7 +2817,7 @@ function App() {
                       >
                         <div className="lux-card-image">
                           {image ? (
-                            <img src={image} alt={product.name} loading="lazy" />
+                            <img src={image} alt={product.name} loading="lazy" decoding="async" />
                           ) : (
                             <div className="lux-card-placeholder">SHRIMOH</div>
                           )}
