@@ -1695,6 +1695,53 @@ ${text}
       });
     }
 
+    /*
+     * DETERMINISTIC OVERRIDE FOR "Color Images:" LINES
+     * Gemini has shown a real, repeatable failure mode here: given a line
+     * like "Color Images: Black=url1,url2|Tan=url1,url2", it can scramble
+     * which URLs it assigns to which color when building the colorImages
+     * JSON - a mistake plain string-splitting code never makes (the CSV
+     * upload path uses the exact same split-on-"|"-then-first-"=" logic
+     * and has never shown this problem). So for the common case of a
+     * SINGLE product with a SINGLE "Color Images:" line in the pasted
+     * text, don't trust the AI's colorImages at all - parse that line
+     * ourselves and use it instead, letting the AI only handle the
+     * fields that are genuinely free text (name, description, etc).
+     * With multiple products/lines in one paste, this 1:1 mapping isn't
+     * safe to assume, so it's left to the AI (with the stricter prompt
+     * instructions above) in that case.
+     */
+    const colorImagesLineMatches = [...text.matchAll(/color images\s*:\s*(.+)/gi)];
+    if (parsed.length === 1 && colorImagesLineMatches.length === 1) {
+      const deterministicColorImages = {};
+      colorImagesLineMatches[0][1]
+        .split("|")
+        .map((pair) => pair.trim())
+        .filter(Boolean)
+        .forEach((pair) => {
+          const eqIndex = pair.indexOf("=");
+          if (eqIndex === -1) return;
+          const color = pair.slice(0, eqIndex).trim();
+          const urls = pair.slice(eqIndex + 1).split(",").map((url) => url.trim()).filter(Boolean);
+          if (color && urls.length) deterministicColorImages[color] = urls;
+        });
+
+      if (Object.keys(deterministicColorImages).length > 0) {
+        parsed[0].colorImages = deterministicColorImages;
+        // Make sure every color named in the deterministic map is also
+        // listed in "colors" (AI-extracted plain color names are reliable,
+        // this just guards against it missing one).
+        const existingColors = new Set(
+          (Array.isArray(parsed[0].colors) ? parsed[0].colors : []).map((c) => String(c).toLowerCase())
+        );
+        for (const color of Object.keys(deterministicColorImages)) {
+          if (!existingColors.has(color.toLowerCase())) {
+            parsed[0].colors = [...(Array.isArray(parsed[0].colors) ? parsed[0].colors : []), color];
+          }
+        }
+      }
+    }
+
     return res.json({ success: true, products: parsed });
   } catch (error) {
     console.error("QUICK ADD PARSE ERROR:", error);
