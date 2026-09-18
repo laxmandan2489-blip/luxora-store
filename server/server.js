@@ -1659,22 +1659,44 @@ ${text}
 """`;
 
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
-        })
-      }
-    );
+    /*
+     * Gemini's free-tier models occasionally return 503 UNAVAILABLE
+     * ("This model is currently experiencing high demand") or 429 rate
+     * limit errors - both are Google-side, temporary, and usually clear
+     * up within a few seconds. Retry a few times with a short growing
+     * delay before giving up, instead of failing on the first blip.
+     */
+    let response;
+    let lastErrText = "";
+    const RETRYABLE_STATUSES = [503, 429];
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.1, responseMimeType: "application/json" }
+          })
+        }
+      );
+      if (response.ok) break;
+
+      lastErrText = await response.text().catch(() => "");
+      console.error("QUICK ADD PARSE ERROR:", response.status, lastErrText);
+
+      const shouldRetry = RETRYABLE_STATUSES.includes(response.status) && attempt < MAX_ATTEMPTS;
+      if (!shouldRetry) break;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
 
     if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("QUICK ADD PARSE ERROR:", response.status, errText);
-      return res.status(500).json({ success: false, message: "AI couldn't process that text. Please try again." });
+      const message = RETRYABLE_STATUSES.includes(response.status)
+        ? "Google's AI service is overloaded right now (this is on Google's side, not your site) - please wait a minute and try again."
+        : "AI couldn't process that text. Please try again.";
+      return res.status(500).json({ success: false, message });
     }
 
     const data = await response.json();
