@@ -1456,9 +1456,14 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
    * updated as rows in THIS batch are added, so two duplicate rows
    * pasted in the same sheet don't create two copies of each other.
    */
+  // Only ACTIVE products should block a re-add by name/supplier ID - a
+  // soft-deleted (active: false) product must never permanently "reserve"
+  // its name, or re-adding it after deleting it would silently get
+  // skipped as a false duplicate forever.
   const { data: existingProducts, error: existingError } = await supabase
     .from("products")
-    .select("name, supplier_product_id");
+    .select("name, supplier_product_id")
+    .eq("active", true);
   if (existingError) console.error("BULK DUPLICATE CHECK ERROR:", existingError);
   const seenNames = new Set(
     (existingProducts || [])
@@ -2109,13 +2114,49 @@ app.delete("/api/products/:id", requireAdmin, async function (req, res) {
     if (productError) throw productError;
     if (!product) return res.status(404).json({ success: false, message: "Product not found." });
 
-    const { error } = await supabase
-      .from("products")
-      .update({ active: false, updated_at: new Date().toISOString() })
-      .eq("id", id);
-    if (error) throw error;
+    /*
+     * PERMANENT DELETE - the admin explicitly asked for this instead of
+     * the old soft-delete (which kept the row forever with active:false,
+     * silently reserving its name and wasting storage). This removes the
+     * row for good, plus any of its photos that were actually uploaded
+     * to Supabase Storage (deleteStorageImages harmlessly ignores any
+     * external URLs, like imgbb links pasted via CSV/Quick Add, since
+     * those were never stored here in the first place).
+     */
+    const colorImageUrls = product.color_images && typeof product.color_images === "object"
+      ? Object.values(product.color_images).flat()
+      : [];
+    const allImages = uniqueImages([...normalizeImages(product.images), ...colorImageUrls]);
 
-    return res.json({ success: true, message: "Product deleted successfully." });
+    const { error } = await supabase.from("products").delete().eq("id", id);
+
+    if (error) {
+      // Postgres foreign-key violation (23503): this product is referenced
+      // by past orders (order_items.product_id), so the database won't
+      // allow a hard delete - that history has to stay intact. Fall back
+      // to hiding it instead (same as the old behaviour) rather than
+      // failing outright, and say why so it's not confusing.
+      if (error.code === "23503") {
+        const { error: hideError } = await supabase
+          .from("products")
+          .update({ active: false, updated_at: new Date().toISOString() })
+          .eq("id", id);
+        if (hideError) throw hideError;
+        return res.json({
+          success: true,
+          message: "This product has past orders, so it can't be fully erased without losing that order history - it's been hidden from the store instead."
+        });
+      }
+      throw error;
+    }
+
+    // Only clean up Storage photos once the row itself is actually gone -
+    // deleteStorageImages harmlessly ignores any external URLs (like
+    // imgbb links pasted via CSV/Quick Add), since those were never
+    // stored here in the first place.
+    if (allImages.length) await deleteStorageImages(allImages);
+
+    return res.json({ success: true, message: "Product permanently deleted." });
   } catch (error) {
     console.error("DELETE PRODUCT ERROR:", error);
     return res.status(500).json({ success: false, message: error.message || "Unable to delete product." });
