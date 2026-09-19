@@ -419,18 +419,62 @@ const INFO_PAGES = {
   },
 };
 
+/*
+ * IMAGE SPEED FIX
+ * Product photos (especially Gemini-generated ones) often arrive as
+ * huge, uncompressed multi-MB PNGs from an external host (imgbb) - that
+ * raw file size, not anything in our own code, is what makes the site
+ * feel slow/"dhire dhire khulti hai". Instead of asking every future
+ * photo to be manually compressed before upload, every externally-hosted
+ * photo is routed through images.weserv.nl (a free, public image proxy/
+ * CDN) which resizes it to a sensible max width and re-encodes it as
+ * WebP on the fly - typically shrinking a 2-4MB PNG down to well under
+ * 200KB with no visible quality loss, and its own CDN caches the result
+ * so repeat visits are instant. This needs no new backend dependency and
+ * applies automatically to every photo already in the database, past and
+ * future - nothing else has to change.
+ */
 function getImageUrl(image) {
   if (!image) return "";
 
-  if (
-    image.startsWith("http://") ||
-    image.startsWith("https://") ||
-    image.startsWith("data:")
-  ) {
+  if (image.startsWith("data:")) {
     return image;
   }
 
+  if (image.startsWith("http://") || image.startsWith("https://")) {
+    const withoutProtocol = image.replace(/^https?:\/\//, "");
+    return `https://images.weserv.nl/?url=${encodeURIComponent(withoutProtocol)}&w=1000&q=78&output=webp`;
+  }
+
   return `${API}${image.startsWith("/") ? "" : "/"}${image}`;
+}
+
+/*
+ * If the weserv.nl compression proxy above ever fails to fetch/serve a
+ * photo (rare, but it's a third-party service), fall back to the
+ * original un-compressed URL once before giving up and dimming the
+ * image - so a proxy hiccup never means a customer sees a broken photo.
+ */
+function handleImageFallback(event) {
+  const img = event.currentTarget;
+  if (img.dataset.fallbackApplied) {
+    img.style.opacity = "0.25";
+    return;
+  }
+  img.dataset.fallbackApplied = "1";
+  try {
+    const url = new URL(img.src);
+    if (url.hostname === "images.weserv.nl") {
+      const original = url.searchParams.get("url");
+      if (original) {
+        img.src = original.startsWith("http") ? original : `https://${original}`;
+        return;
+      }
+    }
+  } catch {
+    /* fall through to dimming below */
+  }
+  img.style.opacity = "0.25";
 }
 
 function normalizeProduct(product) {
@@ -2483,9 +2527,7 @@ function App() {
                             alt={selectedProduct.name}
                             draggable="false"
                             decoding="async"
-                            onError={(e) => {
-                              e.currentTarget.style.opacity = "0.25";
-                            }}
+                            onError={handleImageFallback}
                           />
                         </div>
 
