@@ -554,6 +554,35 @@ function normalizeColorImages(raw) {
   return result;
 }
 
+/*
+ * PER-COLOR DISPLAY NAME
+ * Lets a color variant show its own name (e.g. "Ira Structured
+ * Handbag - Noir" for Black) instead of the plain product name -
+ * without needing a whole separate product record for it. Same
+ * shape/parsing pattern as normalizeColorImages, but each color maps
+ * to a single trimmed string instead of an array of URLs.
+ */
+function normalizeColorNames(raw) {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+
+  const result = {};
+  for (const key of Object.keys(parsed)) {
+    const color = String(key).trim();
+    if (!color) continue;
+    const name = String(parsed[key] || "").trim();
+    if (name) result[color] = name;
+  }
+  return result;
+}
+
 function normalizeImages(images) {
   if (Array.isArray(images)) return uniqueImages(images);
   if (typeof images === "string" && images.trim()) {
@@ -709,6 +738,7 @@ function formatProduct(product) {
     description: product.description || "",
     colors: normalizeColors(product.colors),
     colorImages: normalizeColorImages(product.color_images),
+    colorNames: normalizeColorNames(product.color_names),
     keyFeatures: normalizeStringList(product.key_features),
     dimensions: product.dimensions || "",
     materials: product.materials || "",
@@ -963,13 +993,28 @@ async function calculateCart(items, couponCode) {
       selectedColor = match;
     }
 
+    // If this color has its own display name (set in Admin), use that
+    // for the order instead of the base product name - this is how an
+    // order can be identified by name (e.g. "Ira Noir" vs "Ira Sand")
+    // without needing two separate product listings.
+    const colorNames = normalizeColorNames(product.color_names);
+    const displayName =
+      (selectedColor && colorNames[selectedColor]) || product.name;
+
+    // Likewise, use that color's own photo for the order record when
+    // one is set, so the order/email/admin view shows the right photo
+    // for what was actually ordered.
+    const colorImagesForOrder = normalizeColorImages(product.color_images);
+    const colorImageList = selectedColor ? colorImagesForOrder[selectedColor] || [] : [];
+    const orderImage = colorImageList[0] || images[0] || "";
+
     cartItems.push({
       productId: product.id,
-      name: product.name,
+      name: displayName,
       price,
       quantity: requestedItem.quantity,
       selectedColor,
-      image: images[0] || "",
+      image: orderImage,
       lineTotal
     });
   }
@@ -1350,6 +1395,7 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
     uploadedUrls.push(...galleryUploadedUrls);
 
     const colorImages = normalizeColorImages(body.colorImages);
+    const colorNames = normalizeColorNames(body.colorNames);
     // Multiple files can arrive under the same "colorImage__<Color>" fieldname
     // (one color can have several photos) - group them first so every photo
     // for a color lands in that color's array instead of overwriting the last.
@@ -1397,6 +1443,7 @@ app.post("/api/products", requireAdmin, upload.any(), async function (req, res) 
         colors,
         images: uniqueImages(galleryImageUrls),
         color_images: colorImages,
+        color_names: colorNames,
         key_features: keyFeatures,
         dimensions,
         materials,
@@ -1496,6 +1543,10 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
       // (built client-side from the CSV's "Color Images" column) - same shape the
       // single-add form already sends, so the same normalizer applies here.
       const colorImages = normalizeColorImages(row.colorImages);
+      // row.colorNames arrives as { "Black": "Ira Noir", "Tan": "Ira Sand" } -
+      // built client-side from the CSV's "Color Names" column, same shape the
+      // single-add form sends, so the same normalizer applies here.
+      const colorNames = normalizeColorNames(row.colorNames);
       const keyFeatures = normalizeStringList(row.keyFeatures);
       const dimensions = String(row.dimensions || "").trim();
       const materials = String(row.materials || "").trim();
@@ -1551,6 +1602,7 @@ app.post("/api/products/bulk", requireAdmin, async function (req, res) {
           colors,
           images,
           color_images: colorImages,
+          color_names: colorNames,
           key_features: keyFeatures,
           dimensions,
           materials,
@@ -2142,6 +2194,13 @@ async function updateProduct(req, res) {
         colorImages[color] = uniqueImages([...(colorImages[color] || []), ...newUrlsByColor[color]]);
       }
       updateData.color_images = colorImages;
+    }
+
+    if (body.colorNames !== undefined) {
+      // Full replace (like color_images above) - the admin form always
+      // sends every color's current name, blank or not, so this is how
+      // a name gets cleared, not just how one gets added/changed.
+      updateData.color_names = normalizeColorNames(body.colorNames);
     }
 
     updateData.updated_at = new Date().toISOString();
