@@ -1144,10 +1144,22 @@ function App() {
      PRODUCT SLIDER
   ========================================================= */
 
+  /*
+   * BUG FIX: these two used to read getProductImages() - the full,
+   * every-color-combined photo list - instead of getDisplayImages()
+   * for the color currently selected. That's what caused the "wrong
+   * color's photo" bug: clicking the gallery arrows/dots advanced
+   * through ALL colors' photos together (e.g. index 7 of 11), so once
+   * you clicked past a color's own last photo, selectedImage silently
+   * became a photo of a completely different color while the "COLOR:"
+   * label still correctly said the one you had selected - the label
+   * and the photo were being driven by two different arrays. Both now
+   * use the same color-filtered array the label/swatches already use.
+   */
   function selectProductImage(index) {
     if (!selectedProduct) return;
 
-    const images = getProductImages(selectedProduct);
+    const images = getDisplayImages(selectedProduct, detailColor);
 
     if (!images.length) return;
 
@@ -1160,7 +1172,7 @@ function App() {
   function changeProductImage(direction) {
     if (!selectedProduct) return;
 
-    const images = getProductImages(selectedProduct);
+    const images = getDisplayImages(selectedProduct, detailColor);
 
     if (images.length <= 1) return;
 
@@ -2623,11 +2635,6 @@ function App() {
                   <span className="lux-option-label">
                     COLOR{detailColor ? `: ${detailColor}` : ""}
                   </span>
-
-                  {/* TEMP DEBUG - remove once the color-photo issue is confirmed fixed */}
-                  <div style={{ fontSize: 11, color: "red", wordBreak: "break-all", margin: "4px 0", fontFamily: "monospace" }}>
-                    DEBUG detailColor="{detailColor}" | colorImages keys={JSON.stringify(Object.keys(selectedProduct.colorImages || {}))} | selectedImage={selectedImage}
-                  </div>
 
                   <div className="lux-color-swatches">
                     {selectedProduct.colors.map((color) => {
