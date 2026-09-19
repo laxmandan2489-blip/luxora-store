@@ -1066,6 +1066,17 @@ function App() {
     return Array.from(new Set(colorPhotos.map(getImageUrl).filter(Boolean)));
   }
 
+  // A color variant can have its own display name (set in Admin), so
+  // the product page can show "Ira Noir" for Black and "Ira Sand" for
+  // Tan while everything else on the page (price, description, other
+  // colors' swatches, etc.) stays exactly the same as the base product.
+  // Falls back to the product's normal name when that color has none.
+  function getDisplayName(product, color) {
+    if (!product) return "";
+    const override = color && product.colorNames ? product.colorNames[color] : null;
+    return (override && String(override).trim()) || product.name;
+  }
+
   /*
    * "YOU MAY ALSO LIKE" - shown at the bottom of the product detail
    * view so customers keep browsing instead of leaving after one
@@ -1373,6 +1384,11 @@ function App() {
         ...previousCart,
         {
           ...product,
+          // Cart/checkout/order-email should show that color's own
+          // name when it has one (e.g. "Ira Noir" for Black), same as
+          // the product page already shows - so the customer and the
+          // order both reflect what was actually picked.
+          name: getDisplayName(product, safeColor),
           selectedColor: safeColor,
           quantity: Math.min(safeQuantity, stock || 99),
         },
@@ -1427,6 +1443,7 @@ function App() {
 
     setDirectBuyItem({
       ...selectedProduct,
+      name: getDisplayName(selectedProduct, detailColor || ""),
       selectedColor: detailColor || "",
       quantity,
     });
@@ -2536,7 +2553,7 @@ function App() {
                           <img
                             key={selectedImage}
                             src={selectedImage}
-                            alt={selectedProduct.name}
+                            alt={getDisplayName(selectedProduct, detailColor)}
                             draggable="false"
                             decoding="async"
                             onError={handleImageFallback}
@@ -2603,7 +2620,9 @@ function App() {
                 {selectedProduct.category || "SHRIMOH COLLECTION"}
               </div>
 
-              <h1 className="lux-product-title">{selectedProduct.name}</h1>
+              <h1 className="lux-product-title">
+                {getDisplayName(selectedProduct, detailColor)}
+              </h1>
 
               <div className="lux-price-row">
                 <span className="lux-current-price">

@@ -42,6 +42,7 @@ const BULK_TEMPLATE_HEADERS = [
   "Colors",
   "Image URLs",
   "Color Images",
+  "Color Names",
   "Key Features",
   "Dimensions",
   "Materials",
@@ -70,6 +71,12 @@ const BULK_COLUMN_ALIASES = {
   // convention as multi-value cells elsewhere), "=" pairs a color name
   // to its photos, and "," separates multiple photos for that color.
   colorImages: ["color images", "colorimages", "color photos", "photo per color"],
+  // Optional: a different product name per color (e.g. so choosing
+  // "Black" shows "Ira Noir" instead of the base product name). Format
+  // per cell: "Black=Ira Noir|Tan=Ira Sand" - "|" separates colors, "="
+  // pairs a color name to its display name (same convention as Color
+  // Images above). A color left out just uses the normal product name.
+  colorNames: ["color names", "colornames", "variant names", "variant name"],
   // Rich product-detail fields shown on the product page (Key Features
   // as bullet list, Dimensions/Materials as single lines, Care
   // Instructions as its own guide text, Trust Signals as short badges).
@@ -427,6 +434,19 @@ function getItemPrice(item) {
   );
 }
 
+/*
+ * Which color variant was ordered - so the admin can tell "Ira
+ * Structured Handbag - Black" apart from "...- Tan" on an incoming
+ * order without needing separate products/names for each color.
+ */
+function getItemColor(item) {
+  return (
+    item?.selectedColor ||
+    item?.color ||
+    ""
+  );
+}
+
 function Admin() {
   const [activeTab, setActiveTab] =
     useState("orders");
@@ -515,6 +535,10 @@ function Admin() {
   const [colors, setColors] =
     useState("Black");
   const [colorImageFiles, setColorImageFiles] =
+    useState({});
+  // Per-color display name override, e.g. { Black: "Ira Noir", Tan: "Ira Sand" }.
+  // Optional - a color left blank just shows the product's normal name.
+  const [colorNames, setColorNames] =
     useState({});
   const [images, setImages] =
     useState([]);
@@ -618,6 +642,10 @@ function Admin() {
   // edited - the admin can remove individual ones here; whatever's left
   // is kept, and any newly chosen files above get added on top of it.
   const [editExistingColorImages, setEditExistingColorImages] =
+    useState({});
+  // Per-color display name override for the product being edited, e.g.
+  // { Black: "Ira Noir" }. Blank for a color just keeps the normal name.
+  const [editColorNames, setEditColorNames] =
     useState({});
   const [editImages, setEditImages] =
     useState([]);
@@ -1268,6 +1296,16 @@ function Admin() {
     }));
   }
 
+  // Sets (or clears) one color's display-name override for the Add
+  // Product form. Leaving it blank means that color just uses the
+  // product's normal name.
+  function setColorNameFor(color, name) {
+    setColorNames((previous) => ({
+      ...previous,
+      [color]: name,
+    }));
+  }
+
   /* =====================================================
      ADD PRODUCT
      ===================================================== */
@@ -1345,6 +1383,14 @@ function Admin() {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
         });
       });
+      // Only send display-name overrides for colors that actually have
+      // one typed in - a blank just means "use the product's normal name".
+      const colorNamesToSend = {};
+      parseColorList(colors).forEach((color) => {
+        const value = (colorNames[color] || "").trim();
+        if (value) colorNamesToSend[color] = value;
+      });
+      formData.append("colorNames", JSON.stringify(colorNamesToSend));
       const response =
         await adminFetch(
           `${API}/api/products`,
@@ -1383,6 +1429,7 @@ function Admin() {
       setTrustSignals("");
       setColors("Black");
       setColorImageFiles({});
+      setColorNames({});
       setImages([]);
       setSupplierName("");
       setSupplierProductId("");
@@ -1501,6 +1548,7 @@ function Admin() {
       colors: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colors),
       images: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.images),
       colorImages: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorImages),
+      colorNames: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.colorNames),
       keyFeatures: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.keyFeatures),
       dimensions: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.dimensions),
       materials: findBulkColumnIndex(headerRow, BULK_COLUMN_ALIASES.materials),
@@ -1588,6 +1636,30 @@ function Admin() {
               }
             });
 
+          // "Color Names" cell format: "Black=Ira Noir|Tan=Ira Sand" - a
+          // different product name shown for that color's variant, same
+          // "|"/"=" convention as Color Images above. A color left out of
+          // this cell just uses the normal product name.
+          const colorNames = {};
+          cell(row, columnIndex.colorNames)
+            .split("|")
+            .map((pair) => pair.trim())
+            .filter(Boolean)
+            .forEach((pair) => {
+              const equalsIndex = pair.indexOf("=");
+              if (equalsIndex === -1) {
+                warnings.push(`"${pair}" in Color Names is missing "=" between the color name and its display name.`);
+                return;
+              }
+              const colorName = pair.slice(0, equalsIndex).trim();
+              const displayName = pair.slice(equalsIndex + 1).trim();
+              if (!colorName || !displayName) return;
+              colorNames[colorName] = displayName;
+              if (!colors.some((c) => c.toLowerCase() === colorName.toLowerCase())) {
+                warnings.push(`"${colorName}" in Color Names doesn't match any color in the Colors column.`);
+              }
+            });
+
           // If Price is left blank but Supplier Cost + Margin % are
           // both given, fill it in automatically - same formula as
           // the single "Add Product" form's "Fill Price" button
@@ -1628,6 +1700,7 @@ function Admin() {
             colors,
             images,
             colorImages,
+            colorNames,
             keyFeatures,
             dimensions,
             materials,
@@ -1857,6 +1930,7 @@ function Admin() {
             colors: row.colors,
             images: row.images,
             colorImages: row.colorImages,
+            colorNames: row.colorNames,
             keyFeatures: row.keyFeatures,
             dimensions: row.dimensions,
             materials: row.materials,
@@ -2116,6 +2190,7 @@ function Admin() {
       }
       return normalized;
     });
+    setEditColorNames({ ...(product?.colorNames || {}) });
     setEditSupplierName(product?.supplierName || "");
     setEditSupplierProductId(product?.supplierProductId || "");
     setEditSupplierLink(product?.supplierLink || "");
@@ -2202,6 +2277,16 @@ function Admin() {
     }));
   }
 
+  // Sets (or clears) one color's display-name override in the Edit
+  // Product form. Leaving it blank means that color just uses the
+  // product's normal name.
+  function setEditColorNameFor(color, name) {
+    setEditColorNames((previous) => ({
+      ...previous,
+      [color]: name,
+    }));
+  }
+
   async function updateProduct(event) {
     event.preventDefault();
     if (!editingProduct?.id) {
@@ -2273,6 +2358,14 @@ function Admin() {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
         });
       });
+      // Only send display-name overrides for colors that actually have
+      // one typed in - a blank just means "use the product's normal name".
+      const editColorNamesToSend = {};
+      parseColorList(editColors).forEach((color) => {
+        const value = (editColorNames[color] || "").trim();
+        if (value) editColorNamesToSend[color] = value;
+      });
+      formData.append("colorNames", JSON.stringify(editColorNamesToSend));
       const response =
         await adminFetch(
           `${API}/api/products/${editingProduct.id}`,
@@ -3065,6 +3158,11 @@ function Admin() {
           border-radius: 30px;
           font-size: 11px;
           font-weight: 800;
+        }
+        .item-color-tag {
+          margin-top: 3px;
+          font-size: 11px;
+          color: #96772a;
         }
         .status-received {
           background: #fff3cd;
@@ -4188,6 +4286,17 @@ function Admin() {
                               </td>
                               <td>
                                 {items.length}
+                                {(() => {
+                                  const colors = items
+                                    .map((item) => getItemColor(item))
+                                    .filter(Boolean);
+                                  if (colors.length === 0) return null;
+                                  return (
+                                    <div className="item-color-tag">
+                                      {colors.join(", ")}
+                                    </div>
+                                  );
+                                })()}
                               </td>
                               <td>
                                 <strong>
@@ -4695,7 +4804,11 @@ function Admin() {
                         Upload one or more photos of the bag in each color - customers
                         will see these photos when they click that color on the
                         product page. Leave any color blank to just show the main
-                        photos above for it.
+                        photos above for it. You can also give a color its own
+                        product name below (e.g. "Ira Noir" for Black) - customers
+                        will see that name instead when they pick that color, and
+                        orders for it will show that name so you know which one sold.
+                        Leave it blank to keep the normal product name.
                       </p>
                       <div className="color-photo-grid">
                         {parseColorList(colors).map((color) => {
@@ -4703,6 +4816,16 @@ function Admin() {
                           return (
                             <div className="color-photo-slot" key={color}>
                               <span className="color-photo-name">{color}</span>
+                              <input
+                                type="text"
+                                className="form-input"
+                                placeholder={`Variant name for ${color} (optional)`}
+                                value={colorNames[color] || ""}
+                                onChange={(event) =>
+                                  setColorNameFor(color, event.target.value)
+                                }
+                                style={{ marginBottom: "8px" }}
+                              />
                               <input
                                 type="file"
                                 accept="image/*"
@@ -5162,7 +5285,11 @@ function Admin() {
                 one or more photos show for each color - format each cell as
                 "Black=&lt;link1&gt;,&lt;link2&gt;|Brown=&lt;link1&gt;" (color name, then "=",
                 then that color's photo link(s) separated by commas if there's more than one;
-                "|" between colors). "Supplier Name", "Supplier Cost", "Supplier
+                "|" between colors). The optional "Color Names" column lets one color show a
+                different product name than the others (so an order can be identified by name) -
+                format each cell as "Black=Ira Noir|Tan=Ira Sand" (color name, then "=", then the
+                name to show for it; "|" between colors) - a color left out just keeps the normal
+                product name. "Supplier Name", "Supplier Cost", "Supplier
                 Product ID", "Supplier Link" and "Shipping Time" are optional, admin-only fields
                 (never shown to customers) for tracking dropshipping details - same as the single
                 form's Supplier section above. If you leave "Price" blank, filling in "Supplier
@@ -5776,6 +5903,11 @@ function Admin() {
                               {getItemName(
                                 item
                               )}
+                              {getItemColor(item) && (
+                                <div className="item-color-tag">
+                                  Color: <strong>{getItemColor(item)}</strong>
+                                </div>
+                              )}
                             </td>
                             <td>
                               {quantity}
@@ -5947,6 +6079,11 @@ function Admin() {
                       photo with its ✕, and/or add new ones below - customers see
                       these when they click that color on the product page.
                       Colors with no photo just show the main photos above.
+                      You can also give a color its own product name (e.g.
+                      "Ira Noir" for Black) - customers see that name when
+                      they pick that color, and orders for it will show that
+                      name so you know which one sold. Leave it blank to keep
+                      the normal product name.
                     </p>
                     <div className="color-photo-grid">
                       {parseColorList(editColors).map((color) => {
@@ -5955,6 +6092,16 @@ function Admin() {
                         return (
                           <div className="color-photo-slot" key={color}>
                             <span className="color-photo-name">{color}</span>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder={`Variant name for ${color} (optional)`}
+                              value={editColorNames[color] || ""}
+                              onChange={(event) =>
+                                setEditColorNameFor(color, event.target.value)
+                              }
+                              style={{ marginBottom: "8px" }}
+                            />
                             <input
                               type="file"
                               accept="image/*"
