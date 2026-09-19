@@ -2728,6 +2728,7 @@ function App() {
                 <div className="lux-trust-signals">
                   {selectedProduct.trustSignals.map((signal, index) => (
                     <span className="lux-trust-badge" key={index}>
+                      <span className="lux-trust-badge-tick">✓</span>
                       {signal}
                     </span>
                   ))}

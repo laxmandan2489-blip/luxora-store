@@ -2276,23 +2276,24 @@ a {
 }
 
 .lux-color-swatch {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 2px solid #e7ddc4;
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  border: 1.5px solid #e7ddc4;
   padding: 0;
   cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background-color: #f6f1e5;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
   transition: border-color 0.15s ease, transform 0.15s ease;
 }
 
 .lux-color-swatch:hover {
-  transform: scale(1.08);
+  transform: translateY(-2px);
 }
 
 .lux-color-swatch.active {
-  border-color: #332a1c;
-  box-shadow: 0 0 0 2px #fbf7ee, 0 0 0 3px #332a1c;
+  border-color: #1a1a1a;
+  border-width: 2px;
 }
 
 .lux-color-swatch.has-photo {
@@ -2541,6 +2542,9 @@ a {
 }
 
 .lux-trust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 6px 12px;
   background: #ece2c9;
   color: #5a4a26;
@@ -2549,6 +2553,20 @@ a {
   letter-spacing: 0.6px;
   border-radius: 20px;
   border: 1px solid #d9c99a;
+}
+
+.lux-trust-badge-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #96772a;
+  color: #fbf7ee;
+  font-size: 8px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 /* =========================================================
