@@ -2624,6 +2624,11 @@ function App() {
                     COLOR{detailColor ? `: ${detailColor}` : ""}
                   </span>
 
+                  {/* TEMP DEBUG - remove once the color-photo issue is confirmed fixed */}
+                  <div style={{ fontSize: 11, color: "red", wordBreak: "break-all", margin: "4px 0", fontFamily: "monospace" }}>
+                    DEBUG detailColor="{detailColor}" | colorImages keys={JSON.stringify(Object.keys(selectedProduct.colorImages || {}))} | selectedImage={selectedImage}
+                  </div>
+
                   <div className="lux-color-swatches">
                     {selectedProduct.colors.map((color) => {
                       const colorPhotos = selectedProduct.colorImages?.[color];
