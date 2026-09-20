@@ -3134,7 +3134,14 @@ function App() {
               <>
                 <div className="lux-cart-items">
                   {cart.map((item, index) => {
-                    const image = getProductImages(item)[0];
+                    // BUG FIX (2026-09-20): this used to always show the
+                    // FIRST photo across every color (getProductImages),
+                    // so a Tan item's cart thumbnail could show Black's
+                    // photo while the "Color: Tan" text right next to it
+                    // was correct - same class of bug as the earlier
+                    // gallery color-swap fix. Now uses that item's own
+                    // selected color's photo, same as the product page.
+                    const image = getDisplayImages(item, item.selectedColor)[0];
 
                     return (
                       <div className="lux-cart-item" key={`${item.id}-${index}`}>
@@ -3620,7 +3627,10 @@ function App() {
 
                     <div className="lux-summary-products">
                       {checkoutItems.map((item, index) => {
-                        const image = getProductImages(item)[0];
+                        // Same color-aware fix as the cart drawer above -
+                        // show this item's own selected color's photo,
+                        // not always the first color's photo.
+                        const image = getDisplayImages(item, item.selectedColor)[0];
 
                         return (
                           <div className="lux-summary-item" key={`${item.id}-${index}`}>
