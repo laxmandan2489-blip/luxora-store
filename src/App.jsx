@@ -556,6 +556,89 @@ function App() {
   const [sortBy, setSortBy] = useState("featured");
 
   /*
+   * LISTING FILTERS (price range + color) - shown on the shop/category
+   * grid, inspired by miramoss.com's collection-page sidebar. Empty
+   * values/array mean "no filter applied".
+   */
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [colorFilter, setColorFilter] = useState([]);
+
+  function toggleColorFilter(color) {
+    setColorFilter((previous) =>
+      previous.includes(color) ? previous.filter((c) => c !== color) : [...previous, color]
+    );
+  }
+
+  function clearListingFilters() {
+    setPriceMin("");
+    setPriceMax("");
+    setColorFilter([]);
+  }
+
+  const listingFilterCount =
+    (priceMin !== "" ? 1 : 0) + (priceMax !== "" ? 1 : 0) + colorFilter.length;
+
+  /*
+   * PER-CARD COLOR PICKER (product grid)
+   * Lets a customer pick a color right on the grid card, same as
+   * miramoss.com's listing cards - the card's photo/name switch to
+   * that color without opening the full product page. Keyed by
+   * product id since many cards render at once. Falls back to that
+   * product's first color when nothing's been picked yet.
+   */
+  const [cardColorSelection, setCardColorSelection] = useState({});
+
+  function getCardColor(product) {
+    const colors = Array.isArray(product?.colors) ? product.colors : [];
+    const chosen = cardColorSelection[product?.id];
+    if (chosen) {
+      const match = colors.find((c) => c.toLowerCase() === chosen.toLowerCase());
+      if (match) return match;
+    }
+    return colors[0] || "";
+  }
+
+  function setCardColor(product, color, event) {
+    if (event) event.stopPropagation();
+    setCardColorSelection((previous) => ({ ...previous, [product.id]: color }));
+  }
+
+  /*
+   * QUICK VIEW MODAL (main shop grid only)
+   * A lightweight preview popup - photo, name, price, color swatches,
+   * Add to Cart - so a customer can decide without leaving the grid,
+   * same idea as miramoss.com's "Quick View". "View full details"
+   * inside it still goes to the real /product/:id page for everything
+   * else (description, gallery, trust badges, etc).
+   */
+  const [quickViewProduct, setQuickViewProduct] = useState(null);
+  const [quickViewColor, setQuickViewColor] = useState("");
+  const [quickViewQuantity, setQuickViewQuantity] = useState(1);
+
+  function openQuickView(product, event) {
+    if (event) event.stopPropagation();
+    if (!product) return;
+    setQuickViewProduct(product);
+    setQuickViewColor(getCardColor(product));
+    setQuickViewQuantity(1);
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeQuickView() {
+    setQuickViewProduct(null);
+    document.body.style.overflow = "";
+  }
+
+  function addToCartFromQuickView() {
+    if (!quickViewProduct) return;
+    addToCart(quickViewProduct, quickViewQuantity, quickViewColor);
+    setCartOpen(true);
+    closeQuickView();
+  }
+
+  /*
    * MOBILE NAV
    * The "☰" button in the header only makes sense on mobile
    * (where the full category nav is hidden by CSS). It opens
@@ -987,7 +1070,13 @@ function App() {
      FILTER PRODUCTS
   ========================================================= */
 
-  const filteredProducts = useMemo(() => {
+  /*
+   * Category + search only (no price/color yet) - this is what the
+   * COLOR FILTER CHECKBOXES are built from, so the list of colors on
+   * offer reflects the category/search you're browsing, but doesn't
+   * shrink away as you tick color checkboxes on top of it.
+   */
+  const categorySearchProducts = useMemo(() => {
     return products.filter((product) => {
       const categoryMatch =
         selectedCategory === "All" ||
@@ -1002,6 +1091,41 @@ function App() {
       return categoryMatch && searchMatch;
     });
   }, [products, selectedCategory, searchText]);
+
+  /*
+   * LISTING FILTERS - price range + color, applied on top of the
+   * category/search match above. Inspired by miramoss.com's collection
+   * sidebar (price slider + color swatches).
+   */
+  const availableFilterColors = useMemo(() => {
+    const seen = new Map();
+    categorySearchProducts.forEach((product) => {
+      (Array.isArray(product.colors) ? product.colors : []).forEach((color) => {
+        const key = color.toLowerCase();
+        if (!seen.has(key)) seen.set(key, color);
+      });
+    });
+    return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
+  }, [categorySearchProducts]);
+
+  const filteredProducts = useMemo(() => {
+    const minValue = priceMin !== "" && !Number.isNaN(Number(priceMin)) ? Number(priceMin) : null;
+    const maxValue = priceMax !== "" && !Number.isNaN(Number(priceMax)) ? Number(priceMax) : null;
+
+    return categorySearchProducts.filter((product) => {
+      const price = Number(product.price || 0);
+      const priceMatch = (minValue === null || price >= minValue) && (maxValue === null || price <= maxValue);
+
+      const colorMatch =
+        colorFilter.length === 0 ||
+        (Array.isArray(product.colors) &&
+          product.colors.some((color) =>
+            colorFilter.some((selected) => selected.toLowerCase() === color.toLowerCase())
+          ));
+
+      return priceMatch && colorMatch;
+    });
+  }, [categorySearchProducts, priceMin, priceMax, colorFilter]);
 
   /*
    * SORT
@@ -1117,6 +1241,160 @@ function App() {
     return [...sameCategory, ...rest].slice(0, limit);
   }
 
+  /*
+   * SHARED PRODUCT CARD (grid/scroll-row listings)
+   * One render function used by every product grid on the site
+   * (main shop grid, Bestsellers, New Arrivals, Related Products) so
+   * the color-swatch-on-card and hover-second-photo behaviour (added
+   * 2026-09-20, inspired by miramoss.com's collection page) works the
+   * same way everywhere instead of being copy-pasted four times.
+   *
+   * options:
+   *   keyPrefix          - makes React keys unique across sections
+   *   badge              - "bestseller" | "sale" | "none" (default "sale")
+   *   showDiscountPrice  - show the struck-through old price (default true)
+   *   showOverlayActions - show the hover Add-to-cart/View buttons
+   *                        (only the main shop grid has room for this)
+   */
+  function renderProductCard(product, options = {}) {
+    const {
+      keyPrefix = "product",
+      badge = "sale",
+      showDiscountPrice = true,
+      showOverlayActions = false,
+      eager = false,
+    } = options;
+
+    const colors = Array.isArray(product.colors) ? product.colors : [];
+    const hasMultipleColors = colors.length > 1;
+    const activeColor = getCardColor(product);
+    const images = getDisplayImages(product, activeColor);
+    const image = images[0];
+    const hoverImage = images.find((candidate) => candidate !== image);
+    const displayName = getDisplayName(product, activeColor);
+    const hasDiscount = product.oldPrice > product.price;
+    const isSoldOut = Number(product.stock || 0) <= 0;
+
+    return (
+      <article
+        className="lux-product-card"
+        key={`${keyPrefix}-${product.id}`}
+        onClick={() => openProduct(product, activeColor)}
+      >
+        <div className="lux-card-image">
+          {image ? (
+            <>
+              <img
+                className="lux-card-image-primary"
+                src={image}
+                alt={displayName}
+                loading={eager ? "eager" : "lazy"}
+                decoding="async"
+              />
+              {hoverImage && (
+                <img
+                  className="lux-card-image-hover"
+                  src={hoverImage}
+                  alt={displayName}
+                  loading="lazy"
+                  decoding="async"
+                />
+              )}
+            </>
+          ) : (
+            <div className="lux-card-placeholder">SHRIMOH</div>
+          )}
+
+          {badge === "bestseller" && <div className="lux-card-badge lux-badge-best">BESTSELLER</div>}
+          {badge === "sale" && hasDiscount && <div className="lux-card-badge">SALE</div>}
+
+          {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
+
+          <button
+            type="button"
+            className={`lux-wishlist-heart${isWishlisted(product.id) ? " active" : ""}`}
+            onClick={(e) => toggleWishlist(product, e)}
+            aria-label={isWishlisted(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+          >
+            {isWishlisted(product.id) ? "♥" : "♡"}
+          </button>
+
+          {showOverlayActions && (
+            <button
+              type="button"
+              className="lux-quickview-btn"
+              onClick={(e) => openQuickView(product, e)}
+              aria-label="Quick view"
+              title="Quick view"
+            >
+              ⌕
+            </button>
+          )}
+
+          {showOverlayActions && (
+            <div className="lux-card-overlay" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                disabled={isSoldOut}
+                onClick={() => {
+                  addToCart(product, 1, activeColor);
+                  setCartOpen(true);
+                }}
+              >
+                {isSoldOut ? "SOLD OUT" : "ADD TO CART"}
+              </button>
+
+              <button type="button" onClick={() => openProduct(product, activeColor)}>
+                VIEW
+                <span>→</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {hasMultipleColors && (
+          <div className="lux-card-swatches" onClick={(e) => e.stopPropagation()}>
+            {colors.map((color) => {
+              const colorPhotos = product.colorImages?.[color];
+              const photo = Array.isArray(colorPhotos) ? colorPhotos[0] : colorPhotos;
+
+              return (
+                <button
+                  key={color}
+                  type="button"
+                  className={`lux-card-swatch${activeColor === color ? " active" : ""}`}
+                  style={
+                    photo
+                      ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                      : { backgroundColor: colorToCss(color) }
+                  }
+                  onClick={(e) => setCardColor(product, color, e)}
+                  aria-label={color}
+                  aria-pressed={activeColor === color}
+                  title={color}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        <div className="lux-card-info">
+          <div>
+            <span>{product.category || "COLLECTION"}</span>
+            <h3>{displayName}</h3>
+          </div>
+
+          <div className="lux-card-price">
+            <strong>₹{product.price.toLocaleString("en-IN")}</strong>
+            {showDiscountPrice && hasDiscount && (
+              <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>
+            )}
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   /* =========================================================
      OPEN PRODUCT
   ========================================================= */
@@ -1127,9 +1405,10 @@ function App() {
    * Image/color/quantity get initialised by the effect below,
    * keyed off the URL's product id.
    */
-  function openProduct(product) {
+  function openProduct(product, color) {
     if (!product) return;
-    navigate(`/product/${product.id}`);
+    const query = color ? `?color=${encodeURIComponent(color)}` : "";
+    navigate(`/product/${product.id}${query}`);
   }
 
   /*
@@ -2177,56 +2456,13 @@ function App() {
           </section>
 
           <div className="lux-product-grid lux-scroll-row">
-            {bestsellers.map((product) => {
-              const image = getProductImages(product)[0];
-              const isSoldOut = Number(product.stock || 0) <= 0;
-
-              return (
-                <article
-                  className="lux-product-card"
-                  key={`bestseller-${product.id}`}
-                  onClick={() => openProduct(product)}
-                >
-                  <div className="lux-card-image">
-                    {image ? (
-                      <img src={image} alt={product.name} loading="lazy" decoding="async" />
-                    ) : (
-                      <div className="lux-card-placeholder">SHRIMOH</div>
-                    )}
-
-                    <div className="lux-card-badge lux-badge-best">BESTSELLER</div>
-
-                    {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
-
-                    <button
-                      type="button"
-                      className={`lux-wishlist-heart${
-                        isWishlisted(product.id) ? " active" : ""
-                      }`}
-                      onClick={(e) => toggleWishlist(product, e)}
-                      aria-label={
-                        isWishlisted(product.id)
-                          ? "Remove from wishlist"
-                          : "Add to wishlist"
-                      }
-                    >
-                      {isWishlisted(product.id) ? "♥" : "♡"}
-                    </button>
-                  </div>
-
-                  <div className="lux-card-info">
-                    <div>
-                      <span>{product.category || "COLLECTION"}</span>
-                      <h3>{product.name}</h3>
-                    </div>
-
-                    <div className="lux-card-price">
-                      <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+            {bestsellers.map((product) =>
+              renderProductCard(product, {
+                keyPrefix: "bestseller",
+                badge: "bestseller",
+                showDiscountPrice: false,
+              })
+            )}
           </div>
         </>
       )}
@@ -2246,60 +2482,9 @@ function App() {
           </section>
 
           <div className="lux-product-grid lux-scroll-row">
-            {newArrivals.map((product) => {
-              const image = getProductImages(product)[0];
-              const isSoldOut = Number(product.stock || 0) <= 0;
-              const hasDiscount = product.oldPrice > product.price;
-
-              return (
-                <article
-                  className="lux-product-card"
-                  key={`new-${product.id}`}
-                  onClick={() => openProduct(product)}
-                >
-                  <div className="lux-card-image">
-                    {image ? (
-                      <img src={image} alt={product.name} loading="lazy" decoding="async" />
-                    ) : (
-                      <div className="lux-card-placeholder">SHRIMOH</div>
-                    )}
-
-                    {hasDiscount && <div className="lux-card-badge">SALE</div>}
-
-                    {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
-
-                    <button
-                      type="button"
-                      className={`lux-wishlist-heart${
-                        isWishlisted(product.id) ? " active" : ""
-                      }`}
-                      onClick={(e) => toggleWishlist(product, e)}
-                      aria-label={
-                        isWishlisted(product.id)
-                          ? "Remove from wishlist"
-                          : "Add to wishlist"
-                      }
-                    >
-                      {isWishlisted(product.id) ? "♥" : "♡"}
-                    </button>
-                  </div>
-
-                  <div className="lux-card-info">
-                    <div>
-                      <span>{product.category || "COLLECTION"}</span>
-                      <h3>{product.name}</h3>
-                    </div>
-
-                    <div className="lux-card-price">
-                      <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-                      {hasDiscount && (
-                        <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>
-                      )}
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
+            {newArrivals.map((product) =>
+              renderProductCard(product, { keyPrefix: "new", badge: "sale" })
+            )}
           </div>
         </>
       )}
@@ -2330,6 +2515,15 @@ function App() {
           </p>
           <span>PREMIUM · TIMELESS · REFINED</span>
 
+          <button
+            type="button"
+            className={`lux-filter-toggle${listingFilterCount > 0 ? " active" : ""}`}
+            onClick={() => setFiltersOpen((previous) => !previous)}
+            aria-expanded={filtersOpen}
+          >
+            FILTERS{listingFilterCount > 0 ? ` (${listingFilterCount})` : ""}
+          </button>
+
           <select
             className="lux-sort-select"
             value={sortBy}
@@ -2343,6 +2537,71 @@ function App() {
           </select>
         </div>
       </section>
+
+      {/*
+       * LISTING FILTERS PANEL (price range + color) - inspired by
+       * miramoss.com's collection-page sidebar, collapsed by default
+       * so it doesn't add clutter for anyone who doesn't need it.
+       */}
+      {filtersOpen && (
+        <section className="lux-filter-panel">
+          <div className="lux-filter-group">
+            <span className="lux-filter-label">PRICE (₹)</span>
+            <div className="lux-filter-price-inputs">
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                placeholder="Min"
+                value={priceMin}
+                onChange={(event) => setPriceMin(event.target.value)}
+                aria-label="Minimum price"
+              />
+              <span>to</span>
+              <input
+                type="number"
+                min="0"
+                inputMode="numeric"
+                placeholder="Max"
+                value={priceMax}
+                onChange={(event) => setPriceMax(event.target.value)}
+                aria-label="Maximum price"
+              />
+            </div>
+          </div>
+
+          {availableFilterColors.length > 0 && (
+            <div className="lux-filter-group">
+              <span className="lux-filter-label">COLOR</span>
+              <div className="lux-filter-color-list">
+                {availableFilterColors.map((color) => (
+                  <button
+                    type="button"
+                    key={color}
+                    className={`lux-filter-color-pill${
+                      colorFilter.includes(color) ? " active" : ""
+                    }`}
+                    onClick={() => toggleColorFilter(color)}
+                    aria-pressed={colorFilter.includes(color)}
+                  >
+                    <span
+                      className="lux-filter-color-dot"
+                      style={{ backgroundColor: colorToCss(color) }}
+                    />
+                    {color}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {listingFilterCount > 0 && (
+            <button type="button" className="lux-filter-clear" onClick={clearListingFilters}>
+              Clear filters ✕
+            </button>
+          )}
+        </section>
+      )}
 
       {/* API ERROR */}
       {apiError && <div className="lux-api-error">{apiError}</div>}
@@ -2378,90 +2637,14 @@ function App() {
         </div>
       ) : (
         <main className="lux-product-grid">
-          {sortedProducts.map((product, index) => {
-            const image = getProductImages(product)[0];
-            const hasDiscount = product.oldPrice > product.price;
-            const isSoldOut = Number(product.stock || 0) <= 0;
-
-            return (
-              <article
-                className="lux-product-card"
-                key={product.id}
-                onClick={() => openProduct(product)}
-              >
-                <div className="lux-card-image">
-                  {image ? (
-                    <img
-                      src={image}
-                      alt={product.name}
-                      loading={index < 4 ? "eager" : "lazy"}
-                      decoding="async"
-                    />
-                  ) : (
-                    <div className="lux-card-placeholder">SHRIMOH</div>
-                  )}
-
-                  {hasDiscount && <div className="lux-card-badge">SALE</div>}
-
-                  {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
-
-                  <button
-                    type="button"
-                    className={`lux-wishlist-heart${isWishlisted(product.id) ? " active" : ""}`}
-                    onClick={(e) => toggleWishlist(product, e)}
-                    aria-label={
-                      isWishlisted(product.id) ? "Remove from wishlist" : "Add to wishlist"
-                    }
-                  >
-                    {isWishlisted(product.id) ? "♥" : "♡"}
-                  </button>
-
-                  <div className="lux-card-overlay" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      disabled={isSoldOut}
-                      onClick={() => {
-                        /*
-                         * Products with more than one color need
-                         * the customer to pick one first - send
-                         * them to the detail view instead of
-                         * silently adding a colorless line. A
-                         * single-color product can skip straight
-                         * to the cart with that one color applied.
-                         */
-                        const productColors = Array.isArray(product.colors) ? product.colors : [];
-                        if (productColors.length > 1) {
-                          openProduct(product);
-                          return;
-                        }
-                        addToCart(product, 1, productColors[0] || "");
-                        setCartOpen(true);
-                      }}
-                    >
-                      {isSoldOut ? "SOLD OUT" : "ADD TO CART"}
-                    </button>
-
-                    <button type="button" onClick={() => openProduct(product)}>
-                      VIEW
-                      <span>→</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="lux-card-info">
-                  <div>
-                    <span>{product.category || "COLLECTION"}</span>
-                    <h3>{product.name}</h3>
-                  </div>
-
-                  <div className="lux-card-price">
-                    <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-                    {hasDiscount && <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>}
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+          {sortedProducts.map((product, index) =>
+            renderProductCard(product, {
+              keyPrefix: "shop",
+              badge: "sale",
+              showOverlayActions: true,
+              eager: index < 4,
+            })
+          )}
         </main>
       )}
 
@@ -2923,54 +3106,13 @@ function App() {
                 </section>
 
                 <div className="lux-product-grid lux-scroll-row">
-                  {relatedProducts.map((product) => {
-                    const image = getProductImages(product)[0];
-                    const isSoldOut = Number(product.stock || 0) <= 0;
-
-                    return (
-                      <article
-                        className="lux-product-card"
-                        key={`related-${product.id}`}
-                        onClick={() => openProduct(product)}
-                      >
-                        <div className="lux-card-image">
-                          {image ? (
-                            <img src={image} alt={product.name} loading="lazy" decoding="async" />
-                          ) : (
-                            <div className="lux-card-placeholder">SHRIMOH</div>
-                          )}
-
-                          {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
-
-                          <button
-                            type="button"
-                            className={`lux-wishlist-heart${
-                              isWishlisted(product.id) ? " active" : ""
-                            }`}
-                            onClick={(e) => toggleWishlist(product, e)}
-                            aria-label={
-                              isWishlisted(product.id)
-                                ? "Remove from wishlist"
-                                : "Add to wishlist"
-                            }
-                          >
-                            {isWishlisted(product.id) ? "♥" : "♡"}
-                          </button>
-                        </div>
-
-                        <div className="lux-card-info">
-                          <div>
-                            <span>{product.category || "COLLECTION"}</span>
-                            <h3>{product.name}</h3>
-                          </div>
-
-                          <div className="lux-card-price">
-                            <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+                  {relatedProducts.map((product) =>
+                    renderProductCard(product, {
+                      keyPrefix: "related",
+                      badge: "none",
+                      showDiscountPrice: false,
+                    })
+                  )}
                 </div>
               </div>
             );
@@ -3305,6 +3447,151 @@ function App() {
               </div>
             )}
           </aside>
+        </div>
+      )}
+
+      {/*
+       * QUICK VIEW MODAL - added 2026-09-20. Lets a customer preview a
+       * product (photo, name, price, colors, Add to Cart) right from
+       * the shop grid without a full page navigation, same idea as
+       * miramoss.com's "Quick View". Reuses the same overlay/close
+       * pattern as the Info/Trust pages below.
+       */}
+      {quickViewProduct && (
+        <div
+          className="lux-info-overlay lux-quickview-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closeQuickView();
+          }}
+        >
+          <div className="lux-quickview-page">
+            <button
+              type="button"
+              className="lux-info-close"
+              onClick={closeQuickView}
+              aria-label="Close quick view"
+            >
+              ×
+            </button>
+
+            {(() => {
+              const qvColors = Array.isArray(quickViewProduct.colors) ? quickViewProduct.colors : [];
+              const qvImages = getDisplayImages(quickViewProduct, quickViewColor);
+              const qvImage = qvImages[0];
+              const qvName = getDisplayName(quickViewProduct, quickViewColor);
+              const qvHasDiscount = quickViewProduct.oldPrice > quickViewProduct.price;
+              const qvSoldOut = Number(quickViewProduct.stock || 0) <= 0;
+              const qvStock = Number(quickViewProduct.stock || 0);
+
+              return (
+                <>
+                  <div className="lux-quickview-image">
+                    {qvImage ? (
+                      <img src={qvImage} alt={qvName} />
+                    ) : (
+                      <div className="lux-card-placeholder">SHRIMOH</div>
+                    )}
+                  </div>
+
+                  <div className="lux-quickview-info">
+                    <span className="lux-product-eyebrow">
+                      {quickViewProduct.category || "SHRIMOH COLLECTION"}
+                    </span>
+                    <h2>{qvName}</h2>
+
+                    <div className="lux-price-row">
+                      <span className="lux-current-price">
+                        ₹{quickViewProduct.price.toLocaleString("en-IN")}
+                      </span>
+                      {qvHasDiscount && (
+                        <del className="lux-old-price">
+                          ₹{quickViewProduct.oldPrice.toLocaleString("en-IN")}
+                        </del>
+                      )}
+                    </div>
+
+                    {qvColors.length > 1 && (
+                      <div className="lux-color-section">
+                        <span className="lux-option-label">
+                          COLOR{quickViewColor ? `: ${quickViewColor}` : ""}
+                        </span>
+                        <div className="lux-color-swatches">
+                          {qvColors.map((color) => {
+                            const colorPhotos = quickViewProduct.colorImages?.[color];
+                            const photo = Array.isArray(colorPhotos) ? colorPhotos[0] : colorPhotos;
+
+                            return (
+                              <button
+                                key={color}
+                                type="button"
+                                className={`lux-color-swatch${
+                                  quickViewColor === color ? " active" : ""
+                                }${photo ? " has-photo" : ""}`}
+                                style={
+                                  photo
+                                    ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                                    : { backgroundColor: colorToCss(color) }
+                                }
+                                onClick={() => setQuickViewColor(color)}
+                                aria-label={color}
+                                aria-pressed={quickViewColor === color}
+                                title={color}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="lux-quickview-quantity">
+                      <span className="lux-option-label">QUANTITY</span>
+                      <div className="lux-quantity-controls">
+                        <button
+                          type="button"
+                          onClick={() => setQuickViewQuantity((q) => Math.max(1, q - 1))}
+                          disabled={quickViewQuantity <= 1}
+                        >
+                          −
+                        </button>
+                        <span>{quickViewQuantity}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setQuickViewQuantity((q) => Math.min(qvStock || 99, q + 1))
+                          }
+                          disabled={quickViewQuantity >= (qvStock || 99)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="lux-quickview-actions">
+                      <button
+                        type="button"
+                        className="lux-quickview-add"
+                        disabled={qvSoldOut}
+                        onClick={addToCartFromQuickView}
+                      >
+                        {qvSoldOut ? "SOLD OUT" : "ADD TO CART"}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="lux-quickview-full"
+                        onClick={() => {
+                          closeQuickView();
+                          openProduct(quickViewProduct, quickViewColor);
+                        }}
+                      >
+                        View full details →
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         </div>
       )}
 

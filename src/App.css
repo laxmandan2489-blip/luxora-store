@@ -707,6 +707,123 @@ a {
   cursor: pointer;
 }
 
+/*
+ * LISTING FILTERS (price range + color) - toggle button sits next to
+ * the Sort dropdown; the panel itself only renders when open, right
+ * below the collection header. Added 2026-09-20, inspired by
+ * miramoss.com's collection-page sidebar.
+ */
+.lux-filter-toggle {
+  display: block;
+  margin: 12px 0 0 auto;
+  padding: 9px 14px;
+  border: 1px solid #d8c8a4;
+  background: #fbf7ee;
+  color: #332a1c;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lux-filter-toggle.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+
+.lux-filter-panel {
+  width: min(1400px, 90vw);
+  margin: 0 auto 30px;
+  padding: 20px 24px;
+  border: 1px solid #e7ddc4;
+  background: #fbf7ee;
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 28px;
+  align-items: flex-start;
+}
+
+.lux-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lux-filter-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #a08e6a;
+}
+
+.lux-filter-price-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lux-filter-price-inputs input {
+  width: 90px;
+  padding: 7px 9px;
+  border: 1px solid #d8c8a4;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  color: #332a1c;
+}
+
+.lux-filter-price-inputs span {
+  color: #a08e6a;
+  font-size: 11px;
+}
+
+.lux-filter-color-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 520px;
+}
+
+.lux-filter-color-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #d8c8a4;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11px;
+  color: #332a1c;
+  cursor: pointer;
+}
+
+.lux-filter-color-pill.active {
+  border-color: #1a1a1a;
+  background: #1a1a1a;
+  color: #fff;
+}
+
+.lux-filter-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  display: inline-block;
+}
+
+.lux-filter-clear {
+  align-self: flex-end;
+  margin-left: auto;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  color: #8d4141;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 /* =========================================================
    API ERROR
 ========================================================= */
@@ -779,11 +896,72 @@ a {
   padding: 7%;
   transition:
     transform 0.75s cubic-bezier(0.2, 0.7, 0.2, 1),
-    filter 0.5s ease;
+    filter 0.5s ease,
+    opacity 0.35s ease;
 }
 
 .lux-product-card:hover .lux-card-image img {
   transform: scale(1.035);
+}
+
+/*
+ * Second photo shown on hover (desktop) - added 2026-09-20, same idea
+ * as miramoss.com's grid cards. Both photos sit stacked in the same
+ * spot; the alternate one fades in on hover and the first fades out.
+ * A card with only one photo just never gets a
+ * ".lux-card-image-hover" element, so nothing changes for it.
+ */
+.lux-card-image-primary,
+.lux-card-image-hover {
+  position: absolute;
+  inset: 0;
+}
+
+.lux-card-image-hover {
+  opacity: 0;
+}
+
+.lux-product-card:hover .lux-card-image-hover {
+  opacity: 1;
+}
+
+.lux-product-card:hover .lux-card-image-primary {
+  opacity: 0;
+}
+
+/*
+ * Color swatches directly on the grid card - added 2026-09-20, lets a
+ * customer pick a color without opening the product page, same as
+ * miramoss.com's listing cards. Small squares, same active-border
+ * convention as the bigger product-page swatches.
+ */
+.lux-card-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.lux-card-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid #d8c8a4;
+  padding: 0;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  background-color: #f6f1e5;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.lux-card-swatch:hover {
+  transform: translateY(-1px);
+}
+
+.lux-card-swatch.active {
+  border-color: #1a1a1a;
+  border-width: 2px;
 }
 
 .lux-card-placeholder {
@@ -857,6 +1035,43 @@ a {
 
 .lux-wishlist-heart:hover {
   transform: scale(1.08);
+}
+
+/*
+ * QUICK VIEW trigger (top-left, mirrors the wishlist heart's top-right
+ * position) - added 2026-09-20, main shop grid only.
+ */
+.lux-quickview-btn {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 6;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: #55483a;
+  font-size: 17px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.lux-product-card:hover .lux-quickview-btn {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.lux-quickview-btn:hover {
+  background: #1c150d;
+  color: #fff;
 }
 
 .lux-wishlist-heart.active {
@@ -1665,6 +1880,100 @@ a {
 .lux-info-content a {
   color: #7a5a12;
   text-decoration: underline;
+}
+
+/*
+ * QUICK VIEW MODAL - reuses .lux-info-overlay for the dark backdrop
+ * and .lux-info-close for the × button; this is just the two-column
+ * (photo + details) layout inside it. Added 2026-09-20.
+ */
+.lux-quickview-page {
+  position: relative;
+  width: min(880px, 96vw);
+  margin: 40px 0;
+  padding: 50px;
+  background: var(--lux-bg);
+  box-shadow:
+    0 35px 100px rgba(0, 0, 0, 0.42),
+    0 8px 30px rgba(0, 0, 0, 0.12);
+  animation: luxProductOpen 0.35s ease;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 40px;
+}
+
+.lux-quickview-image {
+  aspect-ratio: 0.86;
+  border-radius: 6px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, #fff 0%, #f2ede0 65%, #e7dfcd 100%);
+}
+
+.lux-quickview-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+  padding: 6%;
+}
+
+.lux-quickview-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lux-quickview-info h2 {
+  margin: 10px 0 14px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 400;
+  line-height: 1.1;
+}
+
+.lux-quickview-info .lux-color-section {
+  margin-top: 18px;
+}
+
+.lux-quickview-quantity {
+  margin-top: 20px;
+}
+
+.lux-quickview-actions {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lux-quickview-add {
+  padding: 15px;
+  border: 0;
+  border-radius: 4px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.lux-quickview-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lux-quickview-full {
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: #7a5a12;
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  text-decoration: underline;
+  cursor: pointer;
+  text-align: left;
 }
 
 .lux-info-subheading {
@@ -4381,6 +4690,16 @@ a {
     font-size: 34px;
   }
 
+  .lux-quickview-page {
+    grid-template-columns: 1fr;
+    padding: 30px 20px 40px;
+    gap: 22px;
+  }
+
+  .lux-quickview-image {
+    aspect-ratio: 1.1;
+  }
+
   .lux-info-contact-grid {
     grid-template-columns: 1fr;
     gap: 16px;
@@ -4465,6 +4784,23 @@ a {
     text-align: left;
   }
 
+  .lux-filter-toggle,
+  .lux-sort-select {
+    margin: 10px 0 0;
+    width: 100%;
+  }
+
+  .lux-filter-panel {
+    width: 92vw;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .lux-filter-clear {
+    align-self: flex-start;
+    margin-left: 0;
+  }
+
   .lux-product-grid {
     width: 92vw;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4514,6 +4850,14 @@ a {
 
   .lux-card-overlay button + button {
     display: none;
+  }
+
+  .lux-quickview-btn {
+    opacity: 1;
+    transform: none;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
   }
 
   .lux-brand-story {
