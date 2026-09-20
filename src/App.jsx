@@ -537,6 +537,20 @@ function App() {
     : null;
   const isProductPage = Boolean(productIdFromUrl);
 
+  /*
+   * SELECTED COLOR - ALSO LIVES IN THE URL (?color=)
+   * Same idea as the product id above: picking a color is now a real
+   * navigation (/product/:id?color=Black), not just local state. That's
+   * what makes it feel like its own page - the browser's Back button
+   * steps back to the previous color/photos, the link is shareable at
+   * that exact color, and it plugs into the same "scroll to top on a
+   * new page" behaviour product-opening already has - without it being
+   * a whole different route/layout the way opening a product from the
+   * grid is.
+   */
+  const colorFromUrlRaw = new URLSearchParams(location.search).get("color");
+  const colorFromUrl = colorFromUrlRaw ? decodeURIComponent(colorFromUrlRaw) : null;
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const [sortBy, setSortBy] = useState("featured");
@@ -625,7 +639,19 @@ function App() {
   const [selectedImage, setSelectedImage] = useState("");
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [detailQuantity, setDetailQuantity] = useState(1);
-  const [detailColor, setDetailColor] = useState("");
+  /*
+   * detailColor is derived from the URL's ?color= (see colorFromUrl
+   * above), not its own state - so a color pick is a real navigation.
+   * Falls back to the product's first color when the URL has none, or
+   * has one that doesn't match this product's colors.
+   */
+  const detailColorList = Array.isArray(selectedProduct?.colors) ? selectedProduct.colors : [];
+  const detailColor = selectedProduct
+    ? (colorFromUrl &&
+        detailColorList.find((c) => c.toLowerCase() === colorFromUrl.toLowerCase())) ||
+      detailColorList[0] ||
+      ""
+    : "";
   const [touchStartX, setTouchStartX] = useState(null);
 
   /* =========================================================
@@ -1129,13 +1155,30 @@ function App() {
   useEffect(() => {
     if (!selectedProduct) return;
 
-    const colors = Array.isArray(selectedProduct.colors) ? selectedProduct.colors : [];
     setDetailQuantity(1);
-    setDetailColor(colors[0] || "");
     setTouchStartX(null);
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProduct?.id]);
+
+  /*
+   * Picking a color swatch - navigates to this same product's URL
+   * with ?color=<name> added/changed, which is what makes it feel
+   * like a new page opened in the same window: the browser's Back
+   * button steps to the color you were on before, the link at that
+   * exact color is shareable, and (matching how opening a product
+   * from the grid already behaves) the page quantity resets and
+   * scrolls back to the top. It's still the same product-detail
+   * layout though, never a full reload/blank page in between.
+   */
+  function selectDetailColor(color) {
+    if (!selectedProduct || !color) return;
+    if (color === detailColor) return;
+    navigate(`/product/${selectedProduct.id}?color=${encodeURIComponent(color)}`);
+    setDetailQuantity(1);
+    setTouchStartX(null);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }
 
   /*
    * When the customer picks a different color swatch, jump the
@@ -2552,6 +2595,7 @@ function App() {
                         <div className="lux-main-image">
                           <img
                             key={selectedImage}
+                            className="lux-variant-fade"
                             src={selectedImage}
                             alt={getDisplayName(selectedProduct, detailColor)}
                             draggable="false"
@@ -2620,7 +2664,7 @@ function App() {
                 {selectedProduct.category || "SHRIMOH COLLECTION"}
               </div>
 
-              <h1 className="lux-product-title">
+              <h1 className="lux-product-title lux-variant-fade" key={`title-${detailColor}`}>
                 {getDisplayName(selectedProduct, detailColor)}
               </h1>
 
@@ -2672,7 +2716,7 @@ function App() {
                               ? { backgroundImage: `url(${getImageUrl(photo)})` }
                               : { backgroundColor: colorToCss(color) }
                           }
-                          onClick={() => setDetailColor(color)}
+                          onClick={() => selectDetailColor(color)}
                           aria-label={color}
                           aria-pressed={detailColor === color}
                           title={color}

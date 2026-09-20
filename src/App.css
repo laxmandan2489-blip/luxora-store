@@ -2187,6 +2187,26 @@ a {
   letter-spacing: -1.5px;
 }
 
+/*
+ * Plays whenever the title/main photo remounts (new product, or a
+ * different color variant selected) - a quick fade+lift so switching
+ * variants feels like a fresh page came in, not just a text swap.
+ */
+@keyframes lux-variant-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lux-variant-fade {
+  animation: lux-variant-fade-in 0.28s ease;
+}
+
 .lux-rating-row {
   margin-top: 20px;
   display: flex;
