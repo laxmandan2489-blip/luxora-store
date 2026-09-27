@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
@@ -2690,12 +2690,33 @@ function App() {
         <div className="lux-hero-image">
           {heroImages.length > 0 ? (
             heroImages.map((image, index) => (
-              <img
-                key={image}
-                src={image}
-                alt="SHRIMOH collection"
-                className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
-              />
+              /*
+               * Two stacked copies per slide instead of one cropped photo:
+               * - lux-hero-slide-bg: same photo, zoomed/blurred, fills the
+               *   whole banner edge-to-edge (so there's never an empty/
+               *   blank strip whatever the banner's shape is).
+               * - lux-hero-slide (foreground): object-fit CONTAIN, so the
+               *   full photo - the model, the bag, all of it - is always
+               *   completely visible and never cropped, no matter how
+               *   wide/short the banner is on a given screen.
+               * This is what fixed the "bag/photo getting cut off on
+               * laptop" complaint for good, instead of just tuning the
+               * banner's aspect ratio, which only ever reduces cropping,
+               * never fully removes it for every possible photo shape.
+               */
+              <Fragment key={image}>
+                <img
+                  src={image}
+                  alt=""
+                  aria-hidden="true"
+                  className={`lux-hero-slide-bg ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
+                />
+                <img
+                  src={image}
+                  alt="SHRIMOH collection"
+                  className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
+                />
+              </Fragment>
             ))
           ) : filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
             <img src={getProductImages(filteredProducts[0])[0]} alt="SHRIMOH collection" />

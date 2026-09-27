@@ -576,10 +576,39 @@ a {
  * Every slide sits stacked on top of the others; only the active one
  * is visible, cross-fading in over 1s - same technique already used
  * for the product-card hover photo swap further down this file.
+ *
+ * Each slide is actually TWO stacked photos, not one:
+ *  - lux-hero-slide-bg: the same photo, zoomed + blurred, stretched
+ *    (object-fit: cover) to fill the banner completely edge-to-edge,
+ *    so the banner never shows an empty gap regardless of its shape.
+ *  - lux-hero-slide: the same photo again on top, object-fit: CONTAIN
+ *    - this one is never cropped, so the full photo (the model, the
+ *      bag, everything) is always completely visible no matter how
+ *      wide/short the banner ends up being on a given screen. This is
+ *      what actually fixes photos getting cut off on laptop, rather
+ *      than just picking a "less bad" banner shape.
  */
+.lux-hero-image img.lux-hero-slide-bg {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  object-position: center;
+  filter: saturate(0.7) sepia(0.06) blur(35px) brightness(0.6);
+  transform: scale(1.15);
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+.lux-hero-image img.lux-hero-slide-bg.lux-hero-slide-active {
+  opacity: 1;
+}
+
 .lux-hero-image img.lux-hero-slide {
   position: absolute;
   inset: 0;
+  object-fit: contain;
+  object-position: center;
+  filter: saturate(0.85) sepia(0.04);
   opacity: 0;
   transition: opacity 1s ease;
 }
