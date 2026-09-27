@@ -490,7 +490,15 @@ const INFO_PAGES = {
  * applies automatically to every photo already in the database, past and
  * future - nothing else has to change.
  */
-function getImageUrl(image) {
+/*
+ * width defaults to 1000 (full product-page gallery size). Grid/card
+ * thumbnails never actually render that big on screen (a grid card is
+ * a few hundred px wide at most) so they now ask weserv.nl for a
+ * smaller image instead (see THUMB_IMAGE_WIDTH below) - a noticeably
+ * smaller file downloads and decodes faster, which is most of what
+ * made photos feel slow to appear on the shop grid and product cards.
+ */
+function getImageUrl(image, width = 1000) {
   if (!image) return "";
 
   if (image.startsWith("data:")) {
@@ -499,11 +507,13 @@ function getImageUrl(image) {
 
   if (image.startsWith("http://") || image.startsWith("https://")) {
     const withoutProtocol = image.replace(/^https?:\/\//, "");
-    return `https://images.weserv.nl/?url=${encodeURIComponent(withoutProtocol)}&w=1000&q=78&output=webp`;
+    return `https://images.weserv.nl/?url=${encodeURIComponent(withoutProtocol)}&w=${width}&q=78&output=webp`;
   }
 
   return `${API}${image.startsWith("/") ? "" : "/"}${image}`;
 }
+
+const THUMB_IMAGE_WIDTH = 480;
 
 /*
  * If the weserv.nl compression proxy above ever fails to fetch/serve a
@@ -1204,7 +1214,9 @@ function App() {
     return real
       .map((category) => {
         const productsInCategory = products.filter((product) => product.category === category);
-        const firstImage = productsInCategory[0] ? getProductImages(productsInCategory[0])[0] : null;
+        const firstImage = productsInCategory[0]
+          ? getProductImages(productsInCategory[0], THUMB_IMAGE_WIDTH)[0]
+          : null;
 
         return {
           category,
@@ -1342,7 +1354,7 @@ function App() {
      PRODUCT IMAGES
   ========================================================= */
 
-  function getProductImages(product) {
+  function getProductImages(product, width = 1000) {
     if (!product) return [];
 
     let images = [];
@@ -1370,7 +1382,7 @@ function App() {
       images.unshift(product.image);
     }
 
-    return Array.from(new Set(images.filter(Boolean).map(getImageUrl)));
+    return Array.from(new Set(images.filter(Boolean).map((img) => getImageUrl(img, width))));
   }
 
   /*
@@ -1382,14 +1394,19 @@ function App() {
    * product" with all of its own angles/shots, not just one swapped
    * hero image. Falls back to the normal shared photo set for any
    * color that has no dedicated photos of its own yet.
+   *
+   * width is passed straight through to getImageUrl - callers showing
+   * a small thumbnail (grid cards, category tiles) pass
+   * THUMB_IMAGE_WIDTH so weserv.nl serves a smaller, faster-loading
+   * file instead of the full 1000px version those spots never needed.
    */
-  function getDisplayImages(product, color) {
-    const baseImages = getProductImages(product);
+  function getDisplayImages(product, color, width = 1000) {
+    const baseImages = getProductImages(product, width);
     const colorPhotos = color && product?.colorImages ? product.colorImages[color] : null;
 
     if (!Array.isArray(colorPhotos) || colorPhotos.length === 0) return baseImages;
 
-    return Array.from(new Set(colorPhotos.map(getImageUrl).filter(Boolean)));
+    return Array.from(new Set(colorPhotos.map((img) => getImageUrl(img, width)).filter(Boolean)));
   }
 
   // A color variant can have its own display name (set in Admin), so
@@ -1439,12 +1456,25 @@ function App() {
       showDiscountPrice = true,
       showOverlayActions = false,
       eager = false,
+      /*
+       * forceColor pins this card to ONE specific color instead of the
+       * shared "last clicked swatch" state from getCardColor/setCardColor.
+       * expandProductVariants() below passes this so that a 3-color
+       * product renders as 3 separate cards (one per color, each with
+       * its own photo/name) - like miramoss.com's search results - and
+       * each one keeps showing that same color even if another card
+       * for the same product changes its own swatch. Swatch clicks on a
+       * forceColor card jump straight to that color's product page
+       * instead of swapping the photo in place, since two cards for the
+       * same product can't safely share one "currently previewed color".
+       */
+      forceColor = null,
     } = options;
 
     const colors = Array.isArray(product.colors) ? product.colors : [];
     const hasMultipleColors = colors.length > 1;
-    const activeColor = getCardColor(product);
-    const images = getDisplayImages(product, activeColor);
+    const activeColor = forceColor || getCardColor(product);
+    const images = getDisplayImages(product, activeColor, THUMB_IMAGE_WIDTH);
     const image = images[0];
     const hoverImage = images.find((candidate) => candidate !== image);
     const displayName = getDisplayName(product, activeColor);
@@ -1454,7 +1484,7 @@ function App() {
     return (
       <article
         className="lux-product-card"
-        key={`${keyPrefix}-${product.id}`}
+        key={`${keyPrefix}-${product.id}${forceColor ? `-${forceColor}` : ""}`}
         onClick={() => openProduct(product, activeColor)}
       >
         <div className="lux-card-image">
@@ -1466,6 +1496,7 @@ function App() {
                 alt={displayName}
                 loading={eager ? "eager" : "lazy"}
                 decoding="async"
+                fetchPriority={eager ? "high" : "auto"}
               />
               {hoverImage && (
                 <img
@@ -1541,10 +1572,21 @@ function App() {
                   className={`lux-card-swatch${activeColor === color ? " active" : ""}`}
                   style={
                     photo
-                      ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                      ? { backgroundImage: `url(${getImageUrl(photo, 80)})` }
                       : { backgroundColor: colorToCss(color) }
                   }
-                  onClick={(e) => setCardColor(product, color, e)}
+                  onClick={(e) => {
+                    if (forceColor) {
+                      // This card is one of several separate per-color
+                      // cards for the same product - jump straight to
+                      // that color's own page instead of swapping the
+                      // photo in place (see forceColor note above).
+                      e.stopPropagation();
+                      if (color !== activeColor) openProduct(product, color);
+                    } else {
+                      setCardColor(product, color, e);
+                    }
+                  }}
                   aria-label={color}
                   aria-pressed={activeColor === color}
                   title={color}
@@ -1569,6 +1611,29 @@ function App() {
         </div>
       </article>
     );
+  }
+
+  /*
+   * EXPAND MULTI-COLOR PRODUCTS INTO SEPARATE CARDS
+   * A product with 2+ colors used to render as ONE grid card with a
+   * small swatch row to flip through its colors in place. The owner
+   * wanted each color to also show up as its OWN separate card, same
+   * as miramoss.com's search/collection grid (e.g. "Odette Shoulder
+   * Bag - Walnut" and "Odette Shoulder Bag - Noir" both appear as
+   * their own tiles). This turns a list of N products into a flat
+   * list of { product, color } entries - one per color for a
+   * multi-color product, or just one entry (its only/default color)
+   * for a single-color product - ready to pass straight into
+   * renderProductCard's forceColor option.
+   */
+  function expandProductVariants(list) {
+    return list.flatMap((product) => {
+      const colors = Array.isArray(product.colors) ? product.colors : [];
+      if (colors.length > 1) {
+        return colors.map((color) => ({ product, color }));
+      }
+      return [{ product, color: colors[0] || null }];
+    });
   }
 
   /* =========================================================
@@ -2709,11 +2774,12 @@ function App() {
           </section>
 
           <div className="lux-product-grid lux-scroll-row">
-            {bestsellers.map((product) =>
+            {expandProductVariants(bestsellers).map(({ product, color }) =>
               renderProductCard(product, {
                 keyPrefix: "bestseller",
                 badge: "bestseller",
                 showDiscountPrice: false,
+                forceColor: color,
               })
             )}
           </div>
@@ -2735,8 +2801,8 @@ function App() {
           </section>
 
           <div className="lux-product-grid lux-scroll-row">
-            {newArrivals.map((product) =>
-              renderProductCard(product, { keyPrefix: "new", badge: "sale" })
+            {expandProductVariants(newArrivals).map(({ product, color }) =>
+              renderProductCard(product, { keyPrefix: "new", badge: "sale", forceColor: color })
             )}
           </div>
         </>
@@ -2890,12 +2956,13 @@ function App() {
         </div>
       ) : (
         <main className="lux-product-grid">
-          {sortedProducts.map((product, index) =>
+          {expandProductVariants(sortedProducts).map(({ product, color }, index) =>
             renderProductCard(product, {
               keyPrefix: "shop",
               badge: "sale",
               showOverlayActions: true,
               eager: index < 4,
+              forceColor: color,
             })
           )}
         </main>
@@ -3049,6 +3116,7 @@ function App() {
                             alt={getDisplayName(selectedProduct, detailColor)}
                             draggable="false"
                             decoding="async"
+                            fetchPriority="high"
                             onError={handleImageFallback}
                           />
                         </div>
@@ -3162,7 +3230,7 @@ function App() {
                           }${photo ? " has-photo" : ""}`}
                           style={
                             photo
-                              ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                              ? { backgroundImage: `url(${getImageUrl(photo, 80)})` }
                               : { backgroundColor: colorToCss(color) }
                           }
                           onClick={() => selectDetailColor(color)}
@@ -3372,11 +3440,12 @@ function App() {
                 </section>
 
                 <div className="lux-product-grid lux-scroll-row">
-                  {relatedProducts.map((product) =>
+                  {expandProductVariants(relatedProducts).map(({ product, color }) =>
                     renderProductCard(product, {
                       keyPrefix: "related",
                       badge: "none",
                       showDiscountPrice: false,
+                      forceColor: color,
                     })
                   )}
                 </div>
@@ -3795,7 +3864,7 @@ function App() {
                                 }${photo ? " has-photo" : ""}`}
                                 style={
                                   photo
-                                    ? { backgroundImage: `url(${getImageUrl(photo)})` }
+                                    ? { backgroundImage: `url(${getImageUrl(photo, 80)})` }
                                     : { backgroundColor: colorToCss(color) }
                                 }
                                 onClick={() => setQuickViewColor(color)}
