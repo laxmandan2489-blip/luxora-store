@@ -1600,10 +1600,22 @@ function App() {
             <h3>{displayName}</h3>
           </div>
 
+          {/*
+           * One compact line - current price, old price struck through,
+           * discount % - same as the quick-view/product-page price row
+           * (Mira & Moss keeps all three together on one line in the
+           * grid too, instead of stacking price/old-price on separate
+           * lines with no % shown, which took up extra vertical space).
+           */}
           <div className="lux-card-price">
             <strong>₹{product.price.toLocaleString("en-IN")}</strong>
             {showDiscountPrice && hasDiscount && (
               <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>
+            )}
+            {showDiscountPrice && hasDiscount && (
+              <span className="lux-card-discount">
+                {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
+              </span>
             )}
           </div>
         </div>

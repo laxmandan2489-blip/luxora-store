@@ -1429,8 +1429,18 @@ a {
   white-space: nowrap;
 }
 
+/*
+ * One compact line - current price, old price struck through, discount
+ * % - instead of stacking price/old-price on two separate lines with
+ * no % shown (which took up extra vertical space vs. Mira & Moss's
+ * single-line price row in the grid).
+ */
 .lux-card-price {
-  text-align: right;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
   white-space: nowrap;
 }
 
@@ -1441,10 +1451,15 @@ a {
 }
 
 .lux-card-price del {
-  display: block;
-  margin-top: 5px;
   color: #b1a181;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.lux-card-discount {
+  color: #c23a2c;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 /* =========================================================
@@ -5072,7 +5087,7 @@ a {
 
   .lux-card-price {
     margin-top: 8px;
-    text-align: left;
+    justify-content: flex-start;
   }
 
   /* Phone: no dark bar sitting on top of the photo anymore - the
