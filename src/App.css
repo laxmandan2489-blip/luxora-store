@@ -249,6 +249,89 @@ a {
   color: #fbf7ee;
 }
 
+/*
+ * MEGA-MENU (Bags / Accessories dropdowns)
+ * Click a top-level nav item and a small panel slides down below it,
+ * listing that group's specific categories - same idea as
+ * miramoss.com's header nav, instead of showing every category as a
+ * flat row of pills all the time.
+ */
+.lux-nav-item {
+  position: relative;
+  display: inline-flex;
+}
+
+.lux-nav-item-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 5px;
+}
+
+.lux-nav-dropdown {
+  position: absolute;
+  top: calc(100% + 14px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 320px;
+  background: var(--lux-paper);
+  border: 1px solid var(--lux-line);
+  border-radius: 10px;
+  box-shadow: 0 22px 50px rgba(28, 21, 13, 0.16);
+  padding: 20px 22px;
+  display: flex;
+  gap: 30px;
+  z-index: 40;
+  animation: luxMegaMenuIn 0.18s ease;
+}
+
+.lux-nav-dropdown.lux-nav-dropdown-single {
+  min-width: 200px;
+}
+
+@keyframes luxMegaMenuIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.lux-nav-dropdown-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.lux-nav-dropdown-col > span {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: var(--lux-light);
+  margin-bottom: 6px;
+}
+
+.lux-nav-dropdown-col button {
+  background: none;
+  border: none;
+  padding: 6px 0;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: var(--lux-text);
+  text-align: left;
+  width: 100%;
+  white-space: normal;
+}
+
+.lux-nav-dropdown-col button:hover {
+  color: var(--lux-pine);
+}
+
 /* =========================================================
    HEADER ACTIONS
 ========================================================= */
@@ -445,6 +528,50 @@ a {
   filter: saturate(0.78) sepia(0.06);
 }
 
+/*
+ * HERO CAROUSEL (3-5 owner-uploaded photos, auto-rotating)
+ * Every slide sits stacked on top of the others; only the active one
+ * is visible, cross-fading in over 1s - same technique already used
+ * for the product-card hover photo swap further down this file.
+ */
+.lux-hero-image img.lux-hero-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+.lux-hero-image img.lux-hero-slide.lux-hero-slide-active {
+  opacity: 1;
+}
+
+.lux-hero-dots {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+}
+
+.lux-hero-dots button {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.25);
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.2s ease, width 0.2s ease;
+}
+
+.lux-hero-dots button.active {
+  background: #ffffff;
+  width: 22px;
+  border-radius: 999px;
+}
+
 .lux-hero-placeholder {
   width: 100%;
   height: 100%;
@@ -559,46 +686,67 @@ a {
 }
 
 /* =========================================================
-   EDITORIAL STRIP
+   SHOP BY CATEGORY TILES
+   Replaces the old plain-text "Timeless Design / Refined Quality /
+   Everyday Luxury" strip - a photo tile per category instead, same
+   idea as miramoss.com's homepage category grid.
 ========================================================= */
 
-.lux-editorial-strip {
-  min-height: 150px;
-  padding: 35px 5vw;
+.lux-category-tiles {
+  width: min(1400px, 90vw);
+  margin: 60px auto 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  background: var(--lux-soft);
-  border-bottom: 1px solid #d9cbab;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 18px;
 }
 
-.lux-editorial-strip > div {
-  padding: 5px 40px;
-  border-right: 1px solid #d2c3a2;
+.lux-category-tile {
+  position: relative;
+  aspect-ratio: 0.95;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--lux-line);
+  background: #ffffff;
+  cursor: pointer;
 }
 
-.lux-editorial-strip > div:last-child {
-  border-right: 0;
+.lux-category-tile img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 10%;
+  transition: transform 0.5s ease;
 }
 
-.lux-editorial-strip span {
+.lux-category-tile:hover img {
+  transform: scale(1.06);
+}
+
+.lux-category-tile-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px 16px;
+  background: linear-gradient(0deg, rgba(23, 18, 12, 0.72) 0%, rgba(23, 18, 12, 0) 100%);
+  text-align: left;
+}
+
+.lux-category-tile-label strong {
   display: block;
-  margin-bottom: 12px;
-  color: #a8926c;
-  font-size: 9px;
-  letter-spacing: 2px;
+  color: #fbf7ee;
+  font-size: 12px;
+  letter-spacing: 0.8px;
 }
 
-.lux-editorial-strip strong {
+.lux-category-tile-label span {
   display: block;
-  color: #241c11;
+  margin-top: 3px;
+  color: rgba(251, 247, 238, 0.75);
   font-size: 10px;
-  letter-spacing: 1.8px;
-}
-
-.lux-editorial-strip p {
-  margin: 8px 0 0;
-  color: #8a7a5c;
-  font-size: 11px;
+  letter-spacing: 0.5px;
 }
 
 /* =========================================================
@@ -878,13 +1026,13 @@ a {
   position: relative;
   aspect-ratio: 0.86;
   overflow: hidden;
-  background:
-    radial-gradient(
-      circle at center,
-      #fff 0%,
-      #f2ede0 65%,
-      #e7dfcd 100%
-    );
+  /*
+   * Was a cream/beige radial gradient - since every product photo is
+   * shot on a plain white background, that gradient showed up as a
+   * visible off-white border around each photo. Solid white makes the
+   * card blend seamlessly into the product photo instead.
+   */
+  background: #ffffff;
 }
 
 .lux-card-image img {
@@ -1906,8 +2054,7 @@ a {
   aspect-ratio: 0.86;
   border-radius: 6px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at center, #fff 0%, #f2ede0 65%, #e7dfcd 100%);
+  background: #ffffff;
 }
 
 .lux-quickview-image img {
@@ -2249,14 +2396,7 @@ a {
   min-width: 0;
   min-height: 0;
   height: min(700px, 82vh);
-  background:
-    radial-gradient(
-      circle at 50% 42%,
-      #ffffff 0%,
-      #faf6ec 38%,
-      #f0e9d8 72%,
-      #e5dabe 100%
-    );
+  background: #ffffff;
   overflow: hidden;
 }
 

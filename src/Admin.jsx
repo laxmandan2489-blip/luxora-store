@@ -682,12 +682,18 @@ function Admin() {
      until something is uploaded here.
      ===================================================== */
   const [siteSettings, setSiteSettings] = useState({
-    heroImageUrl: "",
+    heroImageUrls: [],
     brandStoryImageUrl: "",
   });
   const [loadingSiteSettings, setLoadingSiteSettings] = useState(false);
-  const [siteHeroFile, setSiteHeroFile] = useState(null);
-  const [siteHeroPreview, setSiteHeroPreview] = useState("");
+  /*
+   * Hero banner now takes up to 5 photos (was a single photo) so the
+   * homepage can rotate through them like miramoss.com's banner. Each
+   * entry below is { file, previewUrl } for a newly-chosen photo that
+   * hasn't been saved yet.
+   */
+  const MAX_HERO_IMAGES = 5;
+  const [siteHeroFiles, setSiteHeroFiles] = useState([]);
   const [siteBrandStoryFile, setSiteBrandStoryFile] = useState(null);
   const [siteBrandStoryPreview, setSiteBrandStoryPreview] = useState("");
   const [savingSiteContent, setSavingSiteContent] = useState(false);
@@ -699,7 +705,14 @@ function Admin() {
       const response = await fetch(`${API}/api/site-settings`);
       const data = await response.json();
       if (data.success && data.settings) {
-        setSiteSettings(data.settings);
+        setSiteSettings({
+          heroImageUrls: Array.isArray(data.settings.heroImageUrls)
+            ? data.settings.heroImageUrls
+            : data.settings.heroImageUrl
+            ? [data.settings.heroImageUrl]
+            : [],
+          brandStoryImageUrl: data.settings.brandStoryImageUrl || "",
+        });
       }
     } catch (error) {
       console.error("Load site settings error:", error);
@@ -709,9 +722,18 @@ function Admin() {
   }
 
   function handleSiteHeroChange(e) {
-    const file = e.target.files?.[0] || null;
-    setSiteHeroFile(file);
-    setSiteHeroPreview(file ? URL.createObjectURL(file) : "");
+    const chosenFiles = Array.from(e.target.files || []);
+    const newEntries = chosenFiles.map((file) => ({
+      file,
+      previewUrl: URL.createObjectURL(file),
+    }));
+    setSiteHeroFiles((current) => [...current, ...newEntries].slice(0, MAX_HERO_IMAGES));
+    // Let the same file input be used again (e.g. after removing a photo).
+    e.target.value = "";
+  }
+
+  function removeSiteHeroFile(index) {
+    setSiteHeroFiles((current) => current.filter((_, i) => i !== index));
   }
 
   function handleSiteBrandStoryChange(e) {
@@ -721,7 +743,7 @@ function Admin() {
   }
 
   async function saveSiteContent() {
-    if (!siteHeroFile && !siteBrandStoryFile) {
+    if (siteHeroFiles.length === 0 && !siteBrandStoryFile) {
       setSiteContentMessage("Choose at least one image first.");
       return;
     }
@@ -731,7 +753,7 @@ function Admin() {
 
     try {
       const formData = new FormData();
-      if (siteHeroFile) formData.append("heroImage", siteHeroFile);
+      siteHeroFiles.forEach(({ file }) => formData.append("heroImage", file));
       if (siteBrandStoryFile) formData.append("brandStoryImage", siteBrandStoryFile);
 
       const response = await adminFetch(`${API}/api/admin/site-settings`, {
@@ -744,9 +766,11 @@ function Admin() {
         throw new Error(data.message || "Unable to update site images.");
       }
 
-      setSiteSettings(data.settings);
-      setSiteHeroFile(null);
-      setSiteHeroPreview("");
+      setSiteSettings({
+        heroImageUrls: Array.isArray(data.settings.heroImageUrls) ? data.settings.heroImageUrls : [],
+        brandStoryImageUrl: data.settings.brandStoryImageUrl || "",
+      });
+      setSiteHeroFiles([]);
       setSiteBrandStoryFile(null);
       setSiteBrandStoryPreview("");
       setSiteContentMessage("Saved. Your live site now shows these images.");
@@ -3152,6 +3176,45 @@ function Admin() {
           margin-left: auto;
           margin-right: auto;
         }
+        .site-content-hero-grid {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin: 14px 0;
+          min-height: 90px;
+        }
+        .site-content-hero-thumb {
+          position: relative;
+          width: 90px;
+          height: 90px;
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1px solid #e8e8e8;
+          background: #f5f3ee;
+        }
+        .site-content-hero-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .site-content-hero-thumb button {
+          position: absolute;
+          top: 3px;
+          right: 3px;
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          border: none;
+          background: rgba(0, 0, 0, 0.65);
+          color: #fff;
+          font-size: 12px;
+          line-height: 1;
+          cursor: pointer;
+        }
+        .site-content-empty {
+          color: #999;
+          font-size: 12px;
+        }
         .status {
           display: inline-block;
           padding: 7px 10px;
@@ -4613,22 +4676,49 @@ function Admin() {
                 <div className="site-content-card">
                   <h3>Homepage Hero Banner</h3>
                   <p className="customer-info">
-                    The large image behind "Crafted for distinction" at the top of
-                    the homepage.
+                    3-5 photos that rotate automatically (every 3 seconds) at the top
+                    of the homepage, behind "Crafted for distinction" - same as a
+                    normal e-commerce homepage slideshow. Choosing new photos and
+                    saving replaces the whole set below.
                   </p>
 
-                  <div className="site-content-preview">
-                    {siteHeroPreview || siteSettings.heroImageUrl ? (
-                      <img
-                        src={siteHeroPreview || siteSettings.heroImageUrl}
-                        alt="Hero preview"
-                      />
+                  <div className="site-content-hero-grid">
+                    {siteHeroFiles.length > 0 ? (
+                      siteHeroFiles.map((entry, index) => (
+                        <div className="site-content-hero-thumb" key={entry.previewUrl}>
+                          <img src={entry.previewUrl} alt={`Hero photo ${index + 1}`} />
+                          <button
+                            type="button"
+                            onClick={() => removeSiteHeroFile(index)}
+                            aria-label="Remove this photo"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    ) : siteSettings.heroImageUrls.length > 0 ? (
+                      siteSettings.heroImageUrls.map((url, index) => (
+                        <div className="site-content-hero-thumb" key={url}>
+                          <img src={url} alt={`Hero photo ${index + 1}`} />
+                        </div>
+                      ))
                     ) : (
-                      <span>No image uploaded yet</span>
+                      <span className="site-content-empty">No images uploaded yet</span>
                     )}
                   </div>
 
-                  <input type="file" accept="image/*" onChange={handleSiteHeroChange} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleSiteHeroChange}
+                    disabled={siteHeroFiles.length >= MAX_HERO_IMAGES}
+                  />
+                  <p className="customer-info" style={{ marginTop: 6 }}>
+                    {siteHeroFiles.length > 0
+                      ? `${siteHeroFiles.length}/${MAX_HERO_IMAGES} new photo(s) chosen - not saved yet.`
+                      : `Choose up to ${MAX_HERO_IMAGES} photos (can select several at once).`}
+                  </p>
                 </div>
 
                 <div className="site-content-card">
@@ -4669,7 +4759,7 @@ function Admin() {
               type="button"
               className="save-product-button"
               style={{ marginTop: 20 }}
-              disabled={savingSiteContent || (!siteHeroFile && !siteBrandStoryFile)}
+              disabled={savingSiteContent || (siteHeroFiles.length === 0 && !siteBrandStoryFile)}
               onClick={saveSiteContent}
             >
               {savingSiteContent ? "SAVING..." : "SAVE CHANGES"}

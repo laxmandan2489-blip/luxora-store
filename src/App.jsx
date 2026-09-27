@@ -64,6 +64,48 @@ function LuxIcon({ name, size = 18, filled = false, style }) {
     );
   }
 
+  /*
+   * The four icons below (lock / refresh / badge-check / box) are used
+   * together in the homepage "guarantee strip" (Secure Payments, Easy
+   * Returns, Authentic & Handcrafted, Pan-India Shipping) - added so all
+   * four share the exact same stroke style/weight instead of mixing
+   * emoji (🔒📦) with text symbols (↺✦), which looked inconsistent.
+   */
+  if (name === "lock") {
+    return (
+      <svg {...common}>
+        <rect x="5" y="11" width="14" height="9" rx="2" />
+        <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+      </svg>
+    );
+  }
+
+  if (name === "refresh") {
+    return (
+      <svg {...common}>
+        <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+        <path d="M20 4v5h-5" />
+      </svg>
+    );
+  }
+
+  if (name === "badge-check") {
+    return (
+      <svg {...common}>
+        <path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3Z" />
+        <path d="M9 12.3l2 2 4-4.5" />
+      </svg>
+    );
+  }
+
+  if (name === "chevron-down") {
+    return (
+      <svg {...common}>
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    );
+  }
+
   return null;
 }
 
@@ -172,6 +214,20 @@ const BAG_CATEGORIES = [
 ];
 
 const ALL_BAGS_LABEL = "All Bags";
+
+/*
+ * HEADER MEGA-MENU GROUPING
+ * The header nav used to show every single category as one long flat
+ * row of pills (10+ buttons) - it worked, but didn't look like a
+ * premium store. Mira & Moss-style sites instead show a few broad
+ * links (New / Bags / Accessories) and reveal the specific categories
+ * in a small dropdown panel when you click one. These two lists just
+ * decide which side of that split each category falls on - "Bags" gets
+ * everything except the two truly non-bag categories below, so any new
+ * category (fixed or typed straight into the admin panel) still shows
+ * up somewhere automatically.
+ */
+const ACCESSORY_ONLY_CATEGORIES = ["Accessories", "Wallets"];
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -653,6 +709,27 @@ function App() {
     document.body.style.overflow = "";
   }
 
+  /*
+   * DESKTOP HEADER MEGA-MENU
+   * "bags" | "accessories" | null - which dropdown panel (if any) is
+   * currently open under the header nav. Closes itself on an outside
+   * click, same as a normal site nav.
+   */
+  const [openMegaMenu, setOpenMegaMenu] = useState(null);
+
+  useEffect(() => {
+    if (!openMegaMenu) return;
+
+    function handleOutsideClick(event) {
+      if (!event.target.closest?.(".lux-nav-item")) {
+        setOpenMegaMenu(null);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openMegaMenu]);
+
   /* =========================================================
      NEW CUSTOMER WELCOME OFFER
      A small corner popup shown once per browser to first-time
@@ -841,8 +918,17 @@ function App() {
      actually add images.
   ========================================================= */
 
-  const [heroImageUrl, setHeroImageUrl] = useState("");
+  /*
+   * heroImages is an ARRAY now (used to be a single heroImageUrl) so
+   * the hero banner can rotate through 3-5 owner-uploaded photos like
+   * miramoss.com's homepage does, instead of showing just one static
+   * image. Backend still tolerates the old single-image shape (see
+   * loadSiteSettings below), so this keeps working even before the
+   * owner re-saves Site Content with multiple photos.
+   */
+  const [heroImages, setHeroImages] = useState([]);
   const [brandStoryImageUrl, setBrandStoryImageUrl] = useState("");
+  const [activeHeroSlide, setActiveHeroSlide] = useState(0);
 
   useEffect(() => {
     async function loadSiteSettings() {
@@ -853,7 +939,12 @@ function App() {
         const data = await response.json();
 
         if (data.success && data.settings) {
-          setHeroImageUrl(data.settings.heroImageUrl || "");
+          const images = Array.isArray(data.settings.heroImageUrls)
+            ? data.settings.heroImageUrls.filter(Boolean)
+            : data.settings.heroImageUrl
+            ? [data.settings.heroImageUrl]
+            : [];
+          setHeroImages(images);
           setBrandStoryImageUrl(data.settings.brandStoryImageUrl || "");
         }
       } catch (error) {
@@ -863,6 +954,22 @@ function App() {
 
     loadSiteSettings();
   }, []);
+
+  /*
+   * Auto-rotate the hero banner every 3 seconds when there's more
+   * than one photo to show - same idea as miramoss.com's homepage
+   * banner. A single photo (or none, which falls back to a product
+   * photo/placeholder further down) just never starts this timer.
+   */
+  useEffect(() => {
+    if (heroImages.length < 2) return;
+
+    const timer = window.setInterval(() => {
+      setActiveHeroSlide((current) => (current + 1) % heroImages.length);
+    }, 3000);
+
+    return () => window.clearInterval(timer);
+  }, [heroImages.length]);
 
   const newArrivals = useMemo(() => products.slice(0, 8), [products]);
 
@@ -1052,6 +1159,75 @@ function App() {
       navigate("/");
     } else {
       navigate(`/category/${slugifyCategory(category)}`);
+    }
+    setOpenMegaMenu(null);
+  }
+
+  /*
+   * HEADER MEGA-MENU - splits the full "categories" list (used above)
+   * into the two dropdown panels the header nav shows: "Bags" gets
+   * every category that isn't specifically an accessory/wallet.
+   */
+  const bagNavCategories = useMemo(
+    () =>
+      categories.filter(
+        (category) =>
+          category !== "All" &&
+          category !== ALL_BAGS_LABEL &&
+          !ACCESSORY_ONLY_CATEGORIES.includes(category)
+      ),
+    [categories]
+  );
+
+  const accessoryNavCategories = useMemo(
+    () => categories.filter((category) => ACCESSORY_ONLY_CATEGORIES.includes(category)),
+    [categories]
+  );
+
+  /*
+   * "SHOP BY CATEGORY" TILES (homepage)
+   * Replaces the old plain-text "Timeless Design / Refined Quality /
+   * Everyday Luxury" strip, which the owner felt wasn't doing
+   * anything useful. This is a real, working piece of navigation
+   * instead - a photo tile per category (using that category's own
+   * first product photo), same idea as miramoss.com's category tile
+   * grid. Only categories that actually have at least one product are
+   * shown, so nothing here is ever a dead/empty tile, and it's capped
+   * at 6 tiles so the row doesn't get overwhelming as more categories
+   * fill up over time.
+   */
+  const categoryShowcase = useMemo(() => {
+    const real = categories.filter(
+      (category) => category !== "All" && category !== ALL_BAGS_LABEL
+    );
+
+    return real
+      .map((category) => {
+        const productsInCategory = products.filter((product) => product.category === category);
+        const firstImage = productsInCategory[0] ? getProductImages(productsInCategory[0])[0] : null;
+
+        return {
+          category,
+          count: productsInCategory.length,
+          image: firstImage,
+        };
+      })
+      .filter((entry) => entry.count > 0 && entry.image)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+  }, [categories, products]);
+
+  function scrollToSection(sectionId) {
+    setOpenMegaMenu(null);
+    if (location.pathname !== "/") {
+      navigate("/");
+      // Wait one tick for the homepage sections to actually mount
+      // before trying to scroll to them.
+      window.setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+    } else {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
     }
   }
 
@@ -2209,17 +2385,98 @@ function App() {
             </div>
           </div>
 
+          {/*
+            HEADER NAV - "Bags" and "Accessories" used to list every
+            single category as flat pills in one long row. Now they're
+            two click-to-open dropdown panels (mira&moss-style
+            mega-menu), so the header itself stays short and the
+            specific categories only appear once you click.
+          */}
           <nav className="lux-nav">
-            {categories.map((category) => (
+            <button
+              type="button"
+              className={selectedCategory === "All" ? "active" : ""}
+              onClick={() => goToCategory("All")}
+            >
+              SHOP ALL
+            </button>
+
+            <button type="button" onClick={() => scrollToSection("lux-new-arrivals")}>
+              NEW ARRIVALS
+            </button>
+
+            <div className="lux-nav-item">
               <button
-                key={category}
                 type="button"
-                className={selectedCategory === category ? "active" : ""}
-                onClick={() => goToCategory(category)}
+                className={`lux-nav-item-trigger ${
+                  selectedCategory === ALL_BAGS_LABEL || bagNavCategories.includes(selectedCategory)
+                    ? "active"
+                    : ""
+                }`}
+                onClick={() => setOpenMegaMenu(openMegaMenu === "bags" ? null : "bags")}
               >
-                {category === "All" ? "SHOP ALL" : category}
+                BAGS <LuxIcon name="chevron-down" size={12} />
               </button>
-            ))}
+
+              {openMegaMenu === "bags" && (
+                <div className="lux-nav-dropdown">
+                  <div className="lux-nav-dropdown-col">
+                    <span>SHOP</span>
+                    <button type="button" onClick={() => goToCategory(ALL_BAGS_LABEL)}>
+                      All Bags
+                    </button>
+                    <button type="button" onClick={() => scrollToSection("lux-bestsellers")}>
+                      Bestsellers
+                    </button>
+                    <button type="button" onClick={() => scrollToSection("lux-new-arrivals")}>
+                      New Arrivals
+                    </button>
+                  </div>
+
+                  <div className="lux-nav-dropdown-col">
+                    <span>CATEGORIES</span>
+                    {bagNavCategories.map((category) => (
+                      <button key={category} type="button" onClick={() => goToCategory(category)}>
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {accessoryNavCategories.length > 0 && (
+              <div className="lux-nav-item">
+                <button
+                  type="button"
+                  className={`lux-nav-item-trigger ${
+                    accessoryNavCategories.includes(selectedCategory) ? "active" : ""
+                  }`}
+                  onClick={() =>
+                    setOpenMegaMenu(openMegaMenu === "accessories" ? null : "accessories")
+                  }
+                >
+                  ACCESSORIES <LuxIcon name="chevron-down" size={12} />
+                </button>
+
+                {openMegaMenu === "accessories" && (
+                  <div className="lux-nav-dropdown lux-nav-dropdown-single">
+                    <div className="lux-nav-dropdown-col">
+                      <span>CATEGORIES</span>
+                      {accessoryNavCategories.map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => goToCategory(category)}
+                        >
+                          {category}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </nav>
 
           <div className="lux-header-actions">
@@ -2347,14 +2604,35 @@ function App() {
       {/* HERO */}
       <section className="lux-hero">
         <div className="lux-hero-image">
-          {heroImageUrl ? (
-            <img src={heroImageUrl} alt="SHRIMOH collection" />
+          {heroImages.length > 0 ? (
+            heroImages.map((image, index) => (
+              <img
+                key={image}
+                src={image}
+                alt="SHRIMOH collection"
+                className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
+              />
+            ))
           ) : filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
             <img src={getProductImages(filteredProducts[0])[0]} alt="SHRIMOH collection" />
           ) : (
             <div className="lux-hero-placeholder">SHRIMOH</div>
           )}
           <div className="lux-hero-image-shade" />
+
+          {heroImages.length > 1 && (
+            <div className="lux-hero-dots">
+              {heroImages.map((image, index) => (
+                <button
+                  key={image}
+                  type="button"
+                  className={index === activeHeroSlide ? "active" : ""}
+                  aria-label={`Show slide ${index + 1}`}
+                  onClick={() => setActiveHeroSlide(index)}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="lux-hero-content">
@@ -2393,58 +2671,33 @@ function App() {
         </div>
       </section>
 
-      {/* EDITORIAL STRIP */}
-      <section className="lux-editorial-strip">
-        <div>
-          <span>01</span>
-          <strong>TIMELESS DESIGN</strong>
-          <p>Pieces created beyond seasons.</p>
-        </div>
-
-        <div>
-          <span>02</span>
-          <strong>REFINED QUALITY</strong>
-          <p>Details that make the difference.</p>
-        </div>
-
-        <div>
-          <span>03</span>
-          <strong>EVERYDAY LUXURY</strong>
-          <p>Designed to become your favourite.</p>
-        </div>
-      </section>
-
-      {/* VALUES STRIP */}
-      <section className="lux-values-strip">
-        <div>
-          <span>🌿</span>
-          <strong>100% VEGAN</strong>
-          <p>No animal-derived materials, ever.</p>
-        </div>
-
-        <div>
-          <span>✦</span>
-          <strong>CRUELTY FREE</strong>
-          <p>Ethically made, start to finish.</p>
-        </div>
-
-        <div>
-          <span>♻</span>
-          <strong>RESPONSIBLE MATERIALS</strong>
-          <p>Considered sourcing at every step.</p>
-        </div>
-
-        <div>
-          <span>✎</span>
-          <strong>HANDCRAFTED</strong>
-          <p>Made with care, not mass produced.</p>
-        </div>
-      </section>
+      {/* SHOP BY CATEGORY (replaces the old text-only "Timeless Design /
+          Refined Quality / Everyday Luxury" strip) */}
+      {categoryShowcase.length > 0 && (
+        <section className="lux-category-tiles">
+          {categoryShowcase.map((entry) => (
+            <button
+              type="button"
+              key={entry.category}
+              className="lux-category-tile"
+              onClick={() => goToCategory(entry.category)}
+            >
+              <img src={entry.image} alt={entry.category} />
+              <div className="lux-category-tile-label">
+                <strong>{entry.category}</strong>
+                <span>
+                  {entry.count} {entry.count === 1 ? "piece" : "pieces"}
+                </span>
+              </div>
+            </button>
+          ))}
+        </section>
+      )}
 
       {/* BESTSELLERS */}
       {bestsellers.length > 0 && (
         <>
-          <section className="lux-section-header">
+          <section className="lux-section-header" id="lux-bestsellers">
             <div>
               <span>MOST LOVED</span>
               <h2>Bestsellers</h2>
@@ -2470,7 +2723,7 @@ function App() {
       {/* NEW ARRIVALS */}
       {newArrivals.length > 0 && (
         <>
-          <section className="lux-section-header">
+          <section className="lux-section-header" id="lux-new-arrivals">
             <div>
               <span>JUST IN</span>
               <h2>New Arrivals</h2>
@@ -2694,28 +2947,41 @@ function App() {
         </div>
       </section>
 
-      {/* GUARANTEE / TRUST STRIP */}
+      {/*
+        GUARANTEE / TRUST STRIP
+        All four icons now come from the same LuxIcon set (same stroke
+        weight/size) instead of mixing emoji (🔒📦) with text symbols
+        (↺✦), which looked inconsistent next to each other.
+      */}
       <section className="lux-guarantee-strip">
         <div>
-          <span className="lux-guarantee-icon">🔒</span>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="lock" size={26} />
+          </span>
           <strong>SECURE PAYMENTS</strong>
           <p>100% safe checkout via Razorpay.</p>
         </div>
 
         <div>
-          <span className="lux-guarantee-icon">↺</span>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="refresh" size={26} />
+          </span>
           <strong>EASY 7-DAY RETURNS</strong>
           <p>Not the right fit? Send it back, hassle-free.</p>
         </div>
 
         <div>
-          <span className="lux-guarantee-icon">✦</span>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="badge-check" size={26} />
+          </span>
           <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
           <p>Every piece checked before it ships.</p>
         </div>
 
         <div>
-          <span className="lux-guarantee-icon">📦</span>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="box" size={26} />
+          </span>
           <strong>PAN-INDIA SHIPPING</strong>
           <p>Delivered safely, wherever you are.</p>
         </div>
