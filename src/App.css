@@ -3870,6 +3870,23 @@ a {
   letter-spacing: 1.4px;
 }
 
+/*
+ * "Remember my details" note - shown only when the delivery form was
+ * pre-filled from this device's last order (see loadSavedCustomer /
+ * customerAutofilled in App.jsx). Disappears the moment the customer
+ * edits any field, since it's no longer just the remembered version.
+ */
+.lux-autofill-note {
+  margin: -14px 0 22px;
+  padding: 10px 14px;
+  background: var(--lux-accent-soft);
+  border: 1px solid var(--lux-line);
+  border-radius: 6px;
+  color: #6b5a3c;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .lux-customer-form input,
 .lux-customer-form textarea {
   width: 100%;

@@ -1008,15 +1008,67 @@ function App() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderReference, setOrderReference] = useState("");
 
-  const [customer, setCustomer] = useState({
-    name: "",
-    mobile: "",
-    email: "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
-  });
+  /*
+   * "REMEMBER MY DETAILS" - free, no-backend version of the
+   * OTP-autofill checkout the owner asked about (GoKwik/Razorpay
+   * Magic Checkout). Those services can recognise a phone number
+   * that has NEVER shopped here before because they share one big
+   * database of customers across many stores - something we don't
+   * have and can't safely fake (looking up a stranger's saved
+   * address just from a phone number they type in, with no
+   * verification, would leak past customers' name/address to
+   * anyone who tries their number - a real privacy risk).
+   *
+   * What we CAN do for free, safely: after someone successfully
+   * places an order on THIS device/browser, remember their name +
+   * address in this browser only (localStorage). Next time they
+   * open checkout on the same device, the form is already filled
+   * in - still fully editable - instead of starting blank. This
+   * covers the very common case of a repeat customer ordering again
+   * from their own phone/laptop, without exposing anyone else's data.
+   */
+  const SAVED_CUSTOMER_KEY = "shrimoh_saved_customer";
+
+  function loadSavedCustomer() {
+    try {
+      const raw = window.localStorage.getItem(SAVED_CUSTOMER_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return {
+        name: parsed.name || "",
+        mobile: parsed.mobile || "",
+        email: parsed.email || "",
+        address: parsed.address || "",
+        city: parsed.city || "",
+        state: parsed.state || "",
+        pincode: parsed.pincode || "",
+      };
+    } catch {
+      // localStorage can be unavailable (private browsing, blocked
+      // storage, etc.) - just fall back to a blank form, same as before.
+      return null;
+    }
+  }
+
+  const [customer, setCustomer] = useState(
+    () =>
+      loadSavedCustomer() || {
+        name: "",
+        mobile: "",
+        email: "",
+        address: "",
+        city: "",
+        state: "",
+        pincode: "",
+      }
+  );
+
+  // True only when the form above was pre-filled from a remembered
+  // order on this device - drives the small "saved from your last
+  // order" note in the checkout form, and clears the moment the
+  // customer edits anything themselves.
+  const [customerAutofilled, setCustomerAutofilled] = useState(() => Boolean(loadSavedCustomer()));
 
   /* =========================================================
      COUPON
@@ -2096,6 +2148,10 @@ function App() {
       ...previous,
       [field]: cleanValue,
     }));
+
+    // Once the customer touches any field themselves, this is no
+    // longer just the remembered/pre-filled version - drop the note.
+    setCustomerAutofilled(false);
   }
 
   /* =========================================================
@@ -2336,6 +2392,16 @@ function App() {
 
             setOrderReference(finalReference);
             setOrderPlaced(true);
+
+            // Remember these details on THIS device only, so checkout
+            // is pre-filled (still fully editable) next time - see the
+            // "REMEMBER MY DETAILS" note near the customer state above.
+            try {
+              window.localStorage.setItem(SAVED_CUSTOMER_KEY, JSON.stringify(customerData));
+            } catch {
+              // Storage blocked/unavailable - not worth failing the
+              // order over, just skip remembering it.
+            }
 
             /*
              * Only clear the persistent cart if this was a
@@ -4209,6 +4275,13 @@ function App() {
                       <span>SHIPPING DETAILS</span>
                       <h2>Delivery information</h2>
                     </div>
+
+                    {customerAutofilled && (
+                      <div className="lux-autofill-note">
+                        Filled in from your last order on this device - change anything that's
+                        different this time.
+                      </div>
+                    )}
 
                     <label>
                       FULL NAME
