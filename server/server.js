@@ -1133,12 +1133,25 @@ async function getSiteSettingsRow() {
 
   if (error) throw error;
 
-  return data || { hero_image_url: null, brand_story_image_url: null };
+  return data || { hero_image_urls: [], hero_image_url: null, brand_story_image_url: null };
 }
 
 function formatSiteSettings(row) {
+  /*
+   * hero_image_urls (jsonb array) is the current shape, supporting the
+   * homepage's rotating hero banner (3-5 photos). hero_image_url (the
+   * old single-photo column) is still read as a fallback so a site
+   * that only ever had that one column keeps working - see the SQL
+   * migration in apply-instructions.md for both columns.
+   */
+  const heroImageUrls = Array.isArray(row?.hero_image_urls) && row.hero_image_urls.length > 0
+    ? row.hero_image_urls
+    : row?.hero_image_url
+    ? [row.hero_image_url]
+    : [];
+
   return {
-    heroImageUrl: row?.hero_image_url || "",
+    heroImageUrls,
     brandStoryImageUrl: row?.brand_story_image_url || ""
   };
 }
@@ -1150,7 +1163,7 @@ app.get("/api/site-settings", async function (req, res) {
   } catch (error) {
     console.error("GET SITE SETTINGS ERROR:", error);
     // Non-fatal for the storefront - it just falls back to defaults.
-    return res.json({ success: true, settings: { heroImageUrl: "", brandStoryImageUrl: "" } });
+    return res.json({ success: true, settings: { heroImageUrls: [], brandStoryImageUrl: "" } });
   }
 });
 
@@ -1159,15 +1172,19 @@ app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (
 
   try {
     const files = Array.isArray(req.files) ? req.files : [];
-    const heroFile = files.find((file) => file.fieldname === "heroImage");
+    const heroFiles = files.filter((file) => file.fieldname === "heroImage").slice(0, 5);
     const brandStoryFile = files.find((file) => file.fieldname === "brandStoryImage");
 
     const updateData = { updated_at: new Date().toISOString() };
 
-    if (heroFile) {
-      const url = await uploadImage(heroFile);
-      uploadedUrls.push(url);
-      updateData.hero_image_url = url;
+    if (heroFiles.length > 0) {
+      const heroUrls = [];
+      for (const file of heroFiles) {
+        const url = await uploadImage(file);
+        uploadedUrls.push(url);
+        heroUrls.push(url);
+      }
+      updateData.hero_image_urls = heroUrls;
     }
 
     if (brandStoryFile) {
@@ -1176,7 +1193,7 @@ app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (
       updateData.brand_story_image_url = url;
     }
 
-    if (!heroFile && !brandStoryFile) {
+    if (heroFiles.length === 0 && !brandStoryFile) {
       return res.status(400).json({
         success: false,
         message: "Please choose at least one image to upload."
