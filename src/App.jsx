@@ -1195,16 +1195,13 @@ function App() {
   );
 
   /*
-   * "SHOP BY CATEGORY" TILES (homepage)
-   * Replaces the old plain-text "Timeless Design / Refined Quality /
-   * Everyday Luxury" strip, which the owner felt wasn't doing
-   * anything useful. This is a real, working piece of navigation
-   * instead - a photo tile per category (using that category's own
-   * first product photo), same idea as miramoss.com's category tile
-   * grid. Only categories that actually have at least one product are
-   * shown, so nothing here is ever a dead/empty tile, and it's capped
-   * at 6 tiles so the row doesn't get overwhelming as more categories
-   * fill up over time.
+   * "SHOP BY CATEGORY" BANNERS (homepage, below New Arrivals)
+   * Mira & Moss keeps this to just a couple of large "Shop Now"
+   * category banners rather than a full row of small tiles for every
+   * category, so we only show the top 2 (by how many products they
+   * have) instead of every category. Only categories that actually
+   * have at least one product with a real photo are eligible, so
+   * nothing here is ever a dead/empty banner.
    */
   const categoryShowcase = useMemo(() => {
     const real = categories.filter(
@@ -1214,9 +1211,10 @@ function App() {
     return real
       .map((category) => {
         const productsInCategory = products.filter((product) => product.category === category);
-        const firstImage = productsInCategory[0]
-          ? getProductImages(productsInCategory[0], THUMB_IMAGE_WIDTH)[0]
-          : null;
+        const withImage = productsInCategory.find(
+          (product) => getProductImages(product, THUMB_IMAGE_WIDTH)[0]
+        );
+        const firstImage = withImage ? getProductImages(withImage, THUMB_IMAGE_WIDTH)[0] : null;
 
         return {
           category,
@@ -1226,7 +1224,7 @@ function App() {
       })
       .filter((entry) => entry.count > 0 && entry.image)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .slice(0, 2);
   }, [categories, products]);
 
   function scrollToSection(sectionId) {
@@ -2736,29 +2734,6 @@ function App() {
         </div>
       </section>
 
-      {/* SHOP BY CATEGORY (replaces the old text-only "Timeless Design /
-          Refined Quality / Everyday Luxury" strip) */}
-      {categoryShowcase.length > 0 && (
-        <section className="lux-category-tiles">
-          {categoryShowcase.map((entry) => (
-            <button
-              type="button"
-              key={entry.category}
-              className="lux-category-tile"
-              onClick={() => goToCategory(entry.category)}
-            >
-              <img src={entry.image} alt={entry.category} />
-              <div className="lux-category-tile-label">
-                <strong>{entry.category}</strong>
-                <span>
-                  {entry.count} {entry.count === 1 ? "piece" : "pieces"}
-                </span>
-              </div>
-            </button>
-          ))}
-        </section>
-      )}
-
       {/* BESTSELLERS */}
       {bestsellers.length > 0 && (
         <>
@@ -2804,6 +2779,44 @@ function App() {
             {expandProductVariants(newArrivals).map(({ product, color }) =>
               renderProductCard(product, { keyPrefix: "new", badge: "sale", forceColor: color })
             )}
+          </div>
+        </>
+      )}
+
+      {/* SHOP BY CATEGORY - just 2 large banner tiles, right below New
+          Arrivals (Mira & Moss keeps this to a couple of big "Shop Now"
+          category banners rather than a full row of small tiles). */}
+      {categoryShowcase.length > 0 && (
+        <>
+          <section className="lux-section-header" id="lux-shop-by-category">
+            <div>
+              <span>EXPLORE</span>
+              <h2>Shop by Category</h2>
+            </div>
+          </section>
+
+          <div className="lux-category-tiles">
+            {categoryShowcase.map((entry) => (
+              <button
+                type="button"
+                key={entry.category}
+                className="lux-category-tile"
+                onClick={() => goToCategory(entry.category)}
+              >
+                <img
+                  src={entry.image}
+                  alt={entry.category}
+                  onError={(event) => {
+                    event.currentTarget.style.display = "none";
+                    event.currentTarget.parentElement?.classList.add("lux-category-tile-noimg");
+                  }}
+                />
+                <div className="lux-category-tile-label">
+                  <strong>{entry.category}</strong>
+                  <span>Shop Now →</span>
+                </div>
+              </button>
+            ))}
           </div>
         </>
       )}
