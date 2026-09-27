@@ -1546,7 +1546,7 @@ function App() {
                   setCartOpen(true);
                 }}
               >
-                {isSoldOut ? "SOLD OUT" : "ADD TO CART"}
+                {isSoldOut ? "SOLD OUT" : "ADD TO BAG"}
               </button>
 
               <button type="button" onClick={() => openProduct(product, activeColor)}>
@@ -1607,6 +1607,27 @@ function App() {
             )}
           </div>
         </div>
+
+        {/*
+         * Mira & Moss-style "ADD TO BAG" - a plain outlined button sitting
+         * BELOW the price/swatches, not a dark bar overlaid on the photo.
+         * This is mobile-only (see .lux-card-add-mobile in App.css) -
+         * on desktop the hover overlay on the image already covers this,
+         * matching the phone screenshot the owner sent as the reference.
+         */}
+        <button
+          type="button"
+          className="lux-card-add-mobile"
+          disabled={isSoldOut}
+          onClick={(e) => {
+            e.stopPropagation();
+            addToCart(product, 1, activeColor);
+            setCartOpen(true);
+          }}
+        >
+          <LuxIcon name="bag" size={13} />
+          {isSoldOut ? "SOLD OUT" : "ADD TO BAG"}
+        </button>
       </article>
     );
   }
@@ -3303,7 +3324,7 @@ function App() {
                     setCartOpen(true);
                   }}
                 >
-                  ADD TO CART
+                  ADD TO BAG
                   <span>→</span>
                 </button>
 
@@ -3921,7 +3942,7 @@ function App() {
                         disabled={qvSoldOut}
                         onClick={addToCartFromQuickView}
                       >
-                        {qvSoldOut ? "SOLD OUT" : "ADD TO CART"}
+                        {qvSoldOut ? "SOLD OUT" : "ADD TO BAG"}
                       </button>
 
                       <button

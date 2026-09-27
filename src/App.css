@@ -528,7 +528,22 @@ a {
 
 .lux-hero {
   position: relative;
-  min-height: 720px;
+  /*
+   * Used to be a flat "min-height: 720px" with no width limit at all,
+   * so on a wide laptop/monitor (1800px, 2200px, 2560px...) the banner
+   * kept getting WIDER while staying exactly 720px tall - an
+   * increasingly extreme, short letterbox shape that crops away more
+   * and more of each hero photo's height the wider the screen gets
+   * (and can make a photo that was framed for a normal-ish banner look
+   * cut off / oddly composed). aspect-ratio keeps the shape closer to
+   * constant as width changes, and max-width stops it from being
+   * stretched across ultra-wide screens at all.
+   */
+  aspect-ratio: 2.1 / 1;
+  min-height: 640px;
+  max-height: 780px;
+  max-width: 1800px;
+  margin: 0 auto;
   overflow: hidden;
   background: #d6c7ab;
 }
@@ -1330,6 +1345,17 @@ a {
 .lux-card-overlay span {
   font-size: 13px;
   margin-left: 5px;
+}
+
+/*
+ * Mira & Moss-style "ADD TO BAG" button - plain white background,
+ * thin dark border, sits BELOW the price/swatches. Hidden on desktop
+ * (the hover overlay on the photo already offers quick-add there);
+ * shown on phones in place of the dark bar that used to sit on top of
+ * the photo permanently (see the 650px media query further down).
+ */
+.lux-card-add-mobile {
+  display: none;
 }
 
 /* =========================================================
@@ -5012,23 +5038,10 @@ a {
     text-align: left;
   }
 
+  /* Phone: no dark bar sitting on top of the photo anymore - the
+     "ADD TO BAG" action moves below the card info instead (see
+     .lux-card-add-mobile below), matching Mira & Moss's mobile grid. */
   .lux-card-overlay {
-    left: 8px;
-    right: 8px;
-    bottom: 8px;
-    min-height: 42px;
-    opacity: 1;
-    transform: none;
-    padding: 0 5px;
-  }
-
-  .lux-card-overlay button {
-    min-height: 40px;
-    font-size: 7px;
-    letter-spacing: 1px;
-  }
-
-  .lux-card-overlay button + button {
     display: none;
   }
 
@@ -5038,6 +5051,31 @@ a {
     width: 30px;
     height: 30px;
     font-size: 14px;
+  }
+
+  .lux-card-add-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 11px 10px;
+    border: 1px solid var(--lux-dark);
+    background: #ffffff;
+    color: var(--lux-dark);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+  }
+
+  .lux-card-add-mobile:active {
+    background: var(--lux-dark);
+    color: #fff;
+  }
+
+  .lux-card-add-mobile:disabled {
+    opacity: 0.45;
   }
 
   .lux-brand-story {
