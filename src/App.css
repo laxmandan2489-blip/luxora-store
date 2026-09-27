@@ -528,24 +528,32 @@ a {
 
 .lux-hero {
   position: relative;
-  /*
-   * Used to be a flat "min-height: 720px" with no width limit at all,
-   * so on a wide laptop/monitor (1800px, 2200px, 2560px...) the banner
-   * kept getting WIDER while staying exactly 720px tall - an
-   * increasingly extreme, short letterbox shape that crops away more
-   * and more of each hero photo's height the wider the screen gets
-   * (and can make a photo that was framed for a normal-ish banner look
-   * cut off / oddly composed). aspect-ratio keeps the shape closer to
-   * constant as width changes, and max-width stops it from being
-   * stretched across ultra-wide screens at all.
-   */
-  aspect-ratio: 2.1 / 1;
-  min-height: 640px;
-  max-height: 780px;
-  max-width: 1800px;
-  margin: 0 auto;
+  min-height: 720px;
   overflow: hidden;
   background: #d6c7ab;
+}
+
+/*
+ * LAPTOP/DESKTOP ONLY (1024px and wider) crop/blur fix.
+ * Phone was already correct (min-height:720px, no width limit, was
+ * fine on a narrow screen) - this override is scoped strictly to
+ * min-width: 1024px so it can NEVER touch the phone view again.
+ * On a wide laptop/monitor, "min-height: 720px" with no width limit
+ * meant the banner kept getting WIDER while staying exactly 720px
+ * tall - an increasingly extreme, short letterbox shape that crops
+ * away more and more of each hero photo's height the wider the
+ * screen gets. aspect-ratio keeps the shape closer to constant as
+ * width changes, and max-width stops it from being stretched across
+ * ultra-wide monitors at all.
+ */
+@media (min-width: 1024px) {
+  .lux-hero {
+    aspect-ratio: 2.1 / 1;
+    min-height: 640px;
+    max-height: 780px;
+    max-width: 1800px;
+    margin: 0 auto;
+  }
 }
 
 .lux-hero-image {
