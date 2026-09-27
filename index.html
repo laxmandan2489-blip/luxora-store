@@ -5,6 +5,17 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Every product photo is served through images.weserv.nl (see
+      getImageUrl() in src/App.jsx). Preconnecting here lets the
+      browser finish the DNS lookup + TLS handshake with that host
+      ahead of time, in parallel with the rest of the page loading,
+      instead of paying that setup cost only when the first photo
+      request actually fires - shaves a real chunk off how long a
+      product's first photo takes to appear.
+    -->
+    <link rel="preconnect" href="https://images.weserv.nl" crossorigin />
+    <link rel="dns-prefetch" href="https://images.weserv.nl" />
     <title>SHRIMOH - The Luxury Store</title>
   </head>
   <body>
