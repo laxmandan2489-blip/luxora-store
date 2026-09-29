@@ -1,32 +1,35 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap");
 
 /* =========================================================
-   SHRIMOH — VEGAN LUXURY EDIT
+   SHRIMOH — PREMIUM LUXURY EDIT
    COMPLETE APP CSS
 ========================================================= */
 
 :root {
-  --lux-bg: #f6f1e6;
-  --lux-paper: #fbf7ee;
-  --lux-soft: #efe7d6;
-  --lux-soft-2: #e8dfc9;
-  --lux-line: #ddd0b3;
-  --lux-line-dark: #c7b590;
-  --lux-text: #211a10;
-  --lux-muted: #7d6c4f;
-  --lux-light: #a19070;
-  --lux-dark: #1c150d;
-  --lux-dark-2: #271e13;
   /*
-   * Premium neutral palette. The two accent colors below used to be
-   * a wine/maroon and a pine green (off-brief for a cream/brown/
-   * black/gold "quiet luxury" look) - they're now a near-black and
-   * a warm antique gold instead, matching the rest of the site
-   * (hero kicker, brand-story circle, pill nav active state).
+   * Palette locked to the SHRIMOH brand spec (obsidian / warm ivory /
+   * deep charcoal / champagne gold). --lux-pine is the champagne-gold
+   * accent name kept from earlier revisions so every existing usage
+   * across this file keeps working untouched - only the colour value
+   * changed, not the variable name. Gold stays reserved for small
+   * highlights (borders, selected states, tiny icons) - the bulk of
+   * the site is obsidian / ivory / charcoal, per the brand rule that
+   * gold should never become a dominant colour.
    */
-  --lux-accent: #1c150d;
-  --lux-accent-soft: #f2e9d6;
-  --lux-pine: #96772a;
+  --lux-bg: #f7f4ef; /* Warm Ivory - primary background */
+  --lux-paper: #fcfaf7; /* secondary background (cards, panels) */
+  --lux-soft: #f1ece2; /* subtle fill (hover/selected surfaces) */
+  --lux-soft-2: #e9e2d3; /* slightly deeper subtle fill */
+  --lux-line: #e4dfd3; /* hairline borders */
+  --lux-line-dark: #d3cbb8; /* slightly stronger borders */
+  --lux-text: #242424; /* Deep Charcoal - body text */
+  --lux-muted: #75726c; /* muted/secondary text */
+  --lux-light: #a8a39a; /* faint text, placeholders */
+  --lux-dark: #111111; /* Obsidian Black - header/footer/buttons */
+  --lux-dark-2: #1c1c1c; /* obsidian, slightly lifted (hover states) */
+  --lux-accent: #111111;
+  --lux-accent-soft: #f3ecdc;
+  --lux-pine: #b89b65; /* Champagne Gold - sparing accent use only */
 }
 
 /* =========================================================
@@ -51,7 +54,7 @@ body {
   margin: 0;
   background: var(--lux-bg);
   color: var(--lux-text);
-  font-family: "DM Sans", Arial, sans-serif;
+  font-family: "Manrope", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -84,6 +87,33 @@ img {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/*
+ * Brand-consistent keyboard focus ring, shown only for keyboard/
+ * assistive-tech navigation (:focus-visible), never on a mouse click.
+ * Anything that already defines its own :focus-visible style (search
+ * inputs, coupon input, etc.) simply overrides this via normal CSS
+ * specificity/source order - this is just the sitewide default.
+ */
+:focus-visible {
+  outline: 2px solid var(--lux-pine);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* =========================================================
@@ -369,7 +399,7 @@ a {
   height: 38px;
   border: 0;
   background: transparent;
-  color: #221b12;
+  color: #1e1e1e;
   font-size: 20px;
   transition: transform 0.2s ease;
 }
@@ -406,7 +436,7 @@ a {
   display: none;
   border: 0;
   background: transparent;
-  color: #221b12;
+  color: #1e1e1e;
   font-size: 22px;
 }
 
@@ -452,7 +482,7 @@ a {
 .lux-search-inner button {
   border: 0;
   background: transparent;
-  color: #221b12;
+  color: #1e1e1e;
   font-size: 26px;
 }
 
@@ -613,6 +643,26 @@ a {
   opacity: 1;
 }
 
+/*
+ * Extremely subtle slow zoom on the active hero photo (scale 1.00 ->
+ * 1.04 over 12s) - cinematic without feeling like the page is
+ * "moving". Skipped entirely for anyone with reduced-motion set.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .lux-hero-image img.lux-hero-slide.lux-hero-slide-active {
+    animation: luxHeroZoom 12s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes luxHeroZoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.04);
+  }
+}
+
 @media (min-width: 1024px) {
   .lux-hero-image img.lux-hero-slide-bg {
     display: block;
@@ -708,6 +758,50 @@ a {
   letter-spacing: 3px;
 }
 
+/*
+ * Staggered entrance for the hero copy on page load (kicker -> heading
+ * -> description -> buttons), each a little later than the last.
+ * Default state is fully visible (opacity: 1) so nothing is ever stuck
+ * invisible if the animation is skipped; the animated version only
+ * applies under prefers-reduced-motion: no-preference.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .lux-hero-kicker,
+  .lux-hero-content h1,
+  .lux-hero-content p,
+  .lux-hero-buttons {
+    opacity: 0;
+    animation: luxHeroContentIn 0.8s ease forwards;
+  }
+
+  .lux-hero-kicker {
+    animation-delay: 0.1s;
+  }
+
+  .lux-hero-content h1 {
+    animation-delay: 0.25s;
+  }
+
+  .lux-hero-content p {
+    animation-delay: 0.5s;
+  }
+
+  .lux-hero-buttons {
+    animation-delay: 0.75s;
+  }
+}
+
+@keyframes luxHeroContentIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .lux-hero-content h1 {
   max-width: 900px;
   margin: 0;
@@ -731,6 +825,12 @@ a {
   font-size: 14px;
   line-height: 1.8;
   letter-spacing: 0.3px;
+}
+
+.lux-hero-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
 }
 
 .lux-hero-content button {
@@ -761,6 +861,65 @@ a {
 
 .lux-hero-content button span {
   font-size: 17px;
+}
+
+.lux-hero-content button.lux-hero-btn-secondary {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.lux-hero-content button.lux-hero-btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+}
+
+.lux-hero-scroll-cue {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2.2px;
+  background: transparent;
+  border: none;
+  padding: 4px;
+}
+
+.lux-hero-scroll-cue svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .lux-hero-scroll-cue svg {
+    animation: luxScrollCue 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes luxScrollCue {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(5px);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .lux-hero-scroll-cue {
+    display: none;
+  }
 }
 
 .lux-hero-bottom {
@@ -926,7 +1085,7 @@ a {
 .lux-collection-header h2,
 .lux-section-header h2 {
   margin: 13px 0 0;
-  color: #1d1710;
+  color: #161616;
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(42px, 5vw, 70px);
   font-weight: 400;
@@ -943,7 +1102,7 @@ a {
 
 .lux-collection-right p {
   margin: 0 0 9px;
-  color: #241c11;
+  color: #1a1a1a;
   font-size: 12px;
 }
 
@@ -1329,7 +1488,7 @@ a {
 }
 
 .lux-quickview-btn:hover {
-  background: #1c150d;
+  background: #111111;
   color: #fff;
 }
 
@@ -1439,7 +1598,7 @@ a {
 .lux-card-info h3 {
   margin: 7px 0 0;
   overflow: hidden;
-  color: #241c11;
+  color: #1a1a1a;
   font-family: "Playfair Display", Georgia, serif;
   font-size: 18px;
   font-weight: 400;
@@ -1464,7 +1623,7 @@ a {
 }
 
 .lux-card-price strong {
-  color: #221b12;
+  color: #1e1e1e;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1625,7 +1784,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #1d160e;
+  background: #111111;
   color: white;
 }
 
@@ -1670,7 +1829,7 @@ a {
 
 .lux-brand-story-copy button:hover {
   background: #fff;
-  color: #1d160e;
+  color: #111111;
 }
 
 .lux-brand-story-mark {
@@ -1747,7 +1906,10 @@ a {
 }
 
 /* =========================================================
-   VALUES STRIP (vegan / cruelty-free positioning)
+   VALUES STRIP (reused on the About page for the real,
+   verifiable trust points - handcrafted / secure payments /
+   returns / shipping - not vegan/cruelty-free positioning,
+   which SHRIMOH explicitly does not use)
 ========================================================= */
 
 .lux-values-strip {
@@ -1775,7 +1937,7 @@ a {
   display: block;
   font-size: 9px;
   letter-spacing: 1.6px;
-  color: #241c11;
+  color: #1a1a1a;
 }
 
 .lux-values-strip p {
@@ -1872,7 +2034,7 @@ a {
 }
 
 .lux-review-top strong {
-  color: #251d13;
+  color: #1b1b1b;
   font-family: "Playfair Display", Georgia, serif;
   font-size: 15px;
   font-weight: 400;
@@ -1898,6 +2060,110 @@ a {
   font-size: 7px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
+}
+
+/* =========================================================
+   NEWSLETTER
+========================================================= */
+
+.lux-newsletter {
+  background: var(--lux-dark);
+  padding: 70px 5vw;
+}
+
+.lux-newsletter-inner {
+  max-width: 620px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.lux-newsletter-kicker {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 2.4px;
+  color: var(--lux-pine);
+  margin-bottom: 14px;
+}
+
+.lux-newsletter-copy h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(26px, 3.4vw, 38px);
+  color: #f7f4ef;
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+.lux-newsletter-copy p {
+  color: #c9c4b8;
+  font-size: 14.5px;
+  margin: 0 0 34px;
+  letter-spacing: 0.2px;
+}
+
+.lux-newsletter-form {
+  display: flex;
+  gap: 10px;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.lux-newsletter-form input {
+  flex: 1;
+  padding: 15px 18px;
+  border: 1px solid rgba(247, 244, 239, 0.25);
+  background: rgba(247, 244, 239, 0.06);
+  color: #f7f4ef;
+  font-size: 13.5px;
+  border-radius: 2px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.lux-newsletter-form input::placeholder {
+  color: rgba(247, 244, 239, 0.5);
+}
+
+.lux-newsletter-form input:focus-visible {
+  outline: none;
+  border-color: var(--lux-pine);
+  background: rgba(247, 244, 239, 0.1);
+}
+
+.lux-newsletter-form button {
+  padding: 15px 26px;
+  background: var(--lux-pine);
+  border: 1px solid var(--lux-pine);
+  color: #14110a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  white-space: nowrap;
+  border-radius: 2px;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.lux-newsletter-form button:hover:not(:disabled) {
+  background: #c7ab77;
+}
+
+.lux-newsletter-form button:disabled {
+  opacity: 0.75;
+}
+
+.lux-newsletter-message {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  letter-spacing: 0.3px;
+  color: #cdbd8c;
+}
+
+.lux-newsletter-message.is-error {
+  color: #e3a2a2;
+}
+
+@media (max-width: 640px) {
+  .lux-newsletter-form {
+    flex-direction: column;
+  }
 }
 
 /* =========================================================
@@ -1956,7 +2222,14 @@ a {
 
 .lux-footer-links {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 640px) {
+  .lux-footer-links {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 28px;
+  }
 }
 
 .lux-footer-links > div {
@@ -2137,7 +2410,7 @@ a {
 }
 
 .lux-info-close:hover {
-  background: #1c150d;
+  background: #111111;
   color: #fff;
 }
 
@@ -3026,7 +3299,7 @@ a {
 }
 
 .lux-service-item strong {
-  color: #2c2416;
+  color: #262626;
   font-size: 8px;
   letter-spacing: 1.5px;
 }
@@ -3322,7 +3595,7 @@ a {
 
 .lux-cart-header button:hover,
 .lux-wishlist-header button:hover {
-  background: #1c150d;
+  background: #111111;
   color: #fff;
 }
 
@@ -3428,6 +3701,113 @@ a {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+/* =========================================================
+   SCROLL REVEAL
+   Applied via className="lux-reveal" + toggled to
+   "lux-reveal-visible" by an IntersectionObserver in App.jsx.
+   Reduced-motion users (or anyone whose JS hasn't run yet) simply
+   see the final, fully-visible state - nothing is ever stuck
+   invisible.
+========================================================= */
+
+@media (prefers-reduced-motion: no-preference) {
+  .lux-reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+
+  .lux-reveal-visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   MOBILE BOTTOM NAV
+   Hidden by default (desktop keeps using the header); becomes a
+   fixed, thumb-reach bar only below 768px.
+========================================================= */
+
+.lux-mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .lux-mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9000;
+    background: var(--lux-paper);
+    border-top: 1px solid var(--lux-line);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -6px 18px rgba(17, 17, 17, 0.06);
+  }
+
+  .lux-mobile-bottom-nav button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 4px 8px;
+    background: transparent;
+    border: none;
+    color: var(--lux-text);
+  }
+
+  .lux-mobile-bottom-nav button span:last-child {
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+  }
+
+  .lux-mobile-bottom-nav-badge-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .lux-mobile-bottom-nav-badge-wrap em {
+    position: absolute;
+    top: -6px;
+    right: -9px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: var(--lux-dark);
+    color: #fff;
+    font-style: normal;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Reserve space at the bottom of the page so this bar never covers
+     the footer/newsletter content beneath it. */
+  .shrimoh-app {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The WhatsApp float and welcome-offer popup both normally sit
+     flush with the screen edge - lift them above the new bar so
+     nothing overlaps on phones. */
+  .lux-whatsapp-float {
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .lux-welcome-offer {
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    border-radius: 16px;
+  }
 }
 
 /* =========================================================
@@ -3895,7 +4275,7 @@ a {
   border: 1px solid #ddceab;
   outline: none;
   background: #fbf7ee;
-  color: #271f13;
+  color: #1c1c1c;
   font-size: 12px;
   transition:
     border-color 0.2s ease,
@@ -4350,7 +4730,7 @@ a {
 
 .lux-track-page-hero h1 {
   margin: 14px 0 0;
-  color: #1d1710;
+  color: #161616;
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(38px, 5vw, 58px);
   font-weight: 400;
@@ -4388,7 +4768,7 @@ a {
   font-family: "Playfair Display", Georgia, serif;
   font-size: 22px;
   font-weight: 400;
-  color: #1d1710;
+  color: #161616;
 }
 
 .lux-track-page-form-card form {
@@ -4489,7 +4869,7 @@ a {
   display: block;
   font-size: 14px;
   margin-bottom: 8px;
-  color: #1d1710;
+  color: #161616;
 }
 
 .lux-track-page-steps > div p {
@@ -4545,7 +4925,7 @@ a {
   font-family: "Playfair Display", Georgia, serif;
   font-size: 26px;
   font-weight: 400;
-  color: #1d1710;
+  color: #161616;
 }
 
 .lux-track-page-summary em {
@@ -4668,7 +5048,7 @@ a {
   font-family: "Playfair Display", Georgia, serif;
   font-size: 18px;
   font-weight: 400;
-  color: #1d1710;
+  color: #161616;
 }
 
 .lux-track-page-items {
@@ -5013,7 +5393,10 @@ a {
 
   .lux-whatsapp-float {
     right: 14px;
-    bottom: 14px;
+    /* Stay above the fixed mobile bottom nav bar (see the
+       max-width: 767px rule) instead of the flush-to-edge 14px
+       this used before that bar existed. */
+    bottom: calc(70px + env(safe-area-inset-bottom, 0px));
     width: 48px;
     height: 48px;
   }
@@ -5487,5 +5870,275 @@ a {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* =========================================================
+   ANNOUNCEMENT BAR - rotation controls
+   (the blanket prefers-reduced-motion rule above already kills the
+   luxAnnouncementFade animation for anyone who needs that, so no
+   separate guard is needed here)
+========================================================= */
+
+.lux-announcement-arrow {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 10px;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.lux-announcement-arrow:hover,
+.lux-announcement-arrow:focus-visible {
+  opacity: 1;
+}
+
+.lux-announcement-text {
+  flex: 1;
+  text-align: center;
+  animation: luxAnnouncementFade 0.4s ease;
+}
+
+@keyframes luxAnnouncementFade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =========================================================
+   HERO - prev/next arrows (autoplay + swipe are JS-only, see App.jsx)
+========================================================= */
+
+.lux-hero-arrow {
+  position: absolute;
+  top: 50%;
+  z-index: 4;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(17, 17, 17, 0.35);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.25s ease, background 0.2s ease;
+}
+
+.lux-hero-image:hover .lux-hero-arrow,
+.lux-hero-arrow:focus-visible {
+  opacity: 1;
+}
+
+.lux-hero-arrow:hover {
+  background: rgba(17, 17, 17, 0.6);
+}
+
+.lux-hero-arrow-prev {
+  left: 20px;
+}
+
+.lux-hero-arrow-next {
+  right: 20px;
+}
+
+@media (max-width: 767px) {
+  .lux-hero-arrow {
+    opacity: 0.55;
+    width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+}
+
+/* =========================================================
+   PRODUCT ROW CONTROLS - shared by New Arrivals, Bestsellers, the
+   category teaser rows and the Featured Products tabbed row: a
+   prev/next arrow pair + "View All", centered under the row.
+========================================================= */
+
+.lux-row-controls {
+  width: min(1400px, 90vw);
+  margin: 18px auto 65px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.lux-row-arrow {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid var(--lux-line-dark);
+  background: var(--lux-paper);
+  color: var(--lux-text);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.lux-row-arrow:hover {
+  background: var(--lux-dark);
+  border-color: var(--lux-dark);
+  color: var(--lux-bg);
+}
+
+.lux-row-viewall {
+  margin-left: 8px;
+  background: transparent;
+  border: 1px solid var(--lux-dark);
+  padding: 11px 24px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.lux-row-viewall:hover {
+  background: var(--lux-dark);
+  color: var(--lux-bg);
+}
+
+@media (max-width: 640px) {
+  .lux-row-controls {
+    margin: 14px auto 45px;
+    gap: 10px;
+  }
+
+  .lux-row-viewall {
+    padding: 9px 18px;
+  }
+}
+
+/* =========================================================
+   FEATURED PRODUCTS TABS
+========================================================= */
+
+.lux-featured-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 480px;
+}
+
+.lux-featured-tabs button {
+  background: transparent;
+  border: 1px solid var(--lux-line-dark);
+  padding: 9px 17px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--lux-muted);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+
+.lux-featured-tabs button.active {
+  background: var(--lux-dark);
+  border-color: var(--lux-dark);
+  color: var(--lux-bg);
+}
+
+@media (max-width: 767px) {
+  .lux-featured-tabs {
+    max-width: none;
+    margin-top: 16px;
+  }
+}
+
+/* =========================================================
+   ADD-TO-BAG SUCCESS TOAST
+========================================================= */
+
+.lux-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 50000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--lux-dark);
+  color: var(--lux-bg);
+  padding: 13px 22px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+  animation: luxToastIn 0.3s ease;
+  max-width: 90vw;
+}
+
+.lux-toast span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes luxToastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@media (max-width: 767px) {
+  .lux-toast {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    font-size: 10px;
+    padding: 11px 18px;
+  }
+}
+
+/* =========================================================
+   MOBILE NAV DRAWER - staggered link reveal on open (each button
+   fades/slides in a little after the previous one, driven by the
+   --lux-nav-stagger index set inline in App.jsx). The blanket
+   prefers-reduced-motion rule above already neutralises this.
+========================================================= */
+
+.lux-mobile-nav-links button {
+  opacity: 0;
+  transform: translateX(-14px);
+  animation: luxNavLinkIn 0.35s ease forwards;
+  animation-delay: calc(var(--lux-nav-stagger, 0) * 0.035s + 0.05s);
+}
+
+@keyframes luxNavLinkIn {
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }

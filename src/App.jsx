@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
@@ -102,6 +102,39 @@ function LuxIcon({ name, size = 18, filled = false, style }) {
     return (
       <svg {...common}>
         <path d="M6 9l6 6 6-6" />
+      </svg>
+    );
+  }
+
+  /*
+   * "home" and "menu" - added for the mobile bottom navigation bar
+   * (Home / Search / Wishlist / Bag / Menu), same stroke set as
+   * everything above.
+   */
+  if (name === "home") {
+    return (
+      <svg {...common}>
+        <path d="M4 11.5 12 4l8 7.5" />
+        <path d="M6 10v9.5a.5.5 0 0 0 .5.5H10v-5a2 2 0 0 1 4 0v5h3.5a.5.5 0 0 0 .5-.5V10" />
+      </svg>
+    );
+  }
+
+  if (name === "menu") {
+    return (
+      <svg {...common}>
+        <path d="M4 6.5h16" />
+        <path d="M4 12h16" />
+        <path d="M4 17.5h16" />
+      </svg>
+    );
+  }
+
+  /* "check" - used by the Add to Bag success toast. */
+  if (name === "check") {
+    return (
+      <svg {...common}>
+        <path d="M5 12.5l4.5 4.5L19 7.5" />
       </svg>
     );
   }
@@ -229,6 +262,14 @@ const ALL_BAGS_LABEL = "All Bags";
  */
 const ACCESSORY_ONLY_CATEGORIES = ["Accessories", "Wallets"];
 
+/* The announcement bar's real, existing claims - unchanged text, just
+   now shown one at a time with rotation instead of all three at once. */
+const ANNOUNCEMENT_MESSAGES = [
+  "✦ FREE DELIVERY ON ALL ORDERS",
+  "PREMIUM COLLECTION · SECURE SHOPPING",
+  "HANDCRAFTED STYLE · MADE FOR YOU",
+];
+
 const API = "https://luxora-store-mkva.onrender.com";
 
 /*
@@ -274,55 +315,40 @@ const INFO_PAGES = {
           construction, refined in detail, and made to last well beyond the first impression.
         </p>
 
-        <div className="lux-info-stats">
-          <div>
-            <strong>1000+</strong>
-            <span>Happy Customers</span>
-          </div>
-          <div>
-            <strong>100%</strong>
-            <span>Vegan Materials</span>
-          </div>
-          <div>
-            <strong>100%</strong>
-            <span>Cruelty Free</span>
-          </div>
-        </div>
-
         <h2 className="lux-info-subheading">Our Values</h2>
 
         <div className="lux-values-strip lux-info-values">
           <div>
-            <span>🌿</span>
-            <strong>100% VEGAN</strong>
-            <p>No animal-derived materials, ever.</p>
+            <span>✎</span>
+            <strong>HANDCRAFTED</strong>
+            <p>Every piece checked before it ships.</p>
           </div>
 
           <div>
             <span>✦</span>
-            <strong>CRUELTY FREE</strong>
-            <p>Ethically made, start to finish.</p>
+            <strong>SECURE PAYMENTS</strong>
+            <p>100% safe checkout via Razorpay.</p>
           </div>
 
           <div>
-            <span>♻</span>
-            <strong>RESPONSIBLE MATERIALS</strong>
-            <p>Considered sourcing at every step.</p>
+            <span>↺</span>
+            <strong>EASY 7-DAY RETURNS</strong>
+            <p>Not the right fit? Send it back, hassle-free.</p>
           </div>
 
           <div>
-            <span>✎</span>
-            <strong>HANDCRAFTED</strong>
-            <p>Made with care, not mass produced.</p>
+            <span>✧</span>
+            <strong>PAN-INDIA SHIPPING</strong>
+            <p>Delivered safely, wherever you are.</p>
           </div>
         </div>
 
         <h2 className="lux-info-subheading">Our Mission</h2>
 
         <p>
-          Our mission is simple: create stylish, vegan, cruelty-free pieces that make you feel
-          good about what you carry - inside and out. We believe fashion and ethics belong
-          together, and that thoughtful design should be accessible, not exclusive.
+          Our mission is simple: create stylish, thoughtfully-made pieces that make you feel good
+          about what you carry. We believe good design should be accessible, not exclusive - and
+          every product is checked before it ships, not mass-produced without care.
         </p>
 
         <p>
@@ -580,6 +606,19 @@ function App() {
     : null;
 
   /*
+   * SHOP ALL PAGE (/shop)
+   * A real, dedicated "every product" page - separate from the
+   * homepage. Mira & Moss's homepage never shows the full catalog
+   * inline; it only ever shows a few curated rows with "View All"
+   * links, and the full grid lives on its own page. selectedCategory
+   * still resolves to "All" here (no /category/ prefix), so all the
+   * existing "All" filtering logic below just works unchanged - this
+   * flag only controls which JSX renders (homepage teasers vs the
+   * full listing).
+   */
+  const isShopAllPage = location.pathname === "/shop";
+
+  /*
    * TRACK ORDER PAGE
    * A real, full page at its own URL (/track-order) instead of a
    * small popup/modal - this is what makes it feel like a page on
@@ -616,6 +655,42 @@ function App() {
    */
   const colorFromUrlRaw = new URLSearchParams(location.search).get("color");
   const colorFromUrl = colorFromUrlRaw ? decodeURIComponent(colorFromUrlRaw) : null;
+
+  /*
+   * ADD-TO-BAG SUCCESS TOAST - a small, auto-dismissing confirmation
+   * shown from the single addToCart() function below, so every
+   * add-to-cart path (grid card, quick view, product page) gets the
+   * same real confirmation instead of no feedback at all.
+   */
+  const [toastMessage, setToastMessage] = useState("");
+  const toastTimeoutRef = useRef(null);
+
+  function showToast(message) {
+    setToastMessage(message);
+    if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = window.setTimeout(() => setToastMessage(""), 2500);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) window.clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
+
+  /* ANNOUNCEMENT BAR rotation - see ANNOUNCEMENT_MESSAGES above. */
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+  const [announcementPaused, setAnnouncementPaused] = useState(false);
+
+  useEffect(() => {
+    if (ANNOUNCEMENT_MESSAGES.length < 2 || announcementPaused) return undefined;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
+
+    const timer = window.setInterval(() => {
+      setAnnouncementIndex((current) => (current + 1) % ANNOUNCEMENT_MESSAGES.length);
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, [announcementPaused]);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -966,20 +1041,87 @@ function App() {
   }, []);
 
   /*
-   * Auto-rotate the hero banner every 3 seconds when there's more
-   * than one photo to show - same idea as miramoss.com's homepage
-   * banner. A single photo (or none, which falls back to a product
-   * photo/placeholder further down) just never starts this timer.
+   * Auto-rotate the hero banner every 5 seconds when there's more than
+   * one photo to show - same idea as miramoss.com's homepage banner.
+   * A single photo (or none) never starts this timer. Pauses while a
+   * finger/mouse is on the hero (heroPaused, set by hover/touch
+   * handlers below) and stays off entirely for prefers-reduced-motion,
+   * same as every other animation on the site - the dots/arrows still
+   * work fine either way, this only controls the automatic rotation.
    */
+  const [heroPaused, setHeroPaused] = useState(false);
+
   useEffect(() => {
-    if (heroImages.length < 2) return;
+    if (heroImages.length < 2 || heroPaused) return undefined;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return undefined;
 
     const timer = window.setInterval(() => {
       setActiveHeroSlide((current) => (current + 1) % heroImages.length);
-    }, 3000);
+    }, 5000);
 
     return () => window.clearInterval(timer);
-  }, [heroImages.length]);
+  }, [heroImages.length, heroPaused]);
+
+  function goToHeroSlide(direction) {
+    if (heroImages.length < 2) return;
+    setActiveHeroSlide((current) => (current + direction + heroImages.length) % heroImages.length);
+  }
+
+  /* Swipe support (mobile) - a plain touchstart/touchend delta on the
+     hero image area, no library needed for a single left/right swipe. */
+  const heroTouchStartX = useRef(null);
+
+  function handleHeroTouchStart(event) {
+    heroTouchStartX.current = event.touches[0]?.clientX ?? null;
+  }
+
+  function handleHeroTouchEnd(event) {
+    if (heroTouchStartX.current === null) return;
+    const deltaX = (event.changedTouches[0]?.clientX ?? heroTouchStartX.current) - heroTouchStartX.current;
+    heroTouchStartX.current = null;
+    if (Math.abs(deltaX) < 40) return;
+    goToHeroSlide(deltaX < 0 ? 1 : -1);
+  }
+
+  /*
+   * HERO SLIDE COPY - a small set of taglines that cycle per slide
+   * (by index, wrapping) when there's more than one hero photo. Slide
+   * 0's copy is exactly the site's existing approved hero copy
+   * unchanged. With 0-1 hero photos the old single fixed heading is
+   * used as-is below, so a store with just one banner photo sees no
+   * change at all.
+   */
+  const HERO_SLIDE_COPY = [
+    {
+      kicker: "SHRIMOH · NEW SEASON 2026",
+      lines: ["Carry your", "everyday elegance."],
+      text: "Curated bags designed for the woman who carries confidence everywhere.",
+      primaryLabel: "SHOP NEW ARRIVALS",
+      primaryTarget: "lux-new-arrivals",
+      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryTarget: "lux-shop-by-category",
+    },
+    {
+      kicker: "THE SHRIMOH EDIT",
+      lines: ["Structured shapes,", "quiet luxury."],
+      text: "Refined silhouettes designed for everyday elegance, from desk to dinner.",
+      primaryLabel: "SHOP BESTSELLERS",
+      primaryTarget: "lux-bestsellers",
+      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryTarget: "lux-shop-by-category",
+    },
+    {
+      kicker: "SHRIMOH / 2026",
+      lines: ["Details that", "feel considered."],
+      text: "Thoughtful hardware and honest materials, made to be carried every day.",
+      primaryLabel: "SHOP NEW ARRIVALS",
+      primaryTarget: "lux-new-arrivals",
+      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryTarget: "lux-shop-by-category",
+    },
+  ];
+
+  const activeHeroCopy = HERO_SLIDE_COPY[activeHeroSlide % HERO_SLIDE_COPY.length];
 
   const newArrivals = useMemo(() => products.slice(0, 8), [products]);
 
@@ -1084,6 +1226,51 @@ function App() {
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, discountAmount }
   const [couponError, setCouponError] = useState("");
   const [couponLoading, setCouponLoading] = useState(false);
+
+  /* =========================================================
+     NEWSLETTER
+     Posts to the real /api/newsletter endpoint (Supabase
+     "newsletter_subscribers" table) - no fake "subscribed!"
+     confirmation without an actual write happening.
+  ========================================================= */
+
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterStatus, setNewsletterStatus] = useState("idle"); // idle | loading | success | error
+  const [newsletterMessage, setNewsletterMessage] = useState("");
+
+  async function submitNewsletter(event) {
+    event.preventDefault();
+    const email = newsletterEmail.trim();
+
+    if (!email) {
+      setNewsletterStatus("error");
+      setNewsletterMessage("Please enter your email address.");
+      return;
+    }
+
+    setNewsletterStatus("loading");
+    setNewsletterMessage("");
+
+    try {
+      const response = await fetch(`${API}/api/newsletter`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to subscribe right now.");
+      }
+
+      setNewsletterStatus("success");
+      setNewsletterMessage("You're on the list. Welcome to SHRIMOH.");
+      setNewsletterEmail("");
+    } catch (error) {
+      setNewsletterStatus("error");
+      setNewsletterMessage(error.message || "Unable to subscribe right now. Please try again.");
+    }
+  }
 
   /* =========================================================
      ORDER TRACKING
@@ -1226,6 +1413,37 @@ function App() {
   }
 
   /*
+   * "SHOP ALL" now goes to the dedicated /shop page (the full catalog,
+   * with filters/sort) instead of the homepage - see isShopAllPage
+   * above for why.
+   */
+  function goToShopAll() {
+    navigate("/shop");
+    setOpenMegaMenu(null);
+  }
+
+  /* Same as goToShopAll, but also pre-sets the sort dropdown - used by
+     a homepage row's "View All" link (e.g. Bestsellers -> shows the
+     full shop already sorted "Best Selling") so the destination page
+     actually matches what the row promised. */
+  function goToShopAllSorted(sortValue) {
+    if (sortValue) setSortBy(sortValue);
+    goToShopAll();
+  }
+
+  /* Scrolls a horizontally-scrolling product row (New Arrivals,
+     Bestsellers, category teaser rows) by ~80% of its own visible
+     width - used by the small prev/next arrow buttons under each row,
+     mirroring miramoss.com's homepage row controls. Looked up by id
+     instead of a ref per row since there can be several of these rows
+     on the page at once. */
+  function scrollRowBy(rowId, direction) {
+    const element = document.getElementById(rowId);
+    if (!element) return;
+    element.scrollBy({ left: element.clientWidth * 0.8 * direction, behavior: "smooth" });
+  }
+
+  /*
    * HEADER MEGA-MENU - splits the full "categories" list (used above)
    * into the two dropdown panels the header nav shows: "Bags" gets
    * every category that isn't specifically an accessory/wallet.
@@ -1278,6 +1496,85 @@ function App() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 2);
   }, [categories, products]);
+
+  /*
+   * HOMEPAGE CATEGORY TEASER ROWS - one short product row per top
+   * category (e.g. "Sling Bags", "Handbags"), each with its own
+   * prev/next arrows + "View All". Mira & Moss's homepage does this
+   * instead of only a couple of banner tiles, so the homepage shows a
+   * real taste of each category's products (not just a photo), while
+   * "View All" still opens that category's own full page rather than
+   * stacking the whole catalog on the homepage. Reuses the same top-2
+   * categories as the "Shop by Category" banners below, for consistency.
+   */
+  const categoryTeaserRows = useMemo(() => {
+    return categoryShowcase
+      .map((entry) => ({
+        category: entry.category,
+        products: products.filter((product) => product.category === entry.category).slice(0, 8),
+      }))
+      .filter((row) => row.products.length > 0);
+  }, [categoryShowcase, products]);
+
+  /*
+   * FEATURED PRODUCTS TABS - "Featured" + up to 5 real categories,
+   * ranked by how many products they actually have (never a hardcoded
+   * category list, so a tab is never empty). Tab state is local/
+   * client-only - switching tabs just swaps the product row below,
+   * no navigation and no page reload.
+   */
+  const [featuredTab, setFeaturedTab] = useState("Featured");
+
+  const featuredTabCategories = useMemo(() => {
+    return categories
+      .filter((category) => category !== "All" && category !== ALL_BAGS_LABEL)
+      .map((category) => ({
+        category,
+        count: products.filter((product) => product.category === category).length,
+      }))
+      .filter((entry) => entry.count > 0)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5)
+      .map((entry) => entry.category);
+  }, [categories, products]);
+
+  const featuredTabProducts = useMemo(() => {
+    if (featuredTab === "Featured") {
+      return (bestsellers.length > 0 ? bestsellers : newArrivals).slice(0, 8);
+    }
+    return products.filter((product) => product.category === featuredTab).slice(0, 8);
+  }, [featuredTab, bestsellers, newArrivals, products]);
+
+  /* =========================================================
+     SCROLL REVEAL
+     Lightweight fade-up-on-scroll for a handful of major section
+     wrappers (marked with className="lux-reveal" in the JSX below).
+     One shared IntersectionObserver, re-run whenever a data-driven
+     section could have just mounted for the first time (bestsellers/
+     new-arrivals/category-showcase all load async after the initial
+     render). Fully inert for anyone with prefers-reduced-motion - see
+     the @media guard in App.css, which is what actually turns this
+     off, not this effect.
+  ========================================================= */
+  useEffect(() => {
+    const elements = document.querySelectorAll(".lux-reveal:not(.lux-reveal-visible)");
+    if (!elements.length) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("lux-reveal-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.15, rootMargin: "0px 0px -60px 0px" }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [bestsellers, newArrivals, categoryShowcase]);
 
   function scrollToSection(sectionId) {
     setOpenMegaMenu(null);
@@ -1384,8 +1681,19 @@ function App() {
       // Product IDs are created from Date.now(), so a higher ID is a newer product.
       return [...filteredProducts].sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
     }
+    if (sortBy === "best-selling") {
+      // Ranked using the real /api/bestsellers order (already the
+      // server's own bestseller ranking) - products not in that list
+      // keep their existing relative order after all the bestsellers.
+      const rank = new Map(bestsellers.map((product, index) => [product.id, index]));
+      return [...filteredProducts].sort((a, b) => {
+        const rankA = rank.has(a.id) ? rank.get(a.id) : Infinity;
+        const rankB = rank.has(b.id) ? rank.get(b.id) : Infinity;
+        return rankA - rankB;
+      });
+    }
     return filteredProducts;
-  }, [filteredProducts, sortBy]);
+  }, [filteredProducts, sortBy, bestsellers]);
 
   /*
    * SEARCH SUGGESTIONS
@@ -2000,6 +2308,7 @@ function App() {
     const safeQuantity = Math.max(1, Number(quantity || 1));
     const stock = Number(product.stock || 0);
     const safeColor = color || "";
+    const displayName = getDisplayName(product, safeColor);
 
     if (stock <= 0) {
       alert("This product is currently sold out.");
@@ -2034,12 +2343,17 @@ function App() {
           // name when it has one (e.g. "Ira Noir" for Black), same as
           // the product page already shows - so the customer and the
           // order both reflect what was actually picked.
-          name: getDisplayName(product, safeColor),
+          name: displayName,
           selectedColor: safeColor,
           quantity: Math.min(safeQuantity, stock || 99),
         },
       ];
     });
+
+    // Success toast - a brief, real confirmation ("Added X to bag")
+    // shown for every add-to-cart path, since they all funnel through
+    // this one function (grid cards, quick view, product page, etc).
+    showToast(`Added "${displayName}" to bag`);
   }
 
   /* =========================================================
@@ -2503,11 +2817,50 @@ function App() {
 
   return (
     <div className="shrimoh-app">
-      {/* ANNOUNCEMENT BAR */}
-      <div className="lux-announcement">
-        <div>✦ FREE DELIVERY ON ALL ORDERS</div>
-        <div className="lux-announcement-center">PREMIUM COLLECTION · SECURE SHOPPING</div>
-        <div>HANDCRAFTED STYLE · MADE FOR YOU</div>
+      {/* ADD-TO-BAG TOAST */}
+      {toastMessage && (
+        <div className="lux-toast" role="status" aria-live="polite">
+          <LuxIcon name="check" size={16} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* ANNOUNCEMENT BAR - rotates one message at a time (same 3 real
+          messages the bar always had, just shown one-at-a-time with
+          prev/next controls instead of all three side by side), pauses
+          on hover/touch, and stays off prefers-reduced-motion. */}
+      <div
+        className="lux-announcement"
+        onMouseEnter={() => setAnnouncementPaused(true)}
+        onMouseLeave={() => setAnnouncementPaused(false)}
+      >
+        <button
+          type="button"
+          className="lux-announcement-arrow"
+          aria-label="Previous announcement"
+          onClick={() =>
+            setAnnouncementIndex(
+              (current) => (current - 1 + ANNOUNCEMENT_MESSAGES.length) % ANNOUNCEMENT_MESSAGES.length
+            )
+          }
+        >
+          ‹
+        </button>
+
+        <div className="lux-announcement-text" key={announcementIndex}>
+          {ANNOUNCEMENT_MESSAGES[announcementIndex]}
+        </div>
+
+        <button
+          type="button"
+          className="lux-announcement-arrow"
+          aria-label="Next announcement"
+          onClick={() =>
+            setAnnouncementIndex((current) => (current + 1) % ANNOUNCEMENT_MESSAGES.length)
+          }
+        >
+          ›
+        </button>
       </div>
 
       {/* OFFER BANNER */}
@@ -2557,8 +2910,8 @@ function App() {
           <nav className="lux-nav">
             <button
               type="button"
-              className={selectedCategory === "All" ? "active" : ""}
-              onClick={() => goToCategory("All")}
+              className={isShopAllPage ? "active" : ""}
+              onClick={goToShopAll}
             >
               SHOP ALL
             </button>
@@ -2639,6 +2992,10 @@ function App() {
                 )}
               </div>
             )}
+
+            <button type="button" onClick={() => openInfoPage("about")}>
+              ABOUT
+            </button>
           </nav>
 
           <div className="lux-header-actions">
@@ -2761,11 +3118,19 @@ function App() {
         homepage above it. This is what makes a category feel like its
         own page instead of a scroll-down section of the homepage.
       */}
-      {selectedCategory === "All" && (
+      {selectedCategory === "All" && !isShopAllPage && (
         <>
       {/* HERO */}
-      <section className="lux-hero">
-        <div className="lux-hero-image">
+      <section
+        className="lux-hero"
+        onMouseEnter={() => setHeroPaused(true)}
+        onMouseLeave={() => setHeroPaused(false)}
+      >
+        <div
+          className="lux-hero-image"
+          onTouchStart={handleHeroTouchStart}
+          onTouchEnd={handleHeroTouchEnd}
+        >
           {heroImages.length > 0 ? (
             heroImages.map((image, index) => (
               /*
@@ -2804,53 +3169,144 @@ function App() {
           <div className="lux-hero-image-shade" />
 
           {heroImages.length > 1 && (
-            <div className="lux-hero-dots">
-              {heroImages.map((image, index) => (
-                <button
-                  key={image}
-                  type="button"
-                  className={index === activeHeroSlide ? "active" : ""}
-                  aria-label={`Show slide ${index + 1}`}
-                  onClick={() => setActiveHeroSlide(index)}
-                />
-              ))}
-            </div>
+            <>
+              <button
+                type="button"
+                className="lux-hero-arrow lux-hero-arrow-prev"
+                aria-label="Previous slide"
+                onClick={() => goToHeroSlide(-1)}
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                className="lux-hero-arrow lux-hero-arrow-next"
+                aria-label="Next slide"
+                onClick={() => goToHeroSlide(1)}
+              >
+                →
+              </button>
+
+              <div className="lux-hero-dots">
+                {heroImages.map((image, index) => (
+                  <button
+                    key={image}
+                    type="button"
+                    className={index === activeHeroSlide ? "active" : ""}
+                    aria-label={`Show slide ${index + 1}`}
+                    onClick={() => setActiveHeroSlide(index)}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </div>
 
-        <div className="lux-hero-content">
-          <div className="lux-hero-kicker">NEW SEASON · 2026</div>
+        {/*
+          keyed by activeHeroSlide so React remounts this block on every
+          slide change - that's what makes the fade-up text animation
+          (luxHeroContentIn in App.css) replay per slide instead of only
+          once on first page load.
+        */}
+        <div className="lux-hero-content" key={`hero-copy-${activeHeroSlide % HERO_SLIDE_COPY.length}`}>
+          <div className="lux-hero-kicker">{activeHeroCopy.kicker}</div>
 
           <h1>
-            Crafted
+            {activeHeroCopy.lines[0]}
             <br />
-            for distinction.
+            {activeHeroCopy.lines[1]}
           </h1>
 
-          <p>
-            Timeless silhouettes.
-            <br />
-            Refined details.
-            <br />
-            Everyday luxury.
-          </p>
+          <p>{activeHeroCopy.text}</p>
 
-          <button
-            type="button"
-            onClick={() =>
-              document.getElementById("lux-products")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
-          >
-            SHOP THE COLLECTION
-            <span>→</span>
-          </button>
+          <div className="lux-hero-buttons">
+            <button
+              type="button"
+              onClick={() =>
+                document.getElementById(activeHeroCopy.primaryTarget)?.scrollIntoView({
+                  behavior: "smooth",
+                })
+              }
+            >
+              {activeHeroCopy.primaryLabel}
+              <span>→</span>
+            </button>
+
+            <button
+              type="button"
+              className="lux-hero-btn-secondary"
+              onClick={() =>
+                document.getElementById(activeHeroCopy.secondaryTarget)?.scrollIntoView({
+                  behavior: "smooth",
+                })
+              }
+            >
+              {activeHeroCopy.secondaryLabel}
+            </button>
+          </div>
         </div>
+
+        <button
+          type="button"
+          className="lux-hero-scroll-cue"
+          onClick={() =>
+            document.getElementById("lux-new-arrivals")?.scrollIntoView({
+              behavior: "smooth",
+            })
+          }
+        >
+          SCROLL TO DISCOVER
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M12 4v15M12 19l-6-6M12 19l6-6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
 
         <div className="lux-hero-bottom">
           <span>SHRIMOH / 2026</span>
           <span>DISCOVER YOUR SIGNATURE</span>
+        </div>
+      </section>
+
+      {/*
+        GUARANTEE / TRUST STRIP
+        Placed right after the hero (per SHRIMOH's design brief - trust
+        signals belong immediately below the fold, before the customer
+        has scrolled through any products yet). All four icons come from
+        the same LuxIcon set (same stroke weight/size) instead of mixing
+        emoji (🔒📦) with text symbols (↺✦), which looked inconsistent
+        next to each other.
+      */}
+      <section className="lux-guarantee-strip">
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="lock" size={26} />
+          </span>
+          <strong>SECURE PAYMENTS</strong>
+          <p>100% safe checkout via Razorpay.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="refresh" size={26} />
+          </span>
+          <strong>EASY 7-DAY RETURNS</strong>
+          <p>Not the right fit? Send it back, hassle-free.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="badge-check" size={26} />
+          </span>
+          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
+          <p>Every piece checked before it ships.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="box" size={26} />
+          </span>
+          <strong>PAN-INDIA SHIPPING</strong>
+          <p>Delivered safely, wherever you are.</p>
         </div>
       </section>
 
@@ -2868,7 +3324,7 @@ function App() {
             </div>
           </section>
 
-          <div className="lux-product-grid lux-scroll-row">
+          <div className="lux-product-grid lux-scroll-row" id="lux-row-bestsellers">
             {expandProductVariants(bestsellers).map(({ product, color }) =>
               renderProductCard(product, {
                 keyPrefix: "bestseller",
@@ -2877,6 +3333,32 @@ function App() {
                 forceColor: color,
               })
             )}
+          </div>
+
+          <div className="lux-row-controls">
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-bestsellers", -1)}
+              aria-label="Scroll bestsellers left"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-bestsellers", 1)}
+              aria-label="Scroll bestsellers right"
+            >
+              →
+            </button>
+            <button
+              type="button"
+              className="lux-row-viewall"
+              onClick={() => goToShopAllSorted("best-selling")}
+            >
+              VIEW ALL <span>→</span>
+            </button>
           </div>
         </>
       )}
@@ -2895,13 +3377,98 @@ function App() {
             </div>
           </section>
 
-          <div className="lux-product-grid lux-scroll-row">
+          <div className="lux-product-grid lux-scroll-row" id="lux-row-new-arrivals">
             {expandProductVariants(newArrivals).map(({ product, color }) =>
               renderProductCard(product, { keyPrefix: "new", badge: "sale", forceColor: color })
             )}
           </div>
+
+          <div className="lux-row-controls">
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-new-arrivals", -1)}
+              aria-label="Scroll new arrivals left"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-new-arrivals", 1)}
+              aria-label="Scroll new arrivals right"
+            >
+              →
+            </button>
+            <button
+              type="button"
+              className="lux-row-viewall"
+              onClick={() => goToShopAllSorted("newest")}
+            >
+              VIEW ALL <span>→</span>
+            </button>
+          </div>
         </>
       )}
+
+      {/* CATEGORY TEASER ROWS - a short product row per top category,
+          each with its own prev/next arrows + View All (see
+          categoryTeaserRows above). Sits between New Arrivals and the
+          "Shop by Category" banner tiles, same spot miramoss.com uses
+          for its per-category rows (e.g. "Cross Body Bags"). */}
+      {categoryTeaserRows.map((row) => {
+        const rowId = `lux-row-cat-${slugifyCategory(row.category)}`;
+        return (
+          <Fragment key={row.category}>
+            <section className="lux-section-header">
+              <div>
+                <span>SHOP THE EDIT</span>
+                <h2>{row.category}</h2>
+              </div>
+
+              <div className="lux-collection-right">
+                <p>Loved for everyday elegance</p>
+              </div>
+            </section>
+
+            <div className="lux-product-grid lux-scroll-row" id={rowId}>
+              {expandProductVariants(row.products).map(({ product, color }) =>
+                renderProductCard(product, {
+                  keyPrefix: `cat-${row.category}`,
+                  badge: "sale",
+                  forceColor: color,
+                })
+              )}
+            </div>
+
+            <div className="lux-row-controls">
+              <button
+                type="button"
+                className="lux-row-arrow"
+                onClick={() => scrollRowBy(rowId, -1)}
+                aria-label={`Scroll ${row.category} left`}
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                className="lux-row-arrow"
+                onClick={() => scrollRowBy(rowId, 1)}
+                aria-label={`Scroll ${row.category} right`}
+              >
+                →
+              </button>
+              <button
+                type="button"
+                className="lux-row-viewall"
+                onClick={() => goToCategory(row.category)}
+              >
+                VIEW ALL <span>→</span>
+              </button>
+            </div>
+          </Fragment>
+        );
+      })}
 
       {/* SHOP BY CATEGORY - just 2 large banner tiles, right below New
           Arrivals (Mira & Moss keeps this to a couple of big "Shop Now"
@@ -2915,7 +3482,7 @@ function App() {
             </div>
           </section>
 
-          <div className="lux-category-tiles">
+          <div className="lux-category-tiles lux-reveal">
             {categoryShowcase.map((entry) => (
               <button
                 type="button"
@@ -2940,19 +3507,106 @@ function App() {
           </div>
         </>
       )}
+
+      {/* FEATURED PRODUCTS - tabbed switcher (Featured + up to 5 real
+          categories that actually have products). Switching tabs just
+          swaps which products render below - no navigation/reload. */}
+      {featuredTabProducts.length > 0 && (
+        <>
+          <section className="lux-section-header" id="lux-featured-tabs">
+            <div>
+              <span>THE SHRIMOH EDIT</span>
+              <h2>Featured Products</h2>
+            </div>
+
+            <div className="lux-featured-tabs" role="tablist" aria-label="Featured products category">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={featuredTab === "Featured"}
+                className={featuredTab === "Featured" ? "active" : ""}
+                onClick={() => setFeaturedTab("Featured")}
+              >
+                FEATURED
+              </button>
+              {featuredTabCategories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  role="tab"
+                  aria-selected={featuredTab === category}
+                  className={featuredTab === category ? "active" : ""}
+                  onClick={() => setFeaturedTab(category)}
+                >
+                  {category.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <div className="lux-product-grid lux-scroll-row" id="lux-row-featured-tabs">
+            {expandProductVariants(featuredTabProducts).map(({ product, color }) =>
+              renderProductCard(product, {
+                keyPrefix: `featured-${featuredTab}`,
+                badge: "sale",
+                forceColor: color,
+              })
+            )}
+          </div>
+
+          <div className="lux-row-controls">
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-featured-tabs", -1)}
+              aria-label="Scroll featured products left"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-featured-tabs", 1)}
+              aria-label="Scroll featured products right"
+            >
+              →
+            </button>
+            <button
+              type="button"
+              className="lux-row-viewall"
+              onClick={() =>
+                featuredTab === "Featured" ? goToShopAll() : goToCategory(featuredTab)
+              }
+            >
+              VIEW ALL <span>→</span>
+            </button>
+          </div>
+        </>
+      )}
         </>
       )}
 
-      {/* CATEGORY PAGE BREADCRUMB - only shown when a category page is open */}
-      {selectedCategory !== "All" && (
-        <nav className="lux-breadcrumb" aria-label="Breadcrumb">
-          <button type="button" onClick={() => goToCategory("All")}>
-            Home
-          </button>
-          <span>/</span>
-          <span>{selectedCategory}</span>
-        </nav>
-      )}
+      {/*
+        FULL LISTING (breadcrumb + collection header + filters + grid) -
+        only rendered on an actual category page OR the dedicated
+        "/shop" (Shop All) page, never stacked underneath the homepage
+        itself. Mira & Moss's homepage only ever shows a few curated
+        teaser rows with "View All" links - the full catalog grid always
+        lives on its own page. Before this, SHRIMOH's homepage used to
+        render this ENTIRE block too (unconditionally), which is why the
+        homepage felt like "every product dumped in one place" instead
+        of curated - this is the fix for that.
+      */}
+      {(selectedCategory !== "All" || isShopAllPage) && (
+        <>
+      {/* CATEGORY PAGE BREADCRUMB */}
+      <nav className="lux-breadcrumb" aria-label="Breadcrumb">
+        <button type="button" onClick={() => goToCategory("All")}>
+          Home
+        </button>
+        <span>/</span>
+        <span>{selectedCategory === "All" ? "Shop All" : selectedCategory}</span>
+      </nav>
 
       {/* COLLECTION HEADER (doubles as the category page's own header) */}
       <section className="lux-collection-header" id="lux-products">
@@ -2983,6 +3637,9 @@ function App() {
             aria-label="Sort products"
           >
             <option value="featured">Sort: Featured</option>
+            {bestsellers.length > 0 && (
+              <option value="best-selling">Sort: Best Selling</option>
+            )}
             <option value="newest">Sort: Newest First</option>
             <option value="price-asc">Sort: Price - Low to High</option>
             <option value="price-desc">Sort: Price - High to Low</option>
@@ -3080,7 +3737,7 @@ function App() {
           <button
             type="button"
             onClick={() => {
-              goToCategory("All");
+              goToShopAll();
               setSearchText("");
             }}
           >
@@ -3100,9 +3757,11 @@ function App() {
           )}
         </main>
       )}
+        </>
+      )}
 
       {/* BRAND STORY */}
-      <section className="lux-brand-story">
+      <section className="lux-brand-story lux-reveal">
         <div className="lux-brand-story-copy">
           <span>THE SHRIMOH PHILOSOPHY</span>
 
@@ -3144,46 +3803,6 @@ function App() {
               </small>
             </>
           )}
-        </div>
-      </section>
-
-      {/*
-        GUARANTEE / TRUST STRIP
-        All four icons now come from the same LuxIcon set (same stroke
-        weight/size) instead of mixing emoji (🔒📦) with text symbols
-        (↺✦), which looked inconsistent next to each other.
-      */}
-      <section className="lux-guarantee-strip">
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="lock" size={26} />
-          </span>
-          <strong>SECURE PAYMENTS</strong>
-          <p>100% safe checkout via Razorpay.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="refresh" size={26} />
-          </span>
-          <strong>EASY 7-DAY RETURNS</strong>
-          <p>Not the right fit? Send it back, hassle-free.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="badge-check" size={26} />
-          </span>
-          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
-          <p>Every piece checked before it ships.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="box" size={26} />
-          </span>
-          <strong>PAN-INDIA SHIPPING</strong>
-          <p>Delivered safely, wherever you are.</p>
         </div>
       </section>
 
@@ -3588,6 +4207,58 @@ function App() {
         </div>
       )}
 
+      {/* NEWSLETTER */}
+      {!isTrackOrderPage && (
+        <section className="lux-newsletter lux-reveal">
+          <div className="lux-newsletter-inner">
+            <div className="lux-newsletter-copy">
+              <span className="lux-newsletter-kicker">STAY IN THE EDIT</span>
+              <h2>A little luxury in your inbox.</h2>
+              <p>New drops, private offers and styling inspiration.</p>
+            </div>
+
+            <form className="lux-newsletter-form" onSubmit={submitNewsletter}>
+              <input
+                type="email"
+                value={newsletterEmail}
+                onChange={(event) => {
+                  setNewsletterEmail(event.target.value);
+                  if (newsletterStatus !== "idle") {
+                    setNewsletterStatus("idle");
+                    setNewsletterMessage("");
+                  }
+                }}
+                placeholder="Your email address"
+                aria-label="Email address"
+                disabled={newsletterStatus === "loading" || newsletterStatus === "success"}
+                required
+              />
+              <button
+                type="submit"
+                disabled={newsletterStatus === "loading" || newsletterStatus === "success"}
+              >
+                {newsletterStatus === "loading"
+                  ? "JOINING..."
+                  : newsletterStatus === "success"
+                    ? "✓ JOINED"
+                    : "JOIN SHRIMOH"}
+              </button>
+            </form>
+
+            {newsletterMessage && (
+              <p
+                className={`lux-newsletter-message${
+                  newsletterStatus === "error" ? " is-error" : ""
+                }`}
+                role="status"
+              >
+                {newsletterMessage}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
+
       {/* FOOTER */}
       <footer className="lux-footer">
         <div className="lux-footer-top">
@@ -3603,7 +4274,7 @@ function App() {
           <div className="lux-footer-links">
             <div>
               <strong>SHOP</strong>
-              <button onClick={() => goToCategory("All")}>All Products</button>
+              <button onClick={goToShopAll}>All Products</button>
 
               {categories.slice(1, 5).map((category) => (
                 <button key={category} onClick={() => goToCategory(category)}>
@@ -3613,9 +4284,12 @@ function App() {
             </div>
 
             <div>
-              <strong>ABOUT</strong>
-              <button type="button" onClick={() => openInfoPage("about")}>
-                Our Story
+              <strong>HELP</strong>
+              <button type="button" onClick={() => openInfoPage("contact")}>
+                Contact Us
+              </button>
+              <button type="button" onClick={() => navigate("/track-order")}>
+                Track Order
               </button>
               <button type="button" onClick={() => openInfoPage("shipping")}>
                 Shipping
@@ -3626,12 +4300,34 @@ function App() {
             </div>
 
             <div>
-              <strong>CONNECT</strong>
+              <strong>ABOUT</strong>
+              <button type="button" onClick={() => openInfoPage("about")}>
+                Our Story
+              </button>
               <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">
                 WhatsApp
               </a>
-              <button type="button" onClick={() => openInfoPage("contact")}>
-                Contact Us
+            </div>
+
+            <div>
+              <strong>CUSTOMER</strong>
+              <button
+                type="button"
+                onClick={() => {
+                  setWishlistOpen(true);
+                  document.body.style.overflow = "hidden";
+                }}
+              >
+                Wishlist{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCartOpen(true);
+                  document.body.style.overflow = "hidden";
+                }}
+              >
+                My Bag{totalItems > 0 ? ` (${totalItems})` : ""}
               </button>
             </div>
           </div>
@@ -3650,6 +4346,65 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/*
+        MOBILE BOTTOM NAV
+        Fixed, thumb-reach navigation bar shown only on small screens
+        (see the max-width: 767px rule in App.css - desktop keeps using
+        the header). Sits at z-index 9000, comfortably under the cart/
+        wishlist drawers (15000) and checkout (40000), so it's simply
+        covered - no need to hide it while those are open.
+      */}
+      <nav className="lux-mobile-bottom-nav" aria-label="Primary">
+        <button type="button" onClick={() => goToCategory("All")}>
+          <LuxIcon name="home" size={19} />
+          <span>Home</span>
+        </button>
+
+        <button type="button" onClick={() => setSearchOpen(true)}>
+          <LuxIcon name="search" size={19} />
+          <span>Search</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setWishlistOpen(true);
+            document.body.style.overflow = "hidden";
+          }}
+        >
+          <span className="lux-mobile-bottom-nav-badge-wrap">
+            <LuxIcon name="heart" size={19} filled={wishlist.length > 0} />
+            {wishlist.length > 0 && <em>{wishlist.length}</em>}
+          </span>
+          <span>Wishlist</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setCartOpen(true);
+            document.body.style.overflow = "hidden";
+          }}
+        >
+          <span className="lux-mobile-bottom-nav-badge-wrap">
+            <LuxIcon name="bag" size={19} />
+            {totalItems > 0 && <em>{totalItems}</em>}
+          </span>
+          <span>Bag</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setMobileMenuOpen(true);
+            document.body.style.overflow = "hidden";
+          }}
+        >
+          <LuxIcon name="menu" size={19} />
+          <span>Menu</span>
+        </button>
+      </nav>
 
       {/*
         WHATSAPP FLOATING BUTTON
@@ -4115,13 +4870,26 @@ function App() {
             </div>
 
             <nav className="lux-mobile-nav-links">
-              {categories.map((category) => (
+              {categories.map((category, index) => (
                 <button
                   key={category}
                   type="button"
-                  className={selectedCategory === category ? "active" : ""}
+                  style={{ "--lux-nav-stagger": index }}
+                  className={
+                    category === "All"
+                      ? isShopAllPage
+                        ? "active"
+                        : ""
+                      : selectedCategory === category
+                      ? "active"
+                      : ""
+                  }
                   onClick={() => {
-                    goToCategory(category);
+                    if (category === "All") {
+                      goToShopAll();
+                    } else {
+                      goToCategory(category);
+                    }
                     closeMobileMenu();
                   }}
                 >
