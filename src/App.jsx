@@ -1469,9 +1469,13 @@ function App() {
    * Mira & Moss keeps this to just a couple of large "Shop Now"
    * category banners rather than a full row of small tiles for every
    * category, so we only show the top 2 (by how many products they
-   * have) instead of every category. Only categories that actually
-   * have at least one product with a real photo are eligible, so
-   * nothing here is ever a dead/empty banner.
+   * have) instead of every category. A category is eligible as soon
+   * as it has at least one product - it does NOT require a resolvable
+   * product photo. If no photo is available (or the image fails to
+   * load), the tile just falls back to a dark "noimg" banner with the
+   * category name + "Shop Now" text instead of disappearing entirely -
+   * a category with real products should never turn into a blank gap
+   * on the homepage just because of an image issue.
    */
   const categoryShowcase = useMemo(() => {
     const real = categories.filter(
@@ -1492,7 +1496,7 @@ function App() {
           image: firstImage,
         };
       })
-      .filter((entry) => entry.count > 0 && entry.image)
+      .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count)
       .slice(0, 2);
   }, [categories, products]);
@@ -3267,49 +3271,6 @@ function App() {
         </div>
       </section>
 
-      {/*
-        GUARANTEE / TRUST STRIP
-        Placed right after the hero (per SHRIMOH's design brief - trust
-        signals belong immediately below the fold, before the customer
-        has scrolled through any products yet). All four icons come from
-        the same LuxIcon set (same stroke weight/size) instead of mixing
-        emoji (🔒📦) with text symbols (↺✦), which looked inconsistent
-        next to each other.
-      */}
-      <section className="lux-guarantee-strip">
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="lock" size={26} />
-          </span>
-          <strong>SECURE PAYMENTS</strong>
-          <p>100% safe checkout via Razorpay.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="refresh" size={26} />
-          </span>
-          <strong>EASY 7-DAY RETURNS</strong>
-          <p>Not the right fit? Send it back, hassle-free.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="badge-check" size={26} />
-          </span>
-          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
-          <p>Every piece checked before it ships.</p>
-        </div>
-
-        <div>
-          <span className="lux-guarantee-icon">
-            <LuxIcon name="box" size={26} />
-          </span>
-          <strong>PAN-INDIA SHIPPING</strong>
-          <p>Delivered safely, wherever you are.</p>
-        </div>
-      </section>
-
       {/* BESTSELLERS */}
       {bestsellers.length > 0 && (
         <>
@@ -3487,17 +3448,19 @@ function App() {
               <button
                 type="button"
                 key={entry.category}
-                className="lux-category-tile"
+                className={`lux-category-tile${entry.image ? "" : " lux-category-tile-noimg"}`}
                 onClick={() => goToCategory(entry.category)}
               >
-                <img
-                  src={entry.image}
-                  alt={entry.category}
-                  onError={(event) => {
-                    event.currentTarget.style.display = "none";
-                    event.currentTarget.parentElement?.classList.add("lux-category-tile-noimg");
-                  }}
-                />
+                {entry.image && (
+                  <img
+                    src={entry.image}
+                    alt={entry.category}
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                      event.currentTarget.parentElement?.classList.add("lux-category-tile-noimg");
+                    }}
+                  />
+                )}
                 <div className="lux-category-tile-label">
                   <strong>{entry.category}</strong>
                   <span>Shop Now →</span>
@@ -3803,6 +3766,49 @@ function App() {
               </small>
             </>
           )}
+        </div>
+      </section>
+
+      {/*
+        GUARANTEE / TRUST STRIP
+        Restored to its original position - right after Brand Story, as
+        the last curated section before Newsletter/Footer - per direct
+        user feedback after seeing it live at the top of the homepage.
+        All four icons come from the same LuxIcon set (same stroke
+        weight/size) instead of mixing emoji (🔒📦) with text symbols
+        (↺✦), which looked inconsistent next to each other.
+      */}
+      <section className="lux-guarantee-strip">
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="lock" size={26} />
+          </span>
+          <strong>SECURE PAYMENTS</strong>
+          <p>100% safe checkout via Razorpay.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="refresh" size={26} />
+          </span>
+          <strong>EASY 7-DAY RETURNS</strong>
+          <p>Not the right fit? Send it back, hassle-free.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="badge-check" size={26} />
+          </span>
+          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
+          <p>Every piece checked before it ships.</p>
+        </div>
+
+        <div>
+          <span className="lux-guarantee-icon">
+            <LuxIcon name="box" size={26} />
+          </span>
+          <strong>PAN-INDIA SHIPPING</strong>
+          <p>Delivered safely, wherever you are.</p>
         </div>
       </section>
 
