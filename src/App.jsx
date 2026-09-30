@@ -107,9 +107,58 @@ function LuxIcon({ name, size = 18, filled = false, style }) {
   }
 
   /*
-   * "home" and "menu" - added for the mobile bottom navigation bar
-   * (Home / Search / Wishlist / Bag / Menu), same stroke set as
-   * everything above.
+   * "chevron-right" / "chevron-left" - the mobile nav drawer's
+   * "BAGS"/"ACCESSORIES" rows and their slide-in submenu's back
+   * button (see the MOBILE NAV DRAWER section below).
+   */
+  if (name === "chevron-right") {
+    return (
+      <svg {...common}>
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    );
+  }
+
+  if (name === "chevron-left") {
+    return (
+      <svg {...common}>
+        <path d="M15 6l-6 6 6 6" />
+      </svg>
+    );
+  }
+
+  /*
+   * "arrow-right" / "arrow-left" - the plain, un-boxed prev/next row
+   * arrows (New Arrivals, Bestsellers, category rows, Featured
+   * Products, the Shop-by-Category slider). Replaced the old circular
+   * bordered-button arrows with these per direct user feedback
+   * comparing them to miramoss.com's minimal, borderless arrows - a
+   * long shaft with a soft curved hook for the head, no chevron/circle.
+   */
+  if (name === "arrow-right") {
+    return (
+      <svg {...common}>
+        <path d="M3 12h15" />
+        <path d="M13 6c3.5 2 6 4 6 6s-2.5 4-6 6" />
+      </svg>
+    );
+  }
+
+  if (name === "arrow-left") {
+    return (
+      <svg {...common}>
+        <path d="M21 12H6" />
+        <path d="M11 6c-3.5 2-6 4-6 6s2.5 4 6 6" />
+      </svg>
+    );
+  }
+
+  /*
+   * "home" and "menu" - originally added for the mobile bottom
+   * navigation bar (Home / Search / Wishlist / Bag / Menu), which was
+   * removed 2026-09-30 per direct user feedback. Left here unused
+   * (same stroke set as everything above) in case a future icon need
+   * comes up - harmless either way, nothing renders them right now.
    */
   if (name === "home") {
     return (
@@ -139,6 +188,36 @@ function LuxIcon({ name, size = 18, filled = false, style }) {
     );
   }
 
+  /*
+   * "filter" / "sort" - used by the category/shop page's Filters and
+   * Sort controls, restyled as a matched pair of plain bordered boxes
+   * (miramoss.com reference: a simple sliders icon for Filters, a
+   * up/down arrows icon for Sort, sitting to the right of each label).
+   */
+  if (name === "filter") {
+    return (
+      <svg {...common}>
+        <line x1="4" y1="6" x2="20" y2="6" />
+        <line x1="4" y1="12" x2="20" y2="12" />
+        <line x1="4" y1="18" x2="20" y2="18" />
+        <circle cx="9" cy="6" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="16" cy="12" r="1.6" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="18" r="1.6" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+
+  if (name === "sort") {
+    return (
+      <svg {...common}>
+        <path d="M7 4v16" />
+        <path d="M4 7l3-3 3 3" />
+        <path d="M17 20V4" />
+        <path d="M20 17l-3 3-3-3" />
+      </svg>
+    );
+  }
+
   return null;
 }
 
@@ -155,6 +234,27 @@ function slugifyCategory(name) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-+|-+$)/g, "");
+}
+
+/*
+ * PAGINATION NUMBER LIST
+ * Builds a compact list like [1, 2, 3, "...", 9] for the listing
+ * pagination bar - always shows page 1, the last page, and a small
+ * window around the current page, collapsing everything else into a
+ * single "..." instead of listing every page number (miramoss.com's
+ * own collection pages use this same "1 2 3 ... 7" pattern).
+ */
+function getPaginationItems(current, total) {
+  const items = [1];
+  const windowStart = Math.max(2, current - 1);
+  const windowEnd = Math.min(total - 1, current + 1);
+
+  if (windowStart > 2) items.push("...");
+  for (let page = windowStart; page <= windowEnd; page += 1) items.push(page);
+  if (windowEnd < total - 1) items.push("...");
+  if (total > 1) items.push(total);
+
+  return items;
 }
 
 /*
@@ -789,8 +889,19 @@ function App() {
    */
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  /*
+   * MOBILE NAV - "BAGS" / "ACCESSORIES" SLIDE-IN SUBMENU
+   * null | "bags" | "accessories" - mirrors miramoss.com's mobile
+   * menu, where tapping a top-level group slides in a second screen
+   * listing that group's actual categories instead of navigating
+   * away immediately. Reset whenever the drawer itself closes so it
+   * doesn't reopen mid-panel next time.
+   */
+  const [mobileNavPanel, setMobileNavPanel] = useState(null);
+
   function closeMobileMenu() {
     setMobileMenuOpen(false);
+    setMobileNavPanel(null);
     document.body.style.overflow = "";
   }
 
@@ -1096,27 +1207,27 @@ function App() {
       kicker: "SHRIMOH · NEW SEASON 2026",
       lines: ["Carry your", "everyday elegance."],
       text: "Curated bags designed for the woman who carries confidence everywhere.",
-      primaryLabel: "SHOP NEW ARRIVALS",
+      primaryLabel: "Shop New Arrivals",
       primaryTarget: "lux-new-arrivals",
-      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryLabel: "Explore Collection",
       secondaryTarget: "lux-shop-by-category",
     },
     {
       kicker: "THE SHRIMOH EDIT",
       lines: ["Structured shapes,", "quiet luxury."],
       text: "Refined silhouettes designed for everyday elegance, from desk to dinner.",
-      primaryLabel: "SHOP BESTSELLERS",
+      primaryLabel: "Shop Bestsellers",
       primaryTarget: "lux-bestsellers",
-      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryLabel: "Explore Collection",
       secondaryTarget: "lux-shop-by-category",
     },
     {
       kicker: "SHRIMOH / 2026",
       lines: ["Details that", "feel considered."],
       text: "Thoughtful hardware and honest materials, made to be carried every day.",
-      primaryLabel: "SHOP NEW ARRIVALS",
+      primaryLabel: "Shop New Arrivals",
       primaryTarget: "lux-new-arrivals",
-      secondaryLabel: "EXPLORE COLLECTION",
+      secondaryLabel: "Explore Collection",
       secondaryTarget: "lux-shop-by-category",
     },
   ];
@@ -1465,17 +1576,19 @@ function App() {
   );
 
   /*
-   * "SHOP BY CATEGORY" BANNERS (homepage, below New Arrivals)
-   * Mira & Moss keeps this to just a couple of large "Shop Now"
-   * category banners rather than a full row of small tiles for every
-   * category, so we only show the top 2 (by how many products they
-   * have) instead of every category. A category is eligible as soon
-   * as it has at least one product - it does NOT require a resolvable
-   * product photo. If no photo is available (or the image fails to
-   * load), the tile just falls back to a dark "noimg" banner with the
-   * category name + "Shop Now" text instead of disappearing entirely -
-   * a category with real products should never turn into a blank gap
-   * on the homepage just because of an image issue.
+   * "SHOP BY CATEGORY" / "EXPLORE OUR COLLECTIONS" BANNERS (homepage,
+   * below New Arrivals). Large 2-up banner tiles, shown as a slider -
+   * only 2 categories visible at a time, with prev/next arrows to page
+   * through the rest, matching Mira & Moss's "Explore Our Collections"
+   * slider instead of a full grid of every category at once. Capped at
+   * 6 categories (3 pages of 2) so the slider stays reasonably short.
+   * A category is eligible as soon as it has at least one product - it
+   * does NOT require a resolvable product photo. If no photo is
+   * available (or the image fails to load), the tile just falls back
+   * to a dark "noimg" banner with the category name instead of
+   * disappearing entirely - a category with real products should never
+   * turn into a blank gap on the homepage just because of an image
+   * issue.
    */
   const categoryShowcase = useMemo(() => {
     const real = categories.filter(
@@ -1498,8 +1611,30 @@ function App() {
       })
       .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 2);
+      .slice(0, 6);
   }, [categories, products]);
+
+  /*
+   * categoryShowcase above chunked into pairs of 2, for the "Explore Our
+   * Collections" slider - one pair visible at a time.
+   */
+  const categorySlidePairs = useMemo(() => {
+    const pairs = [];
+    for (let index = 0; index < categoryShowcase.length; index += 2) {
+      pairs.push(categoryShowcase.slice(index, index + 2));
+    }
+    return pairs;
+  }, [categoryShowcase]);
+
+  const [categorySlideIndex, setCategorySlideIndex] = useState(0);
+
+  const goToCategorySlide = (direction) => {
+    setCategorySlideIndex((current) => {
+      const total = categorySlidePairs.length;
+      if (total === 0) return 0;
+      return (current + direction + total) % total;
+    });
+  };
 
   /*
    * HOMEPAGE CATEGORY TEASER ROWS - one short product row per top
@@ -1508,11 +1643,13 @@ function App() {
    * instead of only a couple of banner tiles, so the homepage shows a
    * real taste of each category's products (not just a photo), while
    * "View All" still opens that category's own full page rather than
-   * stacking the whole catalog on the homepage. Reuses the same top-2
-   * categories as the "Shop by Category" banners below, for consistency.
+   * stacking the whole catalog on the homepage. Only the top 2
+   * categories (by product count) get a teaser row, even though the
+   * "Explore Our Collections" slider above now cycles through more.
    */
   const categoryTeaserRows = useMemo(() => {
     return categoryShowcase
+      .slice(0, 2)
       .map((entry) => ({
         category: entry.category,
         products: products.filter((product) => product.category === entry.category).slice(0, 8),
@@ -1698,6 +1835,49 @@ function App() {
     }
     return filteredProducts;
   }, [filteredProducts, sortBy, bestsellers]);
+
+  /*
+   * LISTING PAGINATION - miramoss.com's "View All"/category pages show
+   * numbered pages (1 2 3 ... 7 ›) at the bottom instead of one long
+   * grid with everything in it. Paginates the already-expanded (one
+   * card per color variant) list so the page count matches what's
+   * actually visible in the grid, not the raw product count.
+   */
+  const LISTING_PAGE_SIZE = 12;
+  const [listingPage, setListingPage] = useState(1);
+
+  const expandedListingProducts = useMemo(
+    () => expandProductVariants(sortedProducts),
+    [sortedProducts]
+  );
+
+  const listingTotalPages = Math.max(
+    1,
+    Math.ceil(expandedListingProducts.length / LISTING_PAGE_SIZE)
+  );
+
+  // Any change to what's being shown (category, filters, sort, search)
+  // jumps back to page 1 - otherwise switching categories could leave
+  // you stranded on "page 4" of a collection that only has 1 page.
+  useEffect(() => {
+    setListingPage(1);
+  }, [selectedCategory, isShopAllPage, sortBy, priceMin, priceMax, colorFilter, searchText]);
+
+  // Guards against being stuck on a page number that no longer exists
+  // (e.g. a filter just shrank the results from 3 pages down to 1).
+  useEffect(() => {
+    if (listingPage > listingTotalPages) setListingPage(listingTotalPages);
+  }, [listingPage, listingTotalPages]);
+
+  const pagedListingProducts = useMemo(() => {
+    const start = (listingPage - 1) * LISTING_PAGE_SIZE;
+    return expandedListingProducts.slice(start, start + LISTING_PAGE_SIZE);
+  }, [expandedListingProducts, listingPage]);
+
+  function goToListingPage(page) {
+    setListingPage(page);
+    document.getElementById("lux-products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   /*
    * SEARCH SUGGESTIONS
@@ -3303,7 +3483,7 @@ function App() {
               onClick={() => scrollRowBy("lux-row-bestsellers", -1)}
               aria-label="Scroll bestsellers left"
             >
-              ←
+              <LuxIcon name="arrow-left" size={20} />
             </button>
             <button
               type="button"
@@ -3311,14 +3491,14 @@ function App() {
               onClick={() => scrollRowBy("lux-row-bestsellers", 1)}
               aria-label="Scroll bestsellers right"
             >
-              →
+              <LuxIcon name="arrow-right" size={20} />
             </button>
             <button
               type="button"
               className="lux-row-viewall"
               onClick={() => goToShopAllSorted("best-selling")}
             >
-              VIEW ALL <span>→</span>
+              View all <span>→</span>
             </button>
           </div>
         </>
@@ -3351,7 +3531,7 @@ function App() {
               onClick={() => scrollRowBy("lux-row-new-arrivals", -1)}
               aria-label="Scroll new arrivals left"
             >
-              ←
+              <LuxIcon name="arrow-left" size={20} />
             </button>
             <button
               type="button"
@@ -3359,14 +3539,14 @@ function App() {
               onClick={() => scrollRowBy("lux-row-new-arrivals", 1)}
               aria-label="Scroll new arrivals right"
             >
-              →
+              <LuxIcon name="arrow-right" size={20} />
             </button>
             <button
               type="button"
               className="lux-row-viewall"
               onClick={() => goToShopAllSorted("newest")}
             >
-              VIEW ALL <span>→</span>
+              View all <span>→</span>
             </button>
           </div>
         </>
@@ -3409,7 +3589,7 @@ function App() {
                 onClick={() => scrollRowBy(rowId, -1)}
                 aria-label={`Scroll ${row.category} left`}
               >
-                ←
+                <LuxIcon name="arrow-left" size={20} />
               </button>
               <button
                 type="button"
@@ -3417,23 +3597,25 @@ function App() {
                 onClick={() => scrollRowBy(rowId, 1)}
                 aria-label={`Scroll ${row.category} right`}
               >
-                →
+                <LuxIcon name="arrow-right" size={20} />
               </button>
               <button
                 type="button"
                 className="lux-row-viewall"
                 onClick={() => goToCategory(row.category)}
               >
-                VIEW ALL <span>→</span>
+                View all <span>→</span>
               </button>
             </div>
           </Fragment>
         );
       })}
 
-      {/* SHOP BY CATEGORY - just 2 large banner tiles, right below New
-          Arrivals (Mira & Moss keeps this to a couple of big "Shop Now"
-          category banners rather than a full row of small tiles). */}
+      {/* SHOP BY CATEGORY / "EXPLORE OUR COLLECTIONS" - a 2-up slider of
+          large banner tiles, right below New Arrivals. Only one pair is
+          shown at a time; prev/next arrows below page through the rest
+          (up to 3 pairs / 6 categories) - matches Mira & Moss's "Explore
+          Our Collections" slider instead of a static grid. */}
       {categoryShowcase.length > 0 && (
         <>
           <section className="lux-section-header" id="lux-shop-by-category">
@@ -3441,10 +3623,14 @@ function App() {
               <span>EXPLORE</span>
               <h2>Shop by Category</h2>
             </div>
+
+            <div className="lux-collection-right">
+              <p>Discover pieces designed for modern moments</p>
+            </div>
           </section>
 
           <div className="lux-category-tiles lux-reveal">
-            {categoryShowcase.map((entry) => (
+            {(categorySlidePairs[categorySlideIndex] || []).map((entry) => (
               <button
                 type="button"
                 key={entry.category}
@@ -3462,14 +3648,69 @@ function App() {
                   />
                 )}
                 <div className="lux-category-tile-label">
-                  <strong>{entry.category}</strong>
-                  <span>Shop Now →</span>
+                  <strong>Shop {entry.category}</strong>
                 </div>
               </button>
             ))}
           </div>
+
+          {categorySlidePairs.length > 1 && (
+            <div className="lux-row-controls lux-category-slide-controls">
+              <button
+                type="button"
+                className="lux-row-arrow"
+                onClick={() => goToCategorySlide(-1)}
+                aria-label="Previous categories"
+              >
+                <LuxIcon name="arrow-left" size={20} />
+              </button>
+              <button
+                type="button"
+                className="lux-row-arrow"
+                onClick={() => goToCategorySlide(1)}
+                aria-label="Next categories"
+              >
+                <LuxIcon name="arrow-right" size={20} />
+              </button>
+            </div>
+          )}
         </>
       )}
+
+      {/* OUR JOURNEY - a short origin-story banner with a "More About
+          Us" button, placed right after "Explore Our Collections" (Shop
+          by Category). Reuses the same real, already-published brand
+          copy from the About page - no invented customer/order numbers
+          here, unlike Mira & Moss's stats strip, since there's no real
+          figure to back one yet. */}
+      <section className="lux-journey lux-reveal">
+        {heroImages[0] && (
+          <div className="lux-journey-photo">
+            <img src={heroImages[0]} alt="SHRIMOH" />
+          </div>
+        )}
+
+        <div className="lux-journey-copy">
+          <span>OUR STORY</span>
+          <h2>The SHRIMOH Journey</h2>
+
+          <p>
+            SHRIMOH was created with a simple idea: luxury doesn&apos;t need to shout. We design
+            and curate pieces that quietly become part of your everyday life - thoughtful in
+            construction, refined in detail, and made to last well beyond the first impression.
+          </p>
+
+          <p>
+            We&apos;re a small, growing team, and every order matters to us - each piece is
+            checked before it ships, never mass-produced without care.
+          </p>
+
+          <button type="button" onClick={() => openInfoPage("about")}>
+            More About Us
+            <span>→</span>
+          </button>
+        </div>
+      </section>
 
       {/* FEATURED PRODUCTS - tabbed switcher (Featured + up to 5 real
           categories that actually have products). Switching tabs just
@@ -3480,6 +3721,7 @@ function App() {
             <div>
               <span>THE SHRIMOH EDIT</span>
               <h2>Featured Products</h2>
+              <p className="lux-featured-subtitle">Curated favourites from the SHRIMOH edit</p>
             </div>
 
             <div className="lux-featured-tabs" role="tablist" aria-label="Featured products category">
@@ -3490,7 +3732,7 @@ function App() {
                 className={featuredTab === "Featured" ? "active" : ""}
                 onClick={() => setFeaturedTab("Featured")}
               >
-                FEATURED
+                Featured
               </button>
               {featuredTabCategories.map((category) => (
                 <button
@@ -3501,7 +3743,7 @@ function App() {
                   className={featuredTab === category ? "active" : ""}
                   onClick={() => setFeaturedTab(category)}
                 >
-                  {category.toUpperCase()}
+                  {category}
                 </button>
               ))}
             </div>
@@ -3524,7 +3766,7 @@ function App() {
               onClick={() => scrollRowBy("lux-row-featured-tabs", -1)}
               aria-label="Scroll featured products left"
             >
-              ←
+              <LuxIcon name="arrow-left" size={20} />
             </button>
             <button
               type="button"
@@ -3532,7 +3774,7 @@ function App() {
               onClick={() => scrollRowBy("lux-row-featured-tabs", 1)}
               aria-label="Scroll featured products right"
             >
-              →
+              <LuxIcon name="arrow-right" size={20} />
             </button>
             <button
               type="button"
@@ -3541,7 +3783,7 @@ function App() {
                 featuredTab === "Featured" ? goToShopAll() : goToCategory(featuredTab)
               }
             >
-              VIEW ALL <span>→</span>
+              View all <span>→</span>
             </button>
           </div>
         </>
@@ -3583,16 +3825,29 @@ function App() {
             {filteredProducts.length} {filteredProducts.length === 1 ? "piece" : "pieces"}
           </p>
           <span>PREMIUM · TIMELESS · REFINED</span>
+        </div>
+      </section>
 
-          <button
-            type="button"
-            className={`lux-filter-toggle${listingFilterCount > 0 ? " active" : ""}`}
-            onClick={() => setFiltersOpen((previous) => !previous)}
-            aria-expanded={filtersOpen}
-          >
-            FILTERS{listingFilterCount > 0 ? ` (${listingFilterCount})` : ""}
-          </button>
+      {/*
+       * FILTERS + SORT - a matched pair of plain bordered boxes sitting
+       * side by side, full width, right below the header. Replaces the
+       * old right-aligned pill button + native-looking dropdown per the
+       * miramoss.com reference (its category page shows "Filters"/"Sort"
+       * as two equal, plain boxes in their own row, not tucked into a
+       * corner).
+       */}
+      <div className="lux-listing-controls">
+        <button
+          type="button"
+          className={`lux-filter-toggle${listingFilterCount > 0 ? " active" : ""}`}
+          onClick={() => setFiltersOpen((previous) => !previous)}
+          aria-expanded={filtersOpen}
+        >
+          <span>Filters{listingFilterCount > 0 ? ` (${listingFilterCount})` : ""}</span>
+          <LuxIcon name="filter" size={15} />
+        </button>
 
+        <div className="lux-sort-box">
           <select
             className="lux-sort-select"
             value={sortBy}
@@ -3607,8 +3862,9 @@ function App() {
             <option value="price-asc">Sort: Price - Low to High</option>
             <option value="price-desc">Sort: Price - High to Low</option>
           </select>
+          <LuxIcon name="sort" size={14} />
         </div>
-      </section>
+      </div>
 
       {/*
        * LISTING FILTERS PANEL (price range + color) - inspired by
@@ -3708,17 +3964,57 @@ function App() {
           </button>
         </div>
       ) : (
-        <main className="lux-product-grid">
-          {expandProductVariants(sortedProducts).map(({ product, color }, index) =>
-            renderProductCard(product, {
-              keyPrefix: "shop",
-              badge: "sale",
-              showOverlayActions: true,
-              eager: index < 4,
-              forceColor: color,
-            })
+        <>
+          <main className="lux-product-grid">
+            {pagedListingProducts.map(({ product, color }, index) =>
+              renderProductCard(product, {
+                keyPrefix: "shop",
+                badge: "sale",
+                showOverlayActions: true,
+                eager: index < 4,
+                forceColor: color,
+              })
+            )}
+          </main>
+
+          {/*
+           * PAGINATION - numbered pages instead of one endless grid,
+           * same "1 2 3 ... 7 ›" pattern miramoss.com uses on its own
+           * View All/category pages. Only shown once there's more than
+           * one page, so a small collection never shows a pointless
+           * lone "1".
+           */}
+          {listingTotalPages > 1 && (
+            <nav className="lux-pagination" aria-label="Product page navigation">
+              {getPaginationItems(listingPage, listingTotalPages).map((item, index) =>
+                item === "..." ? (
+                  <span key={`dots-${index}`} className="lux-pagination-dots">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    key={item}
+                    className={`lux-pagination-page${item === listingPage ? " active" : ""}`}
+                    onClick={() => goToListingPage(item)}
+                    aria-current={item === listingPage ? "page" : undefined}
+                  >
+                    {item}
+                  </button>
+                )
+              )}
+              <button
+                type="button"
+                className="lux-pagination-next"
+                onClick={() => goToListingPage(Math.min(listingPage + 1, listingTotalPages))}
+                disabled={listingPage >= listingTotalPages}
+                aria-label="Next page"
+              >
+                <LuxIcon name="chevron-right" size={16} />
+              </button>
+            </nav>
           )}
-        </main>
+        </>
       )}
         </>
       )}
@@ -3783,7 +4079,7 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="lock" size={26} />
           </span>
-          <strong>SECURE PAYMENTS</strong>
+          <strong>Secure Payments</strong>
           <p>100% safe checkout via Razorpay.</p>
         </div>
 
@@ -3791,7 +4087,7 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="refresh" size={26} />
           </span>
-          <strong>EASY 7-DAY RETURNS</strong>
+          <strong>Easy 7-Day Returns</strong>
           <p>Not the right fit? Send it back, hassle-free.</p>
         </div>
 
@@ -3799,7 +4095,7 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="badge-check" size={26} />
           </span>
-          <strong>AUTHENTIC &amp; HANDCRAFTED</strong>
+          <strong>Authentic &amp; Handcrafted</strong>
           <p>Every piece checked before it ships.</p>
         </div>
 
@@ -3807,7 +4103,7 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="box" size={26} />
           </span>
-          <strong>PAN-INDIA SHIPPING</strong>
+          <strong>Pan-India Shipping</strong>
           <p>Delivered safely, wherever you are.</p>
         </div>
       </section>
@@ -4315,27 +4611,14 @@ function App() {
               </a>
             </div>
 
-            <div>
-              <strong>CUSTOMER</strong>
-              <button
-                type="button"
-                onClick={() => {
-                  setWishlistOpen(true);
-                  document.body.style.overflow = "hidden";
-                }}
-              >
-                Wishlist{wishlist.length > 0 ? ` (${wishlist.length})` : ""}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCartOpen(true);
-                  document.body.style.overflow = "hidden";
-                }}
-              >
-                My Bag{totalItems > 0 ? ` (${totalItems})` : ""}
-              </button>
-            </div>
+            {/*
+             * No separate "CUSTOMER" column (Wishlist/My Bag links) here
+             * anymore - per direct user feedback (2026-09-30): both are
+             * redundant with the icons already always visible in the top
+             * header (search/track-order/wishlist/bag), same reasoning
+             * that removed these from the mobile drawer earlier the same
+             * day. Grid below changed from 4 to 3 columns to match.
+             */}
           </div>
         </div>
 
@@ -4352,65 +4635,6 @@ function App() {
           </div>
         </div>
       </footer>
-
-      {/*
-        MOBILE BOTTOM NAV
-        Fixed, thumb-reach navigation bar shown only on small screens
-        (see the max-width: 767px rule in App.css - desktop keeps using
-        the header). Sits at z-index 9000, comfortably under the cart/
-        wishlist drawers (15000) and checkout (40000), so it's simply
-        covered - no need to hide it while those are open.
-      */}
-      <nav className="lux-mobile-bottom-nav" aria-label="Primary">
-        <button type="button" onClick={() => goToCategory("All")}>
-          <LuxIcon name="home" size={19} />
-          <span>Home</span>
-        </button>
-
-        <button type="button" onClick={() => setSearchOpen(true)}>
-          <LuxIcon name="search" size={19} />
-          <span>Search</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setWishlistOpen(true);
-            document.body.style.overflow = "hidden";
-          }}
-        >
-          <span className="lux-mobile-bottom-nav-badge-wrap">
-            <LuxIcon name="heart" size={19} filled={wishlist.length > 0} />
-            {wishlist.length > 0 && <em>{wishlist.length}</em>}
-          </span>
-          <span>Wishlist</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setCartOpen(true);
-            document.body.style.overflow = "hidden";
-          }}
-        >
-          <span className="lux-mobile-bottom-nav-badge-wrap">
-            <LuxIcon name="bag" size={19} />
-            {totalItems > 0 && <em>{totalItems}</em>}
-          </span>
-          <span>Bag</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setMobileMenuOpen(true);
-            document.body.style.overflow = "hidden";
-          }}
-        >
-          <LuxIcon name="menu" size={19} />
-          <span>Menu</span>
-        </button>
-      </nav>
 
       {/*
         WHATSAPP FLOATING BUTTON
@@ -4875,70 +5099,156 @@ function App() {
               </button>
             </div>
 
-            <nav className="lux-mobile-nav-links">
-              {categories.map((category, index) => (
+            <nav
+              className={`lux-mobile-nav-links ${
+                mobileNavPanel ? "lux-mobile-nav-panel-open" : ""
+              }`}
+            >
+              <div className="lux-mobile-nav-screen lux-mobile-nav-screen-main">
                 <button
-                  key={category}
                   type="button"
-                  style={{ "--lux-nav-stagger": index }}
-                  className={
-                    category === "All"
-                      ? isShopAllPage
-                        ? "active"
-                        : ""
-                      : selectedCategory === category
-                      ? "active"
-                      : ""
-                  }
+                  style={{ "--lux-nav-stagger": 0 }}
+                  className={isShopAllPage ? "active" : ""}
                   onClick={() => {
-                    if (category === "All") {
-                      goToShopAll();
-                    } else {
-                      goToCategory(category);
-                    }
+                    goToShopAll();
                     closeMobileMenu();
                   }}
                 >
-                  {category === "All" ? "SHOP ALL" : category}
+                  SHOP ALL
                 </button>
-              ))}
+
+                <button
+                  type="button"
+                  style={{ "--lux-nav-stagger": 1 }}
+                  onClick={() => {
+                    closeMobileMenu();
+                    scrollToSection("lux-new-arrivals");
+                  }}
+                >
+                  NEW ARRIVALS
+                </button>
+
+                <button
+                  type="button"
+                  style={{ "--lux-nav-stagger": 2 }}
+                  className={
+                    selectedCategory === ALL_BAGS_LABEL ||
+                    bagNavCategories.includes(selectedCategory)
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() => setMobileNavPanel("bags")}
+                >
+                  BAGS <LuxIcon name="chevron-right" size={14} />
+                </button>
+
+                {accessoryNavCategories.length > 0 && (
+                  <button
+                    type="button"
+                    style={{ "--lux-nav-stagger": 3 }}
+                    className={accessoryNavCategories.includes(selectedCategory) ? "active" : ""}
+                    onClick={() => setMobileNavPanel("accessories")}
+                  >
+                    ACCESSORIES <LuxIcon name="chevron-right" size={14} />
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  style={{ "--lux-nav-stagger": 4 }}
+                  onClick={() => {
+                    closeMobileMenu();
+                    openInfoPage("about");
+                  }}
+                >
+                  ABOUT
+                </button>
+              </div>
+
+              {/*
+                SUB-SCREEN - slides in from the right when "BAGS" or
+                "ACCESSORIES" is tapped above, exactly like
+                miramoss.com's mobile menu: the real categories
+                (Handbags, Sling Bags, Tote Bags... / Wallets,
+                Clutches...) only show up once you tap into the
+                group, with a "Back" row to return to the main list.
+              */}
+              <div className="lux-mobile-nav-screen lux-mobile-nav-screen-sub">
+                <button
+                  type="button"
+                  className="lux-mobile-nav-back"
+                  onClick={() => setMobileNavPanel(null)}
+                >
+                  <LuxIcon name="chevron-left" size={14} /> Back
+                </button>
+
+                {mobileNavPanel && (
+                  <>
+                    <div className="lux-mobile-nav-sub-title">
+                      {mobileNavPanel === "bags" ? "Bags" : "Accessories"}
+                    </div>
+
+                    {mobileNavPanel === "bags" && (
+                      <>
+                        <button
+                          type="button"
+                          className={selectedCategory === ALL_BAGS_LABEL ? "active" : ""}
+                          onClick={() => {
+                            goToCategory(ALL_BAGS_LABEL);
+                            closeMobileMenu();
+                          }}
+                        >
+                          All Bags
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMobileMenu();
+                            scrollToSection("lux-bestsellers");
+                          }}
+                        >
+                          Bestsellers
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMobileMenu();
+                            scrollToSection("lux-new-arrivals");
+                          }}
+                        >
+                          New Arrivals
+                        </button>
+                        <div className="lux-mobile-nav-sub-divider" />
+                      </>
+                    )}
+
+                    {(mobileNavPanel === "bags" ? bagNavCategories : accessoryNavCategories).map(
+                      (category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          className={selectedCategory === category ? "active" : ""}
+                          onClick={() => {
+                            goToCategory(category);
+                            closeMobileMenu();
+                          }}
+                        >
+                          {category}
+                        </button>
+                      )
+                    )}
+                  </>
+                )}
+              </div>
             </nav>
 
-            <div className="lux-mobile-nav-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  closeMobileMenu();
-                  navigate("/track-order");
-                }}
-              >
-                <LuxIcon name="box" size={16} /> TRACK ORDER
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  closeMobileMenu();
-                  setWishlistOpen(true);
-                  document.body.style.overflow = "hidden";
-                }}
-              >
-                <LuxIcon name="heart" size={16} filled={wishlist.length > 0} /> WISHLIST
-                {wishlist.length > 0 ? ` (${wishlist.length})` : ""}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  closeMobileMenu();
-                  setCartOpen(true);
-                  document.body.style.overflow = "hidden";
-                }}
-              >
-                <LuxIcon name="bag" size={16} /> SHOPPING BAG
-                {totalItems > 0 ? ` (${totalItems})` : ""}
-              </button>
-            </div>
+            {/*
+             * No Wishlist/Shopping Bag/Track Order buttons here anymore -
+             * per direct user feedback (2026-09-30): all three are
+             * redundant with the icons already always visible in the top
+             * header (search/track-order/wishlist/bag), so repeating them
+             * at the bottom of this drawer didn't add anything.
+             */}
           </aside>
         </div>
       )}
