@@ -669,6 +669,60 @@ function handleImageFallback(event) {
   img.style.opacity = "0.25";
 }
 
+/*
+ * INSTANT-LOAD CACHE (2026-10-02)
+ * The backend runs on Render's free plan, which "sleeps" after ~15 min
+ * with no visitors - the next visitor then waits 30-60 seconds while it
+ * wakes up, and until now the whole homepage (products, Shop by
+ * Category, hero photos) stayed empty/skeleton for that entire wait.
+ * That was the main "website bahut time leti hai, phir dhire dhire
+ * product dikhati hai" problem.
+ *
+ * Fix: the last successful API response is saved in this browser
+ * (localStorage). On the next visit the page renders immediately from
+ * that saved copy, and the fresh data is still fetched in the
+ * background and swapped in the moment it arrives - so prices/stock
+ * are never stuck stale, they just stop blocking the first paint.
+ * Saved copies older than CACHE_MAX_AGE_MS are ignored. Every
+ * read/write is wrapped in try/catch (private mode, full storage etc.)
+ * and simply falls back to the old behaviour.
+ */
+const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function readCache(key) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.savedAt !== "number") return null;
+    if (Date.now() - parsed.savedAt > CACHE_MAX_AGE_MS) return null;
+    return parsed.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(key, data) {
+  try {
+    const raw = JSON.stringify({ savedAt: Date.now(), data });
+    // Skip absurdly large payloads (e.g. base64 photos) instead of
+    // filling up the browser's ~5MB storage quota.
+    if (raw.length > 3_500_000) return;
+    window.localStorage.setItem(key, raw);
+  } catch {
+    /* storage unavailable or full - just skip caching */
+  }
+}
+
+const PRODUCTS_CACHE_KEY = "shrimoh_cache_products_v1";
+const BESTSELLERS_CACHE_KEY = "shrimoh_cache_bestsellers_v1";
+const SITE_SETTINGS_CACHE_KEY = "shrimoh_cache_site_settings_v1";
+
+/* Hero / brand-story photos are owner-uploaded full-size files - route
+   them through the same weserv.nl compressor as product photos, at a
+   larger width suited to a full-width banner. */
+const BANNER_IMAGE_WIDTH = 1600;
+
 function normalizeProduct(product) {
   return {
     ...product,
@@ -683,8 +737,17 @@ function App() {
      PRODUCTS
   ========================================================= */
 
-  const [products, setProducts] = useState([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  // Start from this browser's saved copy (see INSTANT-LOAD CACHE above)
+  // so a returning visitor sees products immediately, even while the
+  // backend is still waking up.
+  const [products, setProducts] = useState(() => {
+    const cached = readCache(PRODUCTS_CACHE_KEY);
+    return Array.isArray(cached) ? cached.map(normalizeProduct) : [];
+  });
+  const [loadingProducts, setLoadingProducts] = useState(() => {
+    const cached = readCache(PRODUCTS_CACHE_KEY);
+    return !(Array.isArray(cached) && cached.length > 0);
+  });
   const [apiError, setApiError] = useState("");
 
   /* =========================================================
@@ -1085,7 +1148,10 @@ function App() {
      Real sales-based ranking from the backend (not fake data).
   ========================================================= */
 
-  const [bestsellers, setBestsellers] = useState([]);
+  const [bestsellers, setBestsellers] = useState(() => {
+    const cached = readCache(BESTSELLERS_CACHE_KEY);
+    return Array.isArray(cached) ? cached.map(normalizeProduct) : [];
+  });
 
   useEffect(() => {
     async function loadBestsellers() {
@@ -1097,6 +1163,7 @@ function App() {
 
         if (data.success && Array.isArray(data.products)) {
           setBestsellers(data.products.map(normalizeProduct));
+          writeCache(BESTSELLERS_CACHE_KEY, data.products);
         }
       } catch (error) {
         console.error("Bestsellers load error:", error);
@@ -1122,8 +1189,31 @@ function App() {
    * loadSiteSettings below), so this keeps working even before the
    * owner re-saves Site Content with multiple photos.
    */
-  const [heroImages, setHeroImages] = useState([]);
-  const [brandStoryImageUrl, setBrandStoryImageUrl] = useState("");
+  /* Hero + brand-story photos: start from this browser's saved copy
+     (INSTANT-LOAD CACHE) and compress through weserv.nl at banner size
+     (BANNER_IMAGE_WIDTH) instead of downloading the owner's original
+     multi-MB uploads. */
+  const extractSiteImages = (settings) => {
+    if (!settings) return { hero: [], story: "" };
+    const raw = Array.isArray(settings.heroImageUrls)
+      ? settings.heroImageUrls.filter(Boolean)
+      : settings.heroImageUrl
+      ? [settings.heroImageUrl]
+      : [];
+    return {
+      hero: raw.map((image) => getImageUrl(image, BANNER_IMAGE_WIDTH)),
+      story: settings.brandStoryImageUrl
+        ? getImageUrl(settings.brandStoryImageUrl, BANNER_IMAGE_WIDTH)
+        : "",
+    };
+  };
+
+  const [heroImages, setHeroImages] = useState(
+    () => extractSiteImages(readCache(SITE_SETTINGS_CACHE_KEY)).hero
+  );
+  const [brandStoryImageUrl, setBrandStoryImageUrl] = useState(
+    () => extractSiteImages(readCache(SITE_SETTINGS_CACHE_KEY)).story
+  );
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
 
   useEffect(() => {
@@ -1135,13 +1225,10 @@ function App() {
         const data = await response.json();
 
         if (data.success && data.settings) {
-          const images = Array.isArray(data.settings.heroImageUrls)
-            ? data.settings.heroImageUrls.filter(Boolean)
-            : data.settings.heroImageUrl
-            ? [data.settings.heroImageUrl]
-            : [];
-          setHeroImages(images);
-          setBrandStoryImageUrl(data.settings.brandStoryImageUrl || "");
+          const { hero, story } = extractSiteImages(data.settings);
+          setHeroImages(hero);
+          setBrandStoryImageUrl(story);
+          writeCache(SITE_SETTINGS_CACHE_KEY, data.settings);
         }
       } catch (error) {
         console.error("Site settings load error:", error);
@@ -1454,8 +1541,9 @@ function App() {
 
   useEffect(() => {
     async function loadProducts() {
+      const hadCachedProducts = Array.isArray(readCache(PRODUCTS_CACHE_KEY));
+
       try {
-        setLoadingProducts(true);
         setApiError("");
 
         const response = await fetch(`${API}/api/products`);
@@ -1468,15 +1556,20 @@ function App() {
 
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products.map(normalizeProduct));
+          writeCache(PRODUCTS_CACHE_KEY, data.products);
         } else {
           setProducts([]);
         }
       } catch (error) {
         console.error(error);
 
-        setApiError(
-          "Products could not be loaded. Please make sure the backend server is running."
-        );
+        // If we're already showing this browser's saved copy, keep it
+        // quietly instead of flashing an error over a working page.
+        if (!hadCachedProducts) {
+          setApiError(
+            "Products could not be loaded. Please make sure the backend server is running."
+          );
+        }
       } finally {
         setLoadingProducts(false);
       }
@@ -1611,30 +1704,17 @@ function App() {
       })
       .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count)
-      .slice(0, 6);
+      .slice(0, 10);
   }, [categories, products]);
 
   /*
-   * categoryShowcase above chunked into pairs of 2, for the "Explore Our
-   * Collections" slider - one pair visible at a time.
+   * (2026-10-02) The old one-pair-at-a-time slider (categorySlidePairs +
+   * categorySlideIndex) was replaced by a real horizontally scrolling
+   * row - see the "SHOP BY CATEGORY" JSX below. Customers can now
+   * swipe it on mobile and scroll it with a trackpad/mouse on desktop,
+   * and the arrows just scroll the row (scrollRowBy).
    */
-  const categorySlidePairs = useMemo(() => {
-    const pairs = [];
-    for (let index = 0; index < categoryShowcase.length; index += 2) {
-      pairs.push(categoryShowcase.slice(index, index + 2));
-    }
-    return pairs;
-  }, [categoryShowcase]);
-
-  const [categorySlideIndex, setCategorySlideIndex] = useState(0);
-
-  const goToCategorySlide = (direction) => {
-    setCategorySlideIndex((current) => {
-      const total = categorySlidePairs.length;
-      if (total === 0) return 0;
-      return (current + direction + total) % total;
-    });
-  };
+  const CATEGORY_SCROLL_ID = "lux-category-scroll";
 
   /*
    * HOMEPAGE CATEGORY TEASER ROWS - one short product row per top
@@ -1710,12 +1790,28 @@ function App() {
           }
         });
       },
-      { threshold: 0.15, rootMargin: "0px 0px -60px 0px" }
+      { threshold: 0.01, rootMargin: "0px 0px -40px 0px" }
     );
 
     elements.forEach((element) => observer.observe(element));
-    return () => observer.disconnect();
-  }, [bestsellers, newArrivals, categoryShowcase]);
+
+    // Safety net (2026-10-02): whatever happens with the observer
+    // (route change remount, fast scroll, very tall section, browser
+    // quirk), never leave a section stuck at opacity 0 - after 1.5s
+    // everything still pending is simply shown.
+    const safety = window.setTimeout(() => {
+      document
+        .querySelectorAll(".lux-reveal:not(.lux-reveal-visible)")
+        .forEach((element) => element.classList.add("lux-reveal-visible"));
+    }, 1500);
+
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(safety);
+    };
+    // location.pathname: sections remount when coming back to the
+    // homepage from a product/category page and must be re-observed.
+  }, [bestsellers, newArrivals, categoryShowcase, location.pathname]);
 
   function scrollToSection(sectionId) {
     setOpenMegaMenu(null);
@@ -3336,11 +3432,17 @@ function App() {
                   src={image}
                   alt=""
                   aria-hidden="true"
+                  decoding="async"
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  onError={handleImageFallback}
                   className={`lux-hero-slide-bg ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
                 />
                 <img
                   src={image}
                   alt="SHRIMOH collection"
+                  decoding="async"
+                  fetchPriority={index === 0 ? "high" : "low"}
+                  onError={handleImageFallback}
                   className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
                 />
               </Fragment>
@@ -3629,10 +3731,20 @@ function App() {
             </div>
           </section>
 
-          <div className="lux-category-tiles lux-reveal">
-            {(categorySlidePairs[categorySlideIndex] || []).map((entry) => (
+          {/* Not wrapped in lux-reveal any more: the fade-in animation
+              could leave this whole section stuck invisible (opacity 0)
+              when coming back to the homepage, which is why "Shop by
+              Category kabhi dikhta hai, kabhi gayab ho jata hai". */}
+          <div
+            className="lux-category-tiles"
+            id={CATEGORY_SCROLL_ID}
+            role="list"
+            aria-label="Shop by category"
+          >
+            {categoryShowcase.map((entry, index) => (
               <button
                 type="button"
+                role="listitem"
                 key={entry.category}
                 className={`lux-category-tile${entry.image ? "" : " lux-category-tile-noimg"}`}
                 onClick={() => goToCategory(entry.category)}
@@ -3641,25 +3753,37 @@ function App() {
                   <img
                     src={entry.image}
                     alt={entry.category}
+                    loading={index < 2 ? "eager" : "lazy"}
+                    decoding="async"
+                    draggable="false"
+                    onLoad={(event) => event.currentTarget.classList.add("lux-img-loaded")}
                     onError={(event) => {
-                      event.currentTarget.style.display = "none";
-                      event.currentTarget.parentElement?.classList.add("lux-category-tile-noimg");
+                      const img = event.currentTarget;
+                      // First try the original (uncompressed) photo once,
+                      // then fall back to the plain dark tile.
+                      if (!img.dataset.fallbackApplied && img.src.includes("images.weserv.nl")) {
+                        handleImageFallback(event);
+                        return;
+                      }
+                      img.style.display = "none";
+                      img.parentElement?.classList.add("lux-category-tile-noimg");
                     }}
                   />
                 )}
                 <div className="lux-category-tile-label">
                   <strong>Shop {entry.category}</strong>
+                  <small>{entry.count} {entry.count === 1 ? "piece" : "pieces"}</small>
                 </div>
               </button>
             ))}
           </div>
 
-          {categorySlidePairs.length > 1 && (
+          {categoryShowcase.length > 2 && (
             <div className="lux-row-controls lux-category-slide-controls">
               <button
                 type="button"
                 className="lux-row-arrow"
-                onClick={() => goToCategorySlide(-1)}
+                onClick={() => scrollRowBy(CATEGORY_SCROLL_ID, -1)}
                 aria-label="Previous categories"
               >
                 <LuxIcon name="arrow-left" size={20} />
@@ -3667,7 +3791,7 @@ function App() {
               <button
                 type="button"
                 className="lux-row-arrow"
-                onClick={() => goToCategorySlide(1)}
+                onClick={() => scrollRowBy(CATEGORY_SCROLL_ID, 1)}
                 aria-label="Next categories"
               >
                 <LuxIcon name="arrow-right" size={20} />
@@ -3686,7 +3810,7 @@ function App() {
       <section className="lux-journey lux-reveal">
         {heroImages[0] && (
           <div className="lux-journey-photo">
-            <img src={heroImages[0]} alt="SHRIMOH" />
+            <img src={heroImages[0]} alt="SHRIMOH" loading="lazy" decoding="async" onError={handleImageFallback} />
           </div>
         )}
 
@@ -4051,7 +4175,7 @@ function App() {
 
         <div className="lux-brand-story-mark">
           {brandStoryImageUrl ? (
-            <img src={brandStoryImageUrl} alt="SHRIMOH" className="lux-brand-story-photo" />
+            <img src={brandStoryImageUrl} alt="SHRIMOH" className="lux-brand-story-photo" loading="lazy" decoding="async" onError={handleImageFallback} />
           ) : (
             <>
               <span>S</span>

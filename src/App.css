@@ -960,20 +960,71 @@ a {
    idea as miramoss.com's homepage category grid.
 ========================================================= */
 
+/* (2026-10-02) Now a real horizontal scroll row instead of a fixed
+   2-tile grid: swipe on mobile, trackpad / shift+wheel / arrows on
+   desktop, with scroll-snap so each swipe lands cleanly on a tile.
+   Desktop shows 2 full tiles + a peek of the next (so it's obvious
+   there's more to scroll); mobile shows 1 tile + a peek. */
 .lux-category-tiles {
   width: min(1300px, 92vw);
   margin: 0 auto 20px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 3px;
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.lux-category-tiles::-webkit-scrollbar {
+  display: none;
 }
 
 .lux-category-tile {
   position: relative;
+  flex: 0 0 calc((100% - 24px) / 2.25);
   aspect-ratio: 0.8;
   overflow: hidden;
   background: var(--lux-accent-soft);
   cursor: pointer;
+  scroll-snap-align: start;
+  border: 0;
+  padding: 0;
+}
+
+/* Soft shimmer while the photo is still downloading - so the tile is
+   never a blank/missing gap, it visibly "loads". */
+.lux-category-tile::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0) 30%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 70%
+  );
+  background-size: 200% 100%;
+  animation: lux-tile-shimmer 1.4s linear infinite;
+}
+
+.lux-category-tile:has(img.lux-img-loaded)::before,
+.lux-category-tile.lux-category-tile-noimg::before {
+  display: none;
+}
+
+@keyframes lux-tile-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 .lux-category-tile img {
@@ -984,6 +1035,8 @@ a {
   object-fit: cover;
   object-position: center;
   transition: transform 0.5s ease;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .lux-category-tile:hover img {
@@ -1014,14 +1067,43 @@ a {
   letter-spacing: 0.4px;
 }
 
+.lux-category-tile-label small {
+  display: block;
+  margin-top: 4px;
+  color: rgba(251, 247, 238, 0.8);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Only 1-2 categories: no scrolling needed, fill the width evenly. */
+.lux-category-tiles:has(> .lux-category-tile:only-child) .lux-category-tile {
+  flex-basis: 100%;
+}
+
+.lux-category-tiles:has(> .lux-category-tile:nth-child(2):last-child) .lux-category-tile {
+  flex-basis: calc((100% - 12px) / 2);
+}
+
 @media (max-width: 700px) {
   .lux-category-tiles {
-    gap: 2px;
+    gap: 8px;
     margin: 0 auto 16px;
   }
 
-  .lux-category-tile {
+  .lux-category-tile,
+  .lux-category-tiles:has(> .lux-category-tile:nth-child(2):last-child) .lux-category-tile {
+    flex-basis: 78%;
     aspect-ratio: 0.72;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lux-category-tiles {
+    scroll-behavior: auto;
+  }
+
+  .lux-category-tile::before {
+    animation: none;
   }
 }
 
