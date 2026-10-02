@@ -1,19 +1,12 @@
 import { useEffect, useState } from "react";
+import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
-const categories = [
-  "Bags",
-  "Handbags",
-  "Sling Bags",
-  "Tote Bags",
-  "Backpacks",
-  "Laptop Bags",
-  "Travel Bags",
-  "Clutches",
-  "Wallets",
-  "Accessories",
-];
+/* Fixed category list (shared with the website) - see ./categories.js.
+   Only these can be picked, and any other name coming from a CSV/AI
+   import is mapped onto one of them, so no extra category can appear. */
+const categories = PRODUCT_CATEGORIES;
 
 const ORDER_STATUSES = [
   "Received",
@@ -627,7 +620,7 @@ function Admin() {
   const [name, setName] =
     useState("");
   const [category, setCategory] =
-    useState("Bags");
+    useState(DEFAULT_BAG_CATEGORY);
   const [price, setPrice] =
     useState("");
   const [oldPrice, setOldPrice] =
@@ -738,7 +731,7 @@ function Admin() {
   const [editName, setEditName] =
     useState("");
   const [editCategory, setEditCategory] =
-    useState("Bags");
+    useState(DEFAULT_BAG_CATEGORY);
   const [editPrice, setEditPrice] =
     useState("");
   const [editOldPrice, setEditOldPrice] =
@@ -1572,7 +1565,7 @@ function Admin() {
         "Product successfully added."
       );
       setName("");
-      setCategory("Bags");
+      setCategory(DEFAULT_BAG_CATEGORY);
       setPrice("");
       setOldPrice("");
       setStock("");
@@ -1640,7 +1633,7 @@ function Admin() {
       ],
       [
         "Classic Sling Bag (price auto-filled from cost + margin)",
-        "Sling Bags",
+        "Crossbody Bags",
         "", // Price left blank on purpose - filled in from Supplier Cost + Margin % below
         "",
         "20",
@@ -1844,10 +1837,16 @@ function Admin() {
             warnings.push(`Price auto-calculated as ₹${price} from Supplier Cost + Margin %.`);
           }
 
+          const typedCategory = cell(row, columnIndex.category);
+          const finalCategory = canonicalizeCategory(typedCategory, name);
+          if (typedCategory && typedCategory.trim().toLowerCase() !== finalCategory.toLowerCase()) {
+            warnings.push(`Category "${typedCategory}" saved as "${finalCategory}" (fixed category list).`);
+          }
+
           return {
             rowNumber: index + 2, // spreadsheet row number: row 1 is the header
             name,
-            category: cell(row, columnIndex.category) || "Bags",
+            category: canonicalizeCategory(cell(row, columnIndex.category), name),
             price,
             oldPrice: oldPriceRaw ? Number(oldPriceRaw) : 0,
             stock: stockRaw ? Math.max(0, Math.floor(Number(stockRaw))) : 0,
@@ -2018,7 +2017,7 @@ function Admin() {
         return {
           rowNumber: startRowNumber + index,
           name,
-          category: String(product.category || "Bags").trim() || "Bags",
+          category: canonicalizeCategory(product.category, name),
           price,
           oldPrice: Number.isFinite(Number(product.oldPrice)) ? Number(product.oldPrice) : 0,
           stock: Number.isFinite(Number(product.stock)) ? Math.max(0, Math.floor(Number(product.stock))) : 0,
@@ -2312,7 +2311,7 @@ function Admin() {
       product?.name || ""
     );
     setEditCategory(
-      product?.category || "Bags"
+      canonicalizeCategory(product?.category, product?.name)
     );
     setEditPrice(
       product?.price ?? ""

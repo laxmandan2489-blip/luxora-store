@@ -2,6 +2,13 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
+import {
+  BAG_CATEGORIES,
+  ACCESSORY_CATEGORIES,
+  PRODUCT_CATEGORIES,
+  canonicalizeCategory,
+  isBagCategory,
+} from "./categories";
 
 /*
  * LUX ICON SET
@@ -322,30 +329,8 @@ function colorToCss(colorName) {
  * BAG_CATEGORIES too if it's a type of bag, and it will show up
  * everywhere automatically (nav, mobile menu, footer, "All Bags").
  */
-const PRODUCT_CATEGORIES = [
-  "Bags",
-  "Handbags",
-  "Sling Bags",
-  "Tote Bags",
-  "Backpacks",
-  "Laptop Bags",
-  "Travel Bags",
-  "Clutches",
-  "Wallets",
-  "Accessories",
-];
-
-const BAG_CATEGORIES = [
-  "Bags",
-  "Handbags",
-  "Sling Bags",
-  "Tote Bags",
-  "Backpacks",
-  "Laptop Bags",
-  "Travel Bags",
-  "Clutches",
-];
-
+/* Category list + old-name mapping now live in ./categories.js (shared
+   with the admin panel). Only 6 main bag categories + Wallets/Accessories. */
 const ALL_BAGS_LABEL = "All Bags";
 
 /*
@@ -360,7 +345,7 @@ const ALL_BAGS_LABEL = "All Bags";
  * category (fixed or typed straight into the admin panel) still shows
  * up somewhere automatically.
  */
-const ACCESSORY_ONLY_CATEGORIES = ["Accessories", "Wallets"];
+const ACCESSORY_ONLY_CATEGORIES = ACCESSORY_CATEGORIES;
 
 /* The announcement bar's real, existing claims - unchanged text, just
    now shown one at a time with rotation instead of all three at once. */
@@ -726,6 +711,10 @@ const BANNER_IMAGE_WIDTH = 1600;
 function normalizeProduct(product) {
   return {
     ...product,
+    // Old/extra category names ("Bags", "Shoulder Bags & Totes",
+    // "Sling Bags", ...) are shown under one of the main categories -
+    // see ./categories.js.
+    category: canonicalizeCategory(product.category, product.name),
     price: Number(product.price || 0),
     oldPrice: Number(product.oldPrice || 0),
     stock: Number(product.stock || 0),
@@ -1603,8 +1592,14 @@ function App() {
     const match = categories.find(
       (category) => slugifyCategory(category) === categorySlugFromUrl
     );
+    if (match) return match;
 
-    return match || "All";
+    // Old links (e.g. /category/bags, /category/sling-bags,
+    // /category/shoulder-bags-totes) still land somewhere sensible.
+    if (categorySlugFromUrl === "bags") return ALL_BAGS_LABEL;
+    const words = categorySlugFromUrl.replace(/-/g, " ");
+    if (/shoulder/.test(words) && /tote/.test(words)) return ALL_BAGS_LABEL;
+    return canonicalizeCategory(words);
   }, [categorySlugFromUrl, categories]);
 
   function goToCategory(category) {
@@ -1652,20 +1647,28 @@ function App() {
    * into the two dropdown panels the header nav shows: "Bags" gets
    * every category that isn't specifically an accessory/wallet.
    */
+  /* Only categories that actually have products are listed (so a
+     customer never clicks into an empty page). Until products have
+     loaded, the full fixed list is shown so the menu isn't empty. */
+  const usedCategories = useMemo(
+    () => new Set(products.map((product) => product.category)),
+    [products]
+  );
+
   const bagNavCategories = useMemo(
     () =>
-      categories.filter(
-        (category) =>
-          category !== "All" &&
-          category !== ALL_BAGS_LABEL &&
-          !ACCESSORY_ONLY_CATEGORIES.includes(category)
-      ),
-    [categories]
+      products.length === 0
+        ? BAG_CATEGORIES
+        : BAG_CATEGORIES.filter((category) => usedCategories.has(category)),
+    [products.length, usedCategories]
   );
 
   const accessoryNavCategories = useMemo(
-    () => categories.filter((category) => ACCESSORY_ONLY_CATEGORIES.includes(category)),
-    [categories]
+    () =>
+      products.length === 0
+        ? ACCESSORY_ONLY_CATEGORIES
+        : ACCESSORY_ONLY_CATEGORIES.filter((category) => usedCategories.has(category)),
+    [products.length, usedCategories]
   );
 
   /*
@@ -1853,7 +1856,8 @@ function App() {
       const categoryMatch =
         selectedCategory === "All" ||
         (selectedCategory === ALL_BAGS_LABEL
-          ? BAG_CATEGORIES.includes(product.category)
+          ? // Every bag, from every bag category (anything not an accessory).
+            isBagCategory(product.category)
           : product.category === selectedCategory);
 
       const searchMatch =
