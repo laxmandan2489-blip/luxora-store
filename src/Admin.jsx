@@ -177,6 +177,120 @@ function labelForAiImage(image, index) {
   return AI_STUDIO_SHOT_LABELS[index] || `Studio Shot ${index + 1}`;
 }
 
+/*
+ * FAST UPLOADS (2026-10-03)
+ * Photos used to be sent to the server at full size - a 4-8MB AI/phone
+ * photo (and for "Get Image Links", as base64 text, ~33% bigger still)
+ * had to travel over the owner's internet to the free Render server,
+ * which then resized it itself on a very small CPU, one photo after
+ * another. That's why getting a link back took so long.
+ *
+ * Now every photo is shrunk IN THE BROWSER first, to the exact same size
+ * the server already stores (2000px max, JPEG ~88%) - so the stored
+ * photo looks identical, but only ~300-500KB is uploaded instead of
+ * several MB. Photos with real transparency stay PNG. If anything about
+ * this fails (old browser, odd format), the original file is used, so
+ * an upload is never blocked by it.
+ */
+const UPLOAD_MAX_SIDE = 2000;
+const UPLOAD_JPEG_QUALITY = 0.88;
+
+async function hasTransparency(bitmap) {
+  try {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(bitmap, 0, 0, size, size);
+    const pixels = context.getImageData(0, 0, size, size).data;
+    for (let index = 3; index < pixels.length; index += 4) {
+      if (pixels[index] < 250) return true;
+    }
+  } catch {
+    /* treat as opaque */
+  }
+  return false;
+}
+
+async function compressImageFile(file) {
+  try {
+    if (!file || !file.type || !file.type.startsWith("image/")) return file;
+    if (file.type === "image/gif" || file.type === "image/svg+xml") return file;
+
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, UPLOAD_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const keepPng = file.type === "image/png" && (await hasTransparency(bitmap));
+    const outType = keepPng ? "image/png" : "image/jpeg";
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!keepPng) {
+      // JPEG has no transparency - paint white behind instead of black.
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, width, height);
+    }
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close?.();
+
+    const blob = await new Promise((resolve) =>
+      canvas.toBlob(resolve, outType, keepPng ? undefined : UPLOAD_JPEG_QUALITY)
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const baseName = (file.name || "photo").replace(/\.[^.]+$/, "");
+    return new File([blob], `${baseName}.${keepPng ? "png" : "jpg"}`, {
+      type: outType,
+      lastModified: Date.now(),
+    });
+  } catch (error) {
+    console.warn("Photo compression skipped, uploading original:", error);
+    return file;
+  }
+}
+
+function compressImageFiles(files) {
+  return Promise.all(Array.from(files || []).map((file) => compressImageFile(file)));
+}
+
+async function compressDataUrl(dataUrl) {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    const file = await compressImageFile(new File([blob], "photo", { type: blob.type }));
+    if (file.size >= blob.size) return dataUrl;
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("read failed"));
+      reader.readAsDataURL(file);
+    });
+  } catch {
+    return dataUrl;
+  }
+}
+
+/* Runs worker(item) for every item, at most `limit` at a time, keeping
+   results in the original order - so 10 photos upload ~3 at once
+   instead of strictly one after another. */
+async function runWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function lane() {
+    while (next < items.length) {
+      const current = next++;
+      results[current] = await worker(items[current], current);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
+  return results;
+}
+
 function getImageUrl(image) {
   if (!image) return "";
   const value = String(image).trim();
@@ -581,6 +695,15 @@ function Admin() {
   // outcome.
   const [manualFiles, setManualFiles] = useState([]);
   const [manualUploading, setManualUploading] = useState(false);
+  const [manualProgress, setManualProgress] = useState({ done: 0, total: 0 });
+
+  /* Wake up the free Render backend the moment the admin panel opens
+     (it sleeps after ~15 min idle and takes 30-60s to wake). By the
+     time the owner has picked photos, the server is already awake, so
+     the first upload no longer waits for that start-up. */
+  useEffect(() => {
+    fetch(`${API}/api/health`).catch(() => {});
+  }, []);
   const [manualUploadError, setManualUploadError] = useState("");
 
   const [orderSearch, setOrderSearch] =
@@ -753,8 +876,11 @@ function Admin() {
 
     try {
       const formData = new FormData();
-      siteHeroFiles.forEach(({ file }) => formData.append("heroImage", file));
-      if (siteBrandStoryFile) formData.append("brandStoryImage", siteBrandStoryFile);
+      const smallHeroFiles = await compressImageFiles(siteHeroFiles.map(({ file }) => file));
+      smallHeroFiles.forEach((file) => formData.append("heroImage", file));
+      if (siteBrandStoryFile) {
+        formData.append("brandStoryImage", await compressImageFile(siteBrandStoryFile));
+      }
 
       const response = await adminFetch(`${API}/api/admin/site-settings`, {
         method: "PUT",
@@ -1396,17 +1522,22 @@ function Admin() {
       formData.append("supplierLink", supplierLink);
       formData.append("supplierCost", supplierCost);
       formData.append("shippingTime", shippingTime);
-      images.forEach((file) => {
+      // Shrink every photo in the browser first (see FAST UPLOADS).
+      setMessage("Preparing photos...");
+      const smallImages = await compressImageFiles(images);
+      smallImages.forEach((file) => {
         formData.append(
           "images",
           file
         );
       });
-      parseColorList(colors).forEach((color) => {
-        (colorImageFiles[color] || []).forEach((file) => {
+      for (const color of parseColorList(colors)) {
+        const smallColorFiles = await compressImageFiles(colorImageFiles[color] || []);
+        smallColorFiles.forEach((file) => {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
         });
-      });
+      }
+      setMessage("Uploading...");
       // Only send display-name overrides for colors that actually have
       // one typed in - a blank just means "use the product's normal name".
       const colorNamesToSend = {};
@@ -2064,7 +2195,7 @@ function Admin() {
         const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl: image.dataUrl }),
+          body: JSON.stringify({ dataUrl: await compressDataUrl(image.dataUrl) }),
         });
         const data = await response.json();
         if (!response.ok || !data.success) {
@@ -2132,9 +2263,13 @@ function Admin() {
     try {
       setManualUploading(true);
       setManualUploadError("");
-      const savedUrls = [];
-      for (const file of manualFiles) {
-        const dataUrl = await readFileAsDataUrl(file);
+      setManualProgress({ done: 0, total: manualFiles.length });
+      // Shrink in the browser first (see FAST UPLOADS), then upload up
+      // to 3 photos at once instead of one after another.
+      let doneCount = 0;
+      const savedUrls = await runWithConcurrency(manualFiles, 3, async (file) => {
+        const smallFile = await compressImageFile(file);
+        const dataUrl = await readFileAsDataUrl(smallFile);
         const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2144,9 +2279,11 @@ function Admin() {
         if (!response.ok || !data.success) {
           throw new Error(data?.message || `Server error ${response.status}`);
         }
-        savedUrls.push(data.url);
-      }
-      const thumbnail = await readFileAsDataUrl(manualFiles[0]);
+        doneCount += 1;
+        setManualProgress({ done: doneCount, total: manualFiles.length });
+        return data.url;
+      });
+      const thumbnail = await readFileAsDataUrl(await compressImageFile(manualFiles[0]));
       setAiHistory((previous) => [
         {
           id: `${Date.now()}`,
@@ -2367,7 +2504,9 @@ function Admin() {
       formData.append("supplierLink", editSupplierLink);
       formData.append("supplierCost", editSupplierCost);
       formData.append("shippingTime", editShippingTime);
-      editImages.forEach((file) => {
+      // Shrink every photo in the browser first (see FAST UPLOADS).
+      const smallEditImages = await compressImageFiles(editImages);
+      smallEditImages.forEach((file) => {
         formData.append(
           "images",
           file
@@ -2377,11 +2516,12 @@ function Admin() {
       // for every color shown in the form - the server keeps exactly
       // these and then adds any newly uploaded photos on top of them.
       formData.append("colorImages", JSON.stringify(editExistingColorImages));
-      parseColorList(editColors).forEach((color) => {
-        (editColorImageFiles[color] || []).forEach((file) => {
+      for (const color of parseColorList(editColors)) {
+        const smallColorFiles = await compressImageFiles(editColorImageFiles[color] || []);
+        smallColorFiles.forEach((file) => {
           formData.append(`colorImage__${encodeURIComponent(color)}`, file);
         });
-      });
+      }
       // Only send display-name overrides for colors that actually have
       // one typed in - a blank just means "use the product's normal name".
       const editColorNamesToSend = {};
@@ -5266,7 +5406,9 @@ function Admin() {
                   disabled={manualFiles.length === 0 || manualUploading}
                   onClick={uploadManualPhotos}
                 >
-                  {manualUploading ? "UPLOADING..." : "UPLOAD & GET LINKS"}
+                  {manualUploading
+                    ? `UPLOADING ${manualProgress.done}/${manualProgress.total}...`
+                    : "UPLOAD & GET LINKS"}
                 </button>
               </div>
 
