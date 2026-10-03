@@ -333,6 +333,19 @@ function colorToCss(colorName) {
    with the admin panel). Only 6 main bag categories + Wallets/Accessories. */
 const ALL_BAGS_LABEL = "All Bags";
 
+/* One short line under each homepage category banner (miramoss.com
+   style: "Best-selling crossbody styles for modern women."). */
+const CATEGORY_TAGLINES = {
+  Handbags: "Structured everyday handbags, made to be carried with confidence.",
+  "Shoulder Bags": "Timeless shoulder bag designs crafted for elegance.",
+  "Crossbody Bags": "Hands-free crossbody styles for the modern woman.",
+  "Tote Bags": "Roomy totes for work, weekends and everything in between.",
+  Backpacks: "Polished backpacks that carry your day in style.",
+  Clutches: "Evening clutches that finish every look.",
+  Wallets: "Slim wallets with a quietly luxurious finish.",
+  Accessories: "Small details that complete your style.",
+};
+
 /*
  * HEADER MEGA-MENU GROUPING
  * The header nav used to show every single category as one long flat
@@ -1280,31 +1293,22 @@ function App() {
    */
   const HERO_SLIDE_COPY = [
     {
-      kicker: "SHRIMOH · NEW SEASON 2026",
-      lines: ["Carry your", "everyday elegance."],
+      lines: ["Carry Your", "Everyday Elegance."],
       text: "Curated bags designed for the woman who carries confidence everywhere.",
-      primaryLabel: "Shop New Arrivals",
+      primaryLabel: "Discover Products",
       primaryTarget: "lux-new-arrivals",
-      secondaryLabel: "Explore Collection",
-      secondaryTarget: "lux-shop-by-category",
     },
     {
-      kicker: "THE SHRIMOH EDIT",
-      lines: ["Structured shapes,", "quiet luxury."],
+      lines: ["Structured Shapes.", "Quiet Luxury."],
       text: "Refined silhouettes designed for everyday elegance, from desk to dinner.",
       primaryLabel: "Shop Bestsellers",
       primaryTarget: "lux-bestsellers",
-      secondaryLabel: "Explore Collection",
-      secondaryTarget: "lux-shop-by-category",
     },
     {
-      kicker: "SHRIMOH / 2026",
-      lines: ["Details that", "feel considered."],
+      lines: ["Details That", "Feel Considered."],
       text: "Thoughtful hardware and honest materials, made to be carried every day.",
-      primaryLabel: "Shop New Arrivals",
-      primaryTarget: "lux-new-arrivals",
-      secondaryLabel: "Explore Collection",
-      secondaryTarget: "lux-shop-by-category",
+      primaryLabel: "Explore Collections",
+      primaryTarget: "lux-shop-by-category",
     },
   ];
 
@@ -3499,8 +3503,6 @@ function App() {
           once on first page load.
         */}
         <div className="lux-hero-content" key={`hero-copy-${activeHeroSlide % HERO_SLIDE_COPY.length}`}>
-          <div className="lux-hero-kicker">{activeHeroCopy.kicker}</div>
-
           <h1>
             {activeHeroCopy.lines[0]}
             <br />
@@ -3519,108 +3521,26 @@ function App() {
               }
             >
               {activeHeroCopy.primaryLabel}
-              <span>→</span>
-            </button>
-
-            <button
-              type="button"
-              className="lux-hero-btn-secondary"
-              onClick={() =>
-                document.getElementById(activeHeroCopy.secondaryTarget)?.scrollIntoView({
-                  behavior: "smooth",
-                })
-              }
-            >
-              {activeHeroCopy.secondaryLabel}
+              <LuxIcon name="arrow-right" size={18} />
             </button>
           </div>
         </div>
 
-        <button
-          type="button"
-          className="lux-hero-scroll-cue"
-          onClick={() =>
-            document.getElementById("lux-new-arrivals")?.scrollIntoView({
-              behavior: "smooth",
-            })
-          }
-        >
-          SCROLL TO DISCOVER
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <path d="M12 4v15M12 19l-6-6M12 19l6-6" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-
-        <div className="lux-hero-bottom">
-          <span>SHRIMOH / 2026</span>
-          <span>DISCOVER YOUR SIGNATURE</span>
-        </div>
       </section>
 
-      {/* BESTSELLERS */}
-      {bestsellers.length > 0 && (
-        <>
-          <section className="lux-section-header" id="lux-bestsellers">
-            <div>
-              <span>MOST LOVED</span>
-              <h2>Bestsellers</h2>
-            </div>
-
-            <div className="lux-collection-right">
-              <p>Real favourites, chosen by our customers</p>
-            </div>
-          </section>
-
-          <div className="lux-product-grid lux-scroll-row" id="lux-row-bestsellers">
-            {expandProductVariants(bestsellers).map(({ product, color }) =>
-              renderProductCard(product, {
-                keyPrefix: "bestseller",
-                badge: "bestseller",
-                showDiscountPrice: false,
-                forceColor: color,
-              })
-            )}
-          </div>
-
-          <div className="lux-row-controls">
-            <button
-              type="button"
-              className="lux-row-arrow"
-              onClick={() => scrollRowBy("lux-row-bestsellers", -1)}
-              aria-label="Scroll bestsellers left"
-            >
-              <LuxIcon name="arrow-left" size={20} />
-            </button>
-            <button
-              type="button"
-              className="lux-row-arrow"
-              onClick={() => scrollRowBy("lux-row-bestsellers", 1)}
-              aria-label="Scroll bestsellers right"
-            >
-              <LuxIcon name="arrow-right" size={20} />
-            </button>
-            <button
-              type="button"
-              className="lux-row-viewall"
-              onClick={() => goToShopAllSorted("best-selling")}
-            >
-              View all <span>→</span>
-            </button>
-          </div>
-        </>
-      )}
-
+      {/* HOMEPAGE ORDER (2026-10-03) - same top-to-bottom sequence as
+          miramoss.com: Hero -> New Arrivals -> 2 category banners ->
+          Featured Products (tabs; its "Featured" tab is the real
+          bestsellers list, so the separate Bestsellers row was folded
+          into it) -> Explore Our Collections (category cards) -> Our
+          Journey. */}
       {/* NEW ARRIVALS */}
       {newArrivals.length > 0 && (
         <>
-          <section className="lux-section-header" id="lux-new-arrivals">
+          <section className="lux-section-header lux-section-header-center" id="lux-new-arrivals">
             <div>
-              <span>JUST IN</span>
               <h2>New Arrivals</h2>
-            </div>
-
-            <div className="lux-collection-right">
-              <p>The latest additions to the edit</p>
+              <p className="lux-section-subtitle">Our most awaited collection is here</p>
             </div>
           </section>
 
@@ -3652,70 +3572,125 @@ function App() {
               className="lux-row-viewall"
               onClick={() => goToShopAllSorted("newest")}
             >
-              View all <span>→</span>
+              View All <span>→</span>
             </button>
           </div>
         </>
       )}
 
-      {/* CATEGORY TEASER ROWS - a short product row per top category,
-          each with its own prev/next arrows + View All (see
-          categoryTeaserRows above). Sits between New Arrivals and the
-          "Shop by Category" banner tiles, same spot miramoss.com uses
-          for its per-category rows (e.g. "Cross Body Bags"). */}
-      {categoryTeaserRows.map((row) => {
-        const rowId = `lux-row-cat-${slugifyCategory(row.category)}`;
-        return (
-          <Fragment key={row.category}>
-            <section className="lux-section-header">
-              <div>
-                <span>SHOP THE EDIT</span>
+      {/* CATEGORY BANNERS (2026-10-03) - miramoss.com puts two big
+          category banners right after New Arrivals ("Cross Body Bags",
+          "Shoulder Bags"): one large photo, the category name, one line
+          of text and a "Shop now" button - no product row. Shown for the
+          top 2 categories by product count (categoryTeaserRows). */}
+      {categoryTeaserRows.length > 0 && (
+        <div className="lux-cat-banners">
+          {categoryTeaserRows.map((row) => {
+            const photo = getProductImages(row.products[0], 1200)[0];
+            return (
+              <section className="lux-cat-banner lux-reveal" key={row.category}>
+                <button
+                  type="button"
+                  className="lux-cat-banner-photo"
+                  onClick={() => goToCategory(row.category)}
+                  aria-label={`Shop ${row.category}`}
+                >
+                  {photo ? (
+                    <img src={photo} alt={row.category} loading="lazy" decoding="async" onError={handleImageFallback} />
+                  ) : (
+                    <span className="lux-card-placeholder">SHRIMOH</span>
+                  )}
+                </button>
                 <h2>{row.category}</h2>
-              </div>
+                <p>{CATEGORY_TAGLINES[row.category] || "Thoughtfully designed for everyday elegance."}</p>
+                <button type="button" className="lux-shop-now" onClick={() => goToCategory(row.category)}>
+                  Shop now <LuxIcon name="arrow-right" size={18} />
+                </button>
+              </section>
+            );
+          })}
+        </div>
+      )}
 
-              <div className="lux-collection-right">
-                <p>Loved for everyday elegance</p>
-              </div>
-            </section>
-
-            <div className="lux-product-grid lux-scroll-row" id={rowId}>
-              {expandProductVariants(row.products).map(({ product, color }) =>
-                renderProductCard(product, {
-                  keyPrefix: `cat-${row.category}`,
-                  badge: "sale",
-                  forceColor: color,
-                })
-              )}
+      {/* FEATURED PRODUCTS - tabbed switcher (Featured + up to 5 real
+          categories that actually have products). Switching tabs just
+          swaps which products render below - no navigation/reload. */}
+      {featuredTabProducts.length > 0 && (
+        <>
+          <section className="lux-section-header lux-section-header-center" id="lux-bestsellers">
+            <div>
+              <h2>Featured Products</h2>
+              <p className="lux-section-subtitle">
+                {bestsellers.length > 0
+                  ? "Our Bestsellers — Loved by Customers"
+                  : "Curated Favourites — The SHRIMOH Edit"}
+              </p>
             </div>
+          </section>
 
-            <div className="lux-row-controls">
+          <div className="lux-featured-tabs" role="tablist" aria-label="Featured products category">
               <button
                 type="button"
-                className="lux-row-arrow"
-                onClick={() => scrollRowBy(rowId, -1)}
-                aria-label={`Scroll ${row.category} left`}
+                role="tab"
+                aria-selected={featuredTab === "Featured"}
+                className={featuredTab === "Featured" ? "active" : ""}
+                onClick={() => setFeaturedTab("Featured")}
               >
-                <LuxIcon name="arrow-left" size={20} />
+                Featured
               </button>
-              <button
-                type="button"
-                className="lux-row-arrow"
-                onClick={() => scrollRowBy(rowId, 1)}
-                aria-label={`Scroll ${row.category} right`}
-              >
-                <LuxIcon name="arrow-right" size={20} />
-              </button>
-              <button
-                type="button"
-                className="lux-row-viewall"
-                onClick={() => goToCategory(row.category)}
-              >
-                View all <span>→</span>
-              </button>
-            </div>
-          </Fragment>
-        );
-      })}
+              {featuredTabCategories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  role="tab"
+                  aria-selected={featuredTab === category}
+                  className={featuredTab === category ? "active" : ""}
+                  onClick={() => setFeaturedTab(category)}
+                >
+                  {category}
+                </button>
+              ))}
+          </div>
+
+          <div className="lux-product-grid lux-scroll-row" id="lux-row-featured-tabs">
+            {expandProductVariants(featuredTabProducts).map(({ product, color }) =>
+              renderProductCard(product, {
+                keyPrefix: `featured-${featuredTab}`,
+                badge: "sale",
+                forceColor: color,
+              })
+            )}
+          </div>
+
+          <div className="lux-row-controls">
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-featured-tabs", -1)}
+              aria-label="Scroll featured products left"
+            >
+              <LuxIcon name="arrow-left" size={20} />
+            </button>
+            <button
+              type="button"
+              className="lux-row-arrow"
+              onClick={() => scrollRowBy("lux-row-featured-tabs", 1)}
+              aria-label="Scroll featured products right"
+            >
+              <LuxIcon name="arrow-right" size={20} />
+            </button>
+            <button
+              type="button"
+              className="lux-row-viewall"
+              onClick={() =>
+                featuredTab === "Featured" ? goToShopAll() : goToCategory(featuredTab)
+              }
+            >
+              View All <span>→</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* SHOP BY CATEGORY / "EXPLORE OUR COLLECTIONS" - a 2-up slider of
           large banner tiles, right below New Arrivals. Only one pair is
@@ -3724,14 +3699,10 @@ function App() {
           Our Collections" slider instead of a static grid. */}
       {categoryShowcase.length > 0 && (
         <>
-          <section className="lux-section-header" id="lux-shop-by-category">
+          <section className="lux-section-header lux-section-header-center" id="lux-shop-by-category">
             <div>
-              <span>EXPLORE</span>
-              <h2>Shop by Category</h2>
-            </div>
-
-            <div className="lux-collection-right">
-              <p>Discover pieces designed for modern moments</p>
+              <h2>Explore Our Collections</h2>
+              <p className="lux-section-subtitle">Discover timeless pieces designed for modern moments</p>
             </div>
           </section>
 
@@ -3839,83 +3810,6 @@ function App() {
           </button>
         </div>
       </section>
-
-      {/* FEATURED PRODUCTS - tabbed switcher (Featured + up to 5 real
-          categories that actually have products). Switching tabs just
-          swaps which products render below - no navigation/reload. */}
-      {featuredTabProducts.length > 0 && (
-        <>
-          <section className="lux-section-header" id="lux-featured-tabs">
-            <div>
-              <span>THE SHRIMOH EDIT</span>
-              <h2>Featured Products</h2>
-              <p className="lux-featured-subtitle">Curated favourites from the SHRIMOH edit</p>
-            </div>
-
-            <div className="lux-featured-tabs" role="tablist" aria-label="Featured products category">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={featuredTab === "Featured"}
-                className={featuredTab === "Featured" ? "active" : ""}
-                onClick={() => setFeaturedTab("Featured")}
-              >
-                Featured
-              </button>
-              {featuredTabCategories.map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  role="tab"
-                  aria-selected={featuredTab === category}
-                  className={featuredTab === category ? "active" : ""}
-                  onClick={() => setFeaturedTab(category)}
-                >
-                  {category}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <div className="lux-product-grid lux-scroll-row" id="lux-row-featured-tabs">
-            {expandProductVariants(featuredTabProducts).map(({ product, color }) =>
-              renderProductCard(product, {
-                keyPrefix: `featured-${featuredTab}`,
-                badge: "sale",
-                forceColor: color,
-              })
-            )}
-          </div>
-
-          <div className="lux-row-controls">
-            <button
-              type="button"
-              className="lux-row-arrow"
-              onClick={() => scrollRowBy("lux-row-featured-tabs", -1)}
-              aria-label="Scroll featured products left"
-            >
-              <LuxIcon name="arrow-left" size={20} />
-            </button>
-            <button
-              type="button"
-              className="lux-row-arrow"
-              onClick={() => scrollRowBy("lux-row-featured-tabs", 1)}
-              aria-label="Scroll featured products right"
-            >
-              <LuxIcon name="arrow-right" size={20} />
-            </button>
-            <button
-              type="button"
-              className="lux-row-viewall"
-              onClick={() =>
-                featuredTab === "Featured" ? goToShopAll() : goToCategory(featuredTab)
-              }
-            >
-              View all <span>→</span>
-            </button>
-          </div>
-        </>
-      )}
         </>
       )}
 

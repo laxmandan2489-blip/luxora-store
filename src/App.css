@@ -1,5 +1,36 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap");
 
+/* Urbanist (miramoss.com-style sans) bundled with the site itself -
+   no extra request to Google, and it never falls back to Arial. */
+@font-face {
+  font-family: "Urbanist";
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url("./assets/fonts/urbanist-latin-300-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Urbanist";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/urbanist-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Urbanist";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./assets/fonts/urbanist-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Urbanist";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./assets/fonts/urbanist-latin-600-normal.woff2") format("woff2");
+}
+
 /* =========================================================
    SHRIMOH — PREMIUM LUXURY EDIT
    COMPLETE APP CSS
@@ -16,6 +47,11 @@
    * the site is obsidian / ivory / charcoal, per the brand rule that
    * gold should never become a dominant colour.
    */
+  /* Fonts (2026-10-03): one clean, rounded sans for everything (headings,
+     product names, body) - the same style miramoss.com uses - instead of
+     the old serif headings. The SHRIMOH logo keeps its own serif. */
+  --lux-font-display: "Urbanist", "Manrope", Arial, sans-serif;
+  --lux-font-body: "Urbanist", "Manrope", Arial, sans-serif;
   --lux-bg: #f7f4ef; /* Warm Ivory - primary background */
   --lux-paper: #fcfaf7; /* secondary background (cards, panels) */
   --lux-soft: #f1ece2; /* subtle fill (hover/selected surfaces) */
@@ -54,7 +90,7 @@ body {
   margin: 0;
   background: var(--lux-bg);
   color: var(--lux-text);
-  font-family: "Manrope", Arial, sans-serif;
+  font-family: var(--lux-font-body);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -471,7 +507,7 @@ a {
   outline: 0;
   background: transparent;
   color: var(--lux-text);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 24px;
 }
 
@@ -806,7 +842,7 @@ a {
   max-width: 900px;
   margin: 0;
   color: #fff;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(60px, 8vw, 112px);
   font-weight: 400;
   line-height: 0.94;
@@ -1174,7 +1210,7 @@ a {
 .lux-section-header h2 {
   margin: 13px 0 0;
   color: #161616;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(42px, 5vw, 70px);
   font-weight: 400;
   line-height: 1;
@@ -1765,7 +1801,7 @@ a {
   margin: 7px 0 0;
   overflow: hidden;
   color: #1a1a1a;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 18px;
   font-weight: 400;
   line-height: 1.2;
@@ -1919,7 +1955,7 @@ a {
 
 .lux-empty h3 {
   margin: 13px 0 8px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 35px;
   font-weight: 400;
 }
@@ -1966,7 +2002,7 @@ a {
 
 .lux-brand-story-copy h2 {
   margin: 22px 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(48px, 6vw, 78px);
   font-weight: 400;
   line-height: 0.98;
@@ -2067,7 +2103,7 @@ a {
 
 .lux-journey-copy h2 {
   margin: 14px 0 20px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(30px, 4vw, 42px);
   font-weight: 400;
 }
@@ -2228,7 +2264,7 @@ a {
 
 .lux-reviews-heading h2 {
   margin: 12px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(42px, 5vw, 65px);
   font-weight: 400;
   line-height: 1;
@@ -2243,7 +2279,7 @@ a {
 }
 
 .lux-review-rating strong {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 20px;
   font-weight: 400;
 }
@@ -2290,7 +2326,7 @@ a {
 
 .lux-review-top strong {
   color: #1b1b1b;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 15px;
   font-weight: 400;
 }
@@ -2341,7 +2377,7 @@ a {
 }
 
 .lux-newsletter-copy h2 {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(26px, 3.4vw, 38px);
   color: #f7f4ef;
   margin: 0 0 12px;
@@ -2597,7 +2633,7 @@ a {
 
 .lux-product-not-found h1 {
   margin: 0 0 12px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 34px;
   color: var(--lux-text);
 }
@@ -2678,7 +2714,7 @@ a {
 
 .lux-info-content h1 {
   margin: 12px 0 30px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 44px;
   font-weight: 400;
 }
@@ -2738,7 +2774,7 @@ a {
 
 .lux-quickview-info h2 {
   margin: 10px 0 14px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(26px, 2.6vw, 34px);
   font-weight: 400;
   line-height: 1.1;
@@ -2790,7 +2826,7 @@ a {
 
 .lux-info-subheading {
   margin: 34px 0 18px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 24px;
   font-weight: 400;
 }
@@ -2811,7 +2847,7 @@ a {
 
 .lux-info-stats strong {
   display: block;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 26px;
   font-weight: 400;
   color: var(--lux-text);
@@ -2944,7 +2980,7 @@ a {
 
 .lux-welcome-offer h3 {
   margin: 0 0 8px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-weight: 500;
   font-size: 22px;
   line-height: 1.2;
@@ -3294,7 +3330,7 @@ a {
 .lux-product-title {
   margin: 14px 0 0;
   color: var(--lux-text);
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(38px, 3.8vw, 56px);
   font-weight: 400;
   line-height: 1.02;
@@ -3733,7 +3769,7 @@ a {
 
 .lux-product-reviews-head h3 {
   margin: 8px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 25px;
   font-weight: 400;
 }
@@ -3832,7 +3868,7 @@ a {
 .lux-cart-header h2,
 .lux-wishlist-header h2 {
   margin: 8px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 29px;
   font-weight: 400;
 }
@@ -3966,7 +4002,7 @@ a {
 
 .lux-mobile-nav-sub-title {
   padding: 10px 14px 4px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 20px;
   color: var(--lux-text);
 }
@@ -4104,7 +4140,7 @@ a {
 .lux-cart-item-info h3,
 .lux-wishlist-item-info h3 {
   margin: 6px 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 17px;
   font-weight: 400;
 }
@@ -4262,7 +4298,7 @@ a {
 .lux-cart-empty h3,
 .lux-wishlist-empty h3 {
   margin: 17px 0 7px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 28px;
   font-weight: 400;
 }
@@ -4317,7 +4353,7 @@ a {
 }
 
 .lux-checkout-logo {
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 24px;
   letter-spacing: 5px;
 }
@@ -4365,7 +4401,7 @@ a {
 
 .lux-checkout-heading h1 {
   margin: 12px 0 7px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(40px, 5vw, 60px);
   font-weight: 400;
   line-height: 1;
@@ -4474,7 +4510,7 @@ a {
 
 .lux-form-title h2 {
   margin: 9px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 30px;
   font-weight: 400;
 }
@@ -4592,7 +4628,7 @@ a {
 
 .lux-summary-heading h2 {
   margin: 9px 0 25px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 30px;
   font-weight: 400;
 }
@@ -4648,7 +4684,7 @@ a {
 
 .lux-summary-item h3 {
   margin: 5px 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 15px;
   font-weight: 400;
 }
@@ -4901,7 +4937,7 @@ a {
 
 .lux-order-success h1 {
   margin: 15px 0 10px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 65px;
   font-weight: 400;
 }
@@ -4969,7 +5005,7 @@ a {
 .lux-track-page-hero h1 {
   margin: 14px 0 0;
   color: #161616;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: clamp(38px, 5vw, 58px);
   font-weight: 400;
   line-height: 1.05;
@@ -5003,7 +5039,7 @@ a {
 
 .lux-track-page-form-card h2 {
   margin: 0 0 22px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 22px;
   font-weight: 400;
   color: #161616;
@@ -5097,7 +5133,7 @@ a {
 
 .lux-track-page-steps > div span {
   display: block;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 30px;
   color: #d8c8a4;
   margin-bottom: 14px;
@@ -5160,7 +5196,7 @@ a {
 
 .lux-track-page-summary h2 {
   margin: 10px 0 0;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 26px;
   font-weight: 400;
   color: #161616;
@@ -5283,7 +5319,7 @@ a {
 
 .lux-track-page-result h3 {
   margin: 0 0 18px;
-  font-family: "Playfair Display", Georgia, serif;
+  font-family: var(--lux-font-display);
   font-size: 18px;
   font-weight: 400;
   color: #161616;
@@ -6422,5 +6458,365 @@ a {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+/* =========================================================
+   MIRA & MOSS STYLE PASS (2026-10-03)
+   Based on a frame-by-frame look at miramoss.com's homepage:
+   centered light sans headings + one grey subtitle line, plain text
+   tabs with a soft pill on the active one, white "View All" box under
+   the row arrows, big category banners, and a cinematic hero change
+   (dip to dark -> new photo slowly settling in -> copy rising in).
+   Placed at the end of the file so it wins over the older rules.
+========================================================= */
+
+/* ---------- Section headers: centered, like miramoss.com ---------- */
+.lux-section-header.lux-section-header-center {
+  display: block;
+  text-align: center;
+  padding: 72px 0 30px;
+}
+
+.lux-section-header.lux-section-header-center h2 {
+  margin: 0;
+  color: #1b1b1b;
+  font-family: var(--lux-font-display);
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.lux-section-subtitle {
+  margin: 12px auto 0;
+  max-width: 560px;
+  color: #6f6a63;
+  font-size: clamp(14px, 1.2vw, 16px);
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: 0.1px;
+}
+
+/* ---------- Featured tabs: plain words, soft pill on the active one ---------- */
+.lux-featured-tabs {
+  width: min(1400px, 92vw);
+  margin: 0 auto 26px;
+  justify-content: center;
+  gap: 6px;
+}
+
+.lux-featured-tabs button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 18px;
+  color: #2a2a2a;
+  font-family: var(--lux-font-body);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.1px;
+}
+
+.lux-featured-tabs button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.lux-featured-tabs button.active {
+  background: #ece8e1;
+  border-color: transparent;
+  color: #1b1b1b;
+}
+
+@media (max-width: 767px) {
+  .lux-featured-tabs {
+    justify-content: flex-start;
+    margin: 0 auto 20px;
+    padding: 0 4vw;
+    width: 100%;
+  }
+}
+
+/* ---------- Row controls: arrows, then a white "View All" box below ---------- */
+.lux-row-controls {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: center;
+  align-items: center;
+  column-gap: 26px;
+  row-gap: 14px;
+}
+
+.lux-row-controls .lux-row-viewall {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin: 0;
+  padding: 10px 18px;
+  background: #ffffff;
+  border: 1px solid #ece7df;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  font-family: var(--lux-font-body);
+  font-size: 14px;
+  font-weight: 400;
+  gap: 12px;
+}
+
+.lux-row-controls .lux-row-viewall:hover {
+  opacity: 1;
+  background: #f6f3ee;
+}
+
+/* ---------- Category banners (after New Arrivals) ---------- */
+.lux-cat-banners {
+  width: min(1300px, 92vw);
+  margin: 40px auto 10px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 56px;
+}
+
+@media (min-width: 900px) {
+  .lux-cat-banners {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+  }
+}
+
+.lux-cat-banner {
+  text-align: center;
+}
+
+.lux-cat-banner-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: #f1ede6;
+  cursor: pointer;
+}
+
+.lux-cat-banner-photo img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.9s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.lux-cat-banner-photo:hover img {
+  transform: scale(1.04);
+}
+
+.lux-cat-banner h2 {
+  margin: 22px 0 8px;
+  font-family: var(--lux-font-display);
+  font-size: clamp(24px, 2.4vw, 32px);
+  font-weight: 400;
+  color: #1b1b1b;
+}
+
+.lux-cat-banner p {
+  margin: 0 auto 18px;
+  max-width: 420px;
+  color: #6f6a63;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.lux-shop-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #ffffff;
+  border: 1px solid #ece7df;
+  color: #1b1b1b;
+  font-family: var(--lux-font-body);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.lux-shop-now:hover {
+  background: #f6f3ee;
+}
+
+.lux-shop-now svg {
+  transition: transform 0.2s ease;
+}
+
+.lux-shop-now:hover svg {
+  transform: translateX(3px);
+}
+
+/* ---------- Our Journey photo: show the WHOLE photo (bag was cut off) ---------- */
+/* The hero photos are tall (4:5). The old box was a short, wide strip
+   (280px / 180px high), so "cover" cut away most of the photo - the
+   bag included. Now the photo sits in a tall 4:5 frame, so the full
+   photo is visible. */
+.lux-journey-photo,
+.lux-journey-photo img {
+  height: auto;
+}
+
+.lux-journey-photo {
+  width: min(420px, 100%);
+  margin: 0 auto 34px;
+  aspect-ratio: 4 / 5;
+  background: #efe9df;
+}
+
+.lux-journey-photo img {
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+@media (max-width: 700px) {
+  .lux-journey-photo {
+    height: auto;
+    width: 100%;
+  }
+}
+
+/* ---------- Hero: cinematic slide change ---------- */
+/* Dark base, so when one photo fades out and the next fades in the
+   banner briefly dips to near-black in between (like miramoss.com)
+   instead of two photos muddling into each other. */
+.lux-hero,
+.lux-hero-image {
+  background: #0e0c0a;
+}
+
+.lux-hero-image img.lux-hero-slide,
+.lux-hero-image img.lux-hero-slide-bg {
+  transition: opacity 0.7s ease;
+}
+
+.lux-hero-image img.lux-hero-slide.lux-hero-slide-active,
+.lux-hero-image img.lux-hero-slide-bg.lux-hero-slide-active {
+  transition: opacity 1.2s ease 0.45s;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* New photo starts slightly zoomed-in and slowly settles - replaces the
+     old endless back-and-forth zoom. */
+  .lux-hero-image img.lux-hero-slide.lux-hero-slide-active {
+    animation: luxHeroSettle 6.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+
+  /* Copy rises in softly (with a slight blur clearing) after the photo. */
+  .lux-hero-content h1,
+  .lux-hero-content p,
+  .lux-hero-buttons {
+    opacity: 0;
+    animation: luxHeroCopyRise 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  }
+
+  .lux-hero-content h1 {
+    animation-delay: 0.75s;
+  }
+
+  .lux-hero-content p {
+    animation-delay: 0.95s;
+  }
+
+  .lux-hero-buttons {
+    animation-delay: 1.15s;
+  }
+
+  /* Active dot fills up like a progress bar for the 5s slide. */
+  .lux-hero-dots button.active {
+    position: relative;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.35);
+  }
+
+  .lux-hero-dots button.active::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: #ffffff;
+    transform-origin: left center;
+    animation: luxHeroDotFill 5s linear forwards;
+  }
+}
+
+@keyframes luxHeroSettle {
+  from {
+    transform: scale(1.09);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+@keyframes luxHeroCopyRise {
+  from {
+    opacity: 0;
+    transform: translateY(22px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes luxHeroDotFill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Hero copy in the new light sans (miramoss.com style). */
+.lux-hero-content h1 {
+  font-family: var(--lux-font-display);
+  font-size: clamp(40px, 5.6vw, 76px);
+  font-weight: 300;
+  line-height: 1.12;
+  letter-spacing: -0.5px;
+}
+
+.lux-hero-content p {
+  margin: 20px 0 30px;
+  font-size: clamp(14px, 1.3vw, 17px);
+  font-weight: 400;
+}
+
+.lux-hero-content button {
+  min-height: 46px;
+  padding: 0 20px;
+  font-family: var(--lux-font-body);
+  font-size: 15px;
+  font-weight: 400;
+}
+
+/* Phone: centered copy, like miramoss.com. */
+@media (max-width: 700px) {
+  .lux-hero-content {
+    align-items: center;
+    text-align: center;
+  }
+
+  .lux-hero-content p {
+    max-width: 320px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .lux-hero-buttons {
+    justify-content: center;
+  }
+
+  .lux-hero-content h1 {
+    font-size: 40px;
   }
 }
