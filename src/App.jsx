@@ -1825,12 +1825,14 @@ function App() {
 
     const isAccessoryPage = ACCESSORY_ONLY_CATEGORIES.includes(selectedCategory);
     let names;
+    // (2026-10-03) No "All Bags" thumbnail in this row - only the real
+    // categories, per user feedback.
     if (isShopAllPage || selectedCategory === "All") {
-      names = ["All", ALL_BAGS_LABEL, ...withProducts(PRODUCT_CATEGORIES)];
+      names = ["All", ...withProducts(PRODUCT_CATEGORIES)];
     } else if (isAccessoryPage) {
       names = withProducts(ACCESSORY_ONLY_CATEGORIES);
     } else {
-      names = [ALL_BAGS_LABEL, ...withProducts(BAG_CATEGORIES)];
+      names = withProducts(BAG_CATEGORIES);
     }
 
     return names.map((category) => ({
