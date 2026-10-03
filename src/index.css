@@ -5,7 +5,8 @@
 }
 
 html {
-  scroll-behavior: smooth;
+  /* No smooth-scroll animation on page/section jumps (2026-10-03). */
+  scroll-behavior: auto;
 }
 
 body {

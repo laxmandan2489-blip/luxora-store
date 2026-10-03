@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
@@ -332,6 +332,71 @@ function colorToCss(colorName) {
 /* Category list + old-name mapping now live in ./categories.js (shared
    with the admin panel). Only 6 main bag categories + Wallets/Accessories. */
 const ALL_BAGS_LABEL = "All Bags";
+
+/* Category page copy (miramoss.com style: "The Crossbody Edit" on the
+   banner, then a short paragraph under the category name). */
+const CATEGORY_PAGE_COPY = {
+  Handbags: {
+    edit: "The Handbag Edit",
+    line: "Structured silhouettes for every day and every occasion.",
+    description:
+      "Polished, structured and easy to carry - our handbags move with you from the morning commute to dinner plans, with the details that make them feel quietly special.",
+  },
+  "Shoulder Bags": {
+    edit: "The Shoulder Bag Edit",
+    line: "Effortless shapes that sit beautifully on the shoulder.",
+    description:
+      "Soft curves, clean lines and just the right size - shoulder bags designed to be reached for every day and styled with everything.",
+  },
+  "Crossbody Bags": {
+    edit: "The Crossbody Edit",
+    line: "Beautifully designed crossbody bags for wherever life takes you.",
+    description:
+      "Chic, hands-free and versatile - our crossbody bags bring modern minimalism to city strolls, daily errands and weekend plans.",
+  },
+  "Tote Bags": {
+    edit: "The Tote Edit",
+    line: "Roomy, refined and ready for everything.",
+    description:
+      "From work days to weekend escapes, our totes carry it all - spacious inside, elegant outside, made for women who are always on the move.",
+  },
+  Backpacks: {
+    edit: "The Backpack Edit",
+    line: "Polished backpacks for days that go everywhere.",
+    description:
+      "Smart compartments, comfortable straps and a refined finish - backpacks that keep you organised without giving up on style.",
+  },
+  Clutches: {
+    edit: "The Clutch Edit",
+    line: "Small, striking and made for the evening.",
+    description:
+      "Statement clutches that finish every look - from festive evenings and weddings to dinners that call for something a little special.",
+  },
+  Wallets: {
+    edit: "The Wallet Edit",
+    line: "Slim essentials with a quietly luxurious finish.",
+    description:
+      "Thoughtfully organised wallets and card holders, made to match the bag you carry every day.",
+  },
+  Accessories: {
+    edit: "The Accessories Edit",
+    line: "The small details that complete your style.",
+    description:
+      "Finishing touches designed to pair beautifully with your SHRIMOH bag.",
+  },
+  [ALL_BAGS_LABEL]: {
+    edit: "Bags for Every Moment",
+    line: "Thoughtfully designed styles for work, weekends, travel and everything in between.",
+    description:
+      "Every SHRIMOH bag in one place - handbags, shoulder bags, crossbody bags, totes and more, each designed for everyday elegance.",
+  },
+  All: {
+    edit: "The SHRIMOH Collection",
+    line: "Every piece, thoughtfully designed for modern moments.",
+    description:
+      "Browse the full SHRIMOH collection - bags and accessories designed to feel considered, refined and made to be carried every day.",
+  },
+};
 
 /* One short line under each homepage category banner (miramoss.com
    style: "Best-selling crossbody styles for modern women."). */
@@ -1715,6 +1780,74 @@ function App() {
   }, [categories, products]);
 
   /*
+   * CATEGORY PAGE TOP (banner + "Shop by categories" thumbnails).
+   * The banner uses the owner's own lifestyle hero photos (Admin ->
+   * Site Content), a different one per category so pages don't all
+   * look the same; if none are uploaded it falls back to a photo of a
+   * product from that category.
+   */
+  const listingTitle = isShopAllPage
+    ? "Shop All"
+    : selectedCategory === "All"
+    ? "Shop All"
+    : selectedCategory;
+
+  const listingCopy =
+    CATEGORY_PAGE_COPY[isShopAllPage ? "All" : selectedCategory] || {
+      edit: `The ${selectedCategory} Edit`,
+      line: "Thoughtfully designed for everyday elegance.",
+      description: "",
+    };
+
+  const listingBannerImage = useMemo(() => {
+    const key = isShopAllPage ? "All" : selectedCategory;
+    const order = ["All", ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES];
+    const index = Math.max(0, order.indexOf(key));
+    if (heroImages.length > 0) return heroImages[index % heroImages.length];
+    const inListing = products.find((product) =>
+      key === "All"
+        ? true
+        : key === ALL_BAGS_LABEL
+        ? isBagCategory(product.category)
+        : product.category === key
+    );
+    return inListing ? getProductImages(inListing, BANNER_IMAGE_WIDTH)[0] || "" : "";
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isShopAllPage, selectedCategory, heroImages, products]);
+
+  const shopByCategoryTiles = useMemo(() => {
+    const firstImageFor = (predicate) => {
+      const product = products.find(predicate);
+      return product ? getProductImages(product, THUMB_IMAGE_WIDTH)[0] || "" : "";
+    };
+    const withProducts = (list) =>
+      list.filter((category) => products.some((product) => product.category === category));
+
+    const isAccessoryPage = ACCESSORY_ONLY_CATEGORIES.includes(selectedCategory);
+    let names;
+    if (isShopAllPage || selectedCategory === "All") {
+      names = ["All", ALL_BAGS_LABEL, ...withProducts(PRODUCT_CATEGORIES)];
+    } else if (isAccessoryPage) {
+      names = withProducts(ACCESSORY_ONLY_CATEGORIES);
+    } else {
+      names = [ALL_BAGS_LABEL, ...withProducts(BAG_CATEGORIES)];
+    }
+
+    return names.map((category) => ({
+      category,
+      label: category === "All" ? "Shop All" : category,
+      active: isShopAllPage ? category === "All" : category === selectedCategory,
+      image:
+        category === "All"
+          ? firstImageFor(() => true)
+          : category === ALL_BAGS_LABEL
+          ? firstImageFor((product) => isBagCategory(product.category))
+          : firstImageFor((product) => product.category === category),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, selectedCategory, isShopAllPage]);
+
+  /*
    * (2026-10-02) The old one-pair-at-a-time slider (categorySlidePairs +
    * categorySlideIndex) was replaced by a real horizontally scrolling
    * row - see the "SHOP BY CATEGORY" JSX below. Customers can now
@@ -1822,15 +1955,17 @@ function App() {
 
   function scrollToSection(sectionId) {
     setOpenMegaMenu(null);
+    // Opens the section directly (no scrolling animation), even when
+    // coming from another page.
     if (location.pathname !== "/") {
       navigate("/");
       // Wait one tick for the homepage sections to actually mount
-      // before trying to scroll to them.
+      // before jumping to them.
       window.setTimeout(() => {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: "instant", block: "start" });
       }, 50);
     } else {
-      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth" });
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "instant", block: "start" });
     }
   }
 
@@ -1841,9 +1976,31 @@ function App() {
    * does, and without it a category "page" felt like it was just
    * scrolling down inside the homepage instead of opening its own page.
    */
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "auto" });
+  //
+  // (2026-10-03) Now an INSTANT jump that happens before the new page is
+  // painted (useLayoutEffect + behavior "instant"). Before, the site-wide
+  // CSS "scroll-behavior: smooth" turned this into a visible scroll-up
+  // animation every time a category was opened.
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, [location.pathname]);
+
+  /* Keeps --lux-header-h equal to the real (sticky) header height, so the
+     sticky Filters/Sort bar on category pages sits right under it. */
+  useEffect(() => {
+    const header = document.querySelector(".lux-header");
+    if (!header) return undefined;
+    const update = () =>
+      document.documentElement.style.setProperty("--lux-header-h", `${header.offsetHeight}px`);
+    update();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    observer?.observe(header);
+    window.addEventListener("resize", update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, []);
 
   /* =========================================================
      FILTER PRODUCTS
@@ -1980,7 +2137,7 @@ function App() {
 
   function goToListingPage(page) {
     setListingPage(page);
-    document.getElementById("lux-products")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("lux-products")?.scrollIntoView({ behavior: "instant", block: "start" });
   }
 
   /*
@@ -3516,7 +3673,8 @@ function App() {
               type="button"
               onClick={() =>
                 document.getElementById(activeHeroCopy.primaryTarget)?.scrollIntoView({
-                  behavior: "smooth",
+                  behavior: "instant",
+                  block: "start",
                 })
               }
             >
@@ -3826,29 +3984,60 @@ function App() {
       */}
       {(selectedCategory !== "All" || isShopAllPage) && (
         <>
-      {/* CATEGORY PAGE BREADCRUMB */}
-      <nav className="lux-breadcrumb" aria-label="Breadcrumb">
-        <button type="button" onClick={() => goToCategory("All")}>
-          Home
-        </button>
-        <span>/</span>
-        <span>{selectedCategory === "All" ? "Shop All" : selectedCategory}</span>
-      </nav>
-
-      {/* COLLECTION HEADER (doubles as the category page's own header) */}
-      <section className="lux-collection-header" id="lux-products">
-        <div>
-          <span>THE SHRIMOH EDIT</span>
-          <h2>{selectedCategory === "All" ? "Curated Collection" : selectedCategory}</h2>
-        </div>
-
-        <div className="lux-collection-right">
-          <p>
-            {filteredProducts.length} {filteredProducts.length === 1 ? "piece" : "pieces"}
-          </p>
-          <span>PREMIUM · TIMELESS · REFINED</span>
+      {/* CATEGORY / COLLECTION PAGE TOP (2026-10-03) - same layout as a
+          miramoss.com category page: a big photo banner with "The ...
+          Edit" on it, then the category name + a short description,
+          then "SHOP BY CATEGORIES" (small photo thumbnails of the sister
+          categories), then Filters/Sort and the products. */}
+      <section className="lux-cat-hero">
+        {listingBannerImage ? (
+          <img
+            src={listingBannerImage}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+            fetchPriority="high"
+            onError={handleImageFallback}
+          />
+        ) : null}
+        <div className="lux-cat-hero-shade" />
+        <div className="lux-cat-hero-copy" key={listingTitle}>
+          <h1>{listingCopy.edit}</h1>
+          <p>{listingCopy.line}</p>
         </div>
       </section>
+
+      <section className="lux-collection-intro" id="lux-products">
+        <h2>{listingTitle}</h2>
+        <p>{listingCopy.description}</p>
+        <span>
+          {filteredProducts.length} {filteredProducts.length === 1 ? "piece" : "pieces"}
+        </span>
+      </section>
+
+      {shopByCategoryTiles.length > 1 && (
+        <section className="lux-shop-cats" aria-label="Shop by categories">
+          <span className="lux-shop-cats-label">SHOP BY CATEGORIES</span>
+          <div className="lux-shop-cats-row">
+            {shopByCategoryTiles.map((tile) => (
+              <button
+                type="button"
+                key={tile.category}
+                className={`lux-shop-cat${tile.active ? " active" : ""}`}
+                onClick={() => (tile.category === "All" ? goToShopAll() : goToCategory(tile.category))}
+                aria-current={tile.active ? "page" : undefined}
+              >
+                <span className="lux-shop-cat-photo">
+                  {tile.image ? (
+                    <img src={tile.image} alt="" loading="lazy" decoding="async" onError={handleImageFallback} />
+                  ) : null}
+                </span>
+                <span className="lux-shop-cat-name">{tile.label}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/*
        * FILTERS + SORT - a matched pair of plain bordered boxes sitting
@@ -3858,7 +4047,7 @@ function App() {
        * as two equal, plain boxes in their own row, not tucked into a
        * corner).
        */}
-      <div className="lux-listing-controls">
+      <div className="lux-listing-controls lux-listing-controls-sticky">
         <button
           type="button"
           className={`lux-filter-toggle${listingFilterCount > 0 ? " active" : ""}`}
@@ -4060,11 +4249,7 @@ function App() {
 
           <button
             type="button"
-            onClick={() =>
-              document.getElementById("lux-products")?.scrollIntoView({
-                behavior: "smooth",
-              })
-            }
+            onClick={goToShopAll}
           >
             EXPLORE SHRIMOH
             <span>→</span>
