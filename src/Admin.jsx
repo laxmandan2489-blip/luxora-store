@@ -765,6 +765,13 @@ function Admin() {
     useState({});
   const [editImages, setEditImages] =
     useState([]);
+  // The product's SAVED photos (uploaded or added by link), in the order
+  // the admin wants them - ◀ ▶ to reorder, ✕ to remove, first = main.
+  // Sent as "keepImages" on save; new files are added after these.
+  const [editExistingImages, setEditExistingImages] =
+    useState([]);
+  const [editImageLink, setEditImageLink] =
+    useState("");
   const [editingLoading, setEditingLoading] =
     useState(false);
 
@@ -815,6 +822,96 @@ function Admin() {
   const [savingSiteContent, setSavingSiteContent] = useState(false);
   const [siteContentMessage, setSiteContentMessage] = useState("");
 
+  /*
+   * CATEGORY LIFESTYLE PHOTOS (2026-10-05)
+   * One lifestyle photo per category for the storefront's category
+   * tiles. categoryImageDraft = what's on screen ({category: url});
+   * categoryImageFiles = photos picked from the phone/computer that get
+   * uploaded on save ({category: { file, previewUrl }}).
+   */
+  const CATEGORY_PHOTO_KEYS = ["All", ...PRODUCT_CATEGORIES];
+  const [categoryImageDraft, setCategoryImageDraft] = useState({});
+  const [categoryImageFiles, setCategoryImageFiles] = useState({});
+  const [categoryLinkInputs, setCategoryLinkInputs] = useState({});
+  const [openCategoryPicker, setOpenCategoryPicker] = useState(null);
+  const [savingCategoryImages, setSavingCategoryImages] = useState(false);
+  const [categoryImagesMessage, setCategoryImagesMessage] = useState("");
+
+  function setCategoryPhotoUrl(categoryKey, url) {
+    setCategoryImageDraft((previous) => ({ ...previous, [categoryKey]: url }));
+    setCategoryImageFiles((previous) => {
+      if (!previous[categoryKey]) return previous;
+      const next = { ...previous };
+      delete next[categoryKey];
+      return next;
+    });
+    setCategoryImagesMessage("");
+  }
+
+  function setCategoryPhotoFile(categoryKey, file) {
+    if (!file) return;
+    setCategoryImageFiles((previous) => ({
+      ...previous,
+      [categoryKey]: { file, previewUrl: URL.createObjectURL(file) },
+    }));
+    setCategoryImagesMessage("");
+  }
+
+  function clearCategoryPhoto(categoryKey) {
+    setCategoryPhotoUrl(categoryKey, "");
+  }
+
+  // Every photo of every product in a category (main + color photos),
+  // so the owner can just tap the lifestyle one.
+  function photosForCategory(categoryKey) {
+    const list = [];
+    for (const product of products || []) {
+      const productCategory = canonicalizeCategory(product?.category, product?.name);
+      if (categoryKey !== "All" && productCategory !== categoryKey) continue;
+      const images = Array.isArray(product?.images) ? product.images : [];
+      list.push(...images);
+      const colorImages = product?.colorImages || {};
+      for (const key of Object.keys(colorImages)) {
+        const value = colorImages[key];
+        if (Array.isArray(value)) list.push(...value);
+        else if (value) list.push(value);
+      }
+    }
+    return Array.from(new Set(list.filter((url) => typeof url === "string" && /^https?:\/\//i.test(url))));
+  }
+
+  async function saveCategoryImages() {
+    setSavingCategoryImages(true);
+    setCategoryImagesMessage("");
+    try {
+      const formData = new FormData();
+      const map = {};
+      for (const key of CATEGORY_PHOTO_KEYS) {
+        if (categoryImageDraft[key]) map[key] = categoryImageDraft[key];
+      }
+      formData.append("categoryImages", JSON.stringify(map));
+      for (const key of Object.keys(categoryImageFiles)) {
+        const small = await compressImageFile(categoryImageFiles[key].file);
+        formData.append(`categoryImage__${encodeURIComponent(key)}`, small);
+      }
+      const response = await adminFetch(`${API}/api/admin/category-images`, {
+        method: "PUT",
+        body: formData,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to save category photos.");
+      }
+      setCategoryImageDraft({ ...(data.settings?.categoryImages || {}) });
+      setCategoryImageFiles({});
+      setCategoryImagesMessage("Saved. Category tiles on the live site now use these photos.");
+    } catch (error) {
+      setCategoryImagesMessage(error.message || "Unable to save category photos.");
+    } finally {
+      setSavingCategoryImages(false);
+    }
+  }
+
   async function loadSiteSettings() {
     setLoadingSiteSettings(true);
     try {
@@ -829,6 +926,8 @@ function Admin() {
             : [],
           brandStoryImageUrl: data.settings.brandStoryImageUrl || "",
         });
+        setCategoryImageDraft({ ...(data.settings.categoryImages || {}) });
+        setCategoryImageFiles({});
       }
     } catch (error) {
       console.error("Load site settings error:", error);
@@ -2340,6 +2439,12 @@ function Admin() {
         : product?.colors || "Black"
     );
     setEditImages([]);
+    setEditImageLink("");
+    setEditExistingImages(() => {
+      let list = Array.isArray(product?.images) ? [...product.images] : [];
+      if (product?.image && !list.includes(product.image)) list.unshift(product.image);
+      return Array.from(new Set(list.filter(Boolean)));
+    });
     setEditColorImageFiles({});
     setEditExistingColorImages(() => {
       const source = product?.colorImages || {};
@@ -2375,7 +2480,58 @@ function Admin() {
       Array.from(
         event.target.files || []
       );
-    setEditImages(selectedFiles);
+    // Adds to the list (doesn't replace it), so photos can be picked in
+    // several goes. The same input can be used again right away.
+    setEditImages((previous) => [...previous, ...selectedFiles]);
+    event.target.value = "";
+  }
+
+  /* SAVED photos (Edit Product) - reorder / remove / add by link. */
+  function moveEditExistingImage(index, direction) {
+    setEditExistingImages((previous) => {
+      const next = [...previous];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  }
+
+  function makeEditExistingImageMain(index) {
+    setEditExistingImages((previous) => {
+      if (index <= 0 || index >= previous.length) return previous;
+      const next = [...previous];
+      const [picked] = next.splice(index, 1);
+      return [picked, ...next];
+    });
+  }
+
+  function removeEditExistingImage(index) {
+    setEditExistingImages((previous) => previous.filter((_, i) => i !== index));
+  }
+
+  function addEditImageLink() {
+    const links = editImageLink
+      .split(/[\s,]+/)
+      .map((link) => link.trim())
+      .filter((link) => /^https?:\/\//i.test(link));
+    if (links.length === 0) {
+      alert("Please paste a full image link starting with https://");
+      return;
+    }
+    setEditExistingImages((previous) => Array.from(new Set([...previous, ...links])));
+    setEditImageLink("");
+  }
+
+  function moveEditExistingColorImage(color, index, direction) {
+    setEditExistingColorImages((previous) => {
+      const list = previous[color] || [];
+      const next = [...list];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return previous;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return { ...previous, [color]: next };
+    });
   }
 
   function moveEditImage(index, direction) {
@@ -2503,6 +2659,12 @@ function Admin() {
       formData.append("supplierLink", editSupplierLink);
       formData.append("supplierCost", editSupplierCost);
       formData.append("shippingTime", editShippingTime);
+      if (editExistingImages.length === 0 && editImages.length === 0) {
+        throw new Error("Product needs at least one photo - add a photo or a link first.");
+      }
+      // Saved photos in the exact order arranged above (removed ones left
+      // out). New files below are added after these.
+      formData.append("keepImages", JSON.stringify(editExistingImages));
       // Shrink every photo in the browser first (see FAST UPLOADS).
       const smallEditImages = await compressImageFiles(editImages);
       smallEditImages.forEach((file) => {
@@ -2558,6 +2720,7 @@ function Admin() {
       );
       setEditingProduct(null);
       setEditImages([]);
+      setEditExistingImages([]);
       setEditColorImageFiles({});
       await loadProducts();
     } catch (error) {
@@ -3539,6 +3702,109 @@ function Admin() {
           padding: 7px 7px 0;
           font-size: 11px;
           text-align: center;
+        }
+        .category-photo-list {
+          display: grid;
+          gap: 14px;
+        }
+        .category-photo-row {
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+          padding: 12px;
+          border: 1px solid #eee;
+          border-radius: 10px;
+        }
+        .category-photo-current {
+          flex: none;
+          width: 84px;
+          height: 84px;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #f3f0ea;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #999;
+          font-size: 12px;
+        }
+        .category-photo-current img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .category-photo-body {
+          flex: 1;
+          min-width: 0;
+        }
+        .category-photo-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+          margin-top: 8px;
+        }
+        .category-photo-actions .image-reorder-button {
+          flex: none;
+          padding: 7px 10px;
+          font-weight: 600;
+        }
+        .category-photo-upload {
+          position: relative;
+          overflow: hidden;
+        }
+        .category-photo-upload input {
+          position: absolute;
+          inset: 0;
+          opacity: 0;
+          cursor: pointer;
+        }
+        .category-photo-choices {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          margin-top: 10px;
+          padding-bottom: 4px;
+        }
+        .category-photo-choice {
+          flex: none;
+          width: 72px;
+          height: 72px;
+          padding: 0;
+          border: 2px solid transparent;
+          border-radius: 8px;
+          overflow: hidden;
+          background: #f3f0ea;
+          cursor: pointer;
+        }
+        .category-photo-choice.selected {
+          border-color: #1b1b1b;
+        }
+        .category-photo-choice img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .edit-image-link-row {
+          display: flex;
+          gap: 8px;
+          margin-top: 12px;
+        }
+        .edit-image-link-row .form-input {
+          flex: 1;
+          min-width: 0;
+        }
+        .edit-image-link-row .image-reorder-button {
+          flex: none;
+          white-space: nowrap;
+          padding: 0 14px;
+        }
+        .image-make-main-button {
+          display: block;
+          flex: none;
+          width: calc(100% - 14px);
+          margin: 0 7px 7px;
+          padding: 5px 0;
+          font-size: 11px;
         }
         .image-reorder-row {
           display: flex;
@@ -4902,6 +5168,129 @@ function Admin() {
               onClick={saveSiteContent}
             >
               {savingSiteContent ? "SAVING..." : "SAVE CHANGES"}
+            </button>
+          </div>
+        )}
+
+        {activeTab === "content" && !loadingSiteSettings && (
+          <div className="panel">
+            <div className="panel-header">
+              <h2 className="panel-title">Category Lifestyle Photos</h2>
+            </div>
+            <p className="customer-info" style={{ marginBottom: 16 }}>
+              Har category ke liye ek lifestyle photo (model ke saath) chuno. Website ke
+              saare category tiles - homepage ke category banners, "Explore Our
+              Collections" aur har page ki "Shop by categories" - hamesha yahi photo
+              dikhayenge. Product photos mein se tap karke chuno, link paste karo, ya
+              photo upload karo. Jis category ki photo set nahi hai, wahan website khud
+              ek product photo use karegi.
+            </p>
+
+            <div className="category-photo-list">
+              {CATEGORY_PHOTO_KEYS.map((key) => {
+                const label = key === "All" ? "Shop All" : key;
+                const pending = categoryImageFiles[key];
+                const current = pending ? pending.previewUrl : categoryImageDraft[key] ? getImageUrl(categoryImageDraft[key]) : "";
+                const choices = openCategoryPicker === key ? photosForCategory(key) : [];
+                return (
+                  <div className="category-photo-row" key={key}>
+                    <div className="category-photo-current">
+                      {current ? (
+                        <img src={current} alt={label} />
+                      ) : (
+                        <span>Auto</span>
+                      )}
+                    </div>
+                    <div className="category-photo-body">
+                      <strong>{label}</strong>
+                      <div className="category-photo-actions">
+                        <button
+                          type="button"
+                          className="image-reorder-button"
+                          onClick={() => setOpenCategoryPicker(openCategoryPicker === key ? null : key)}
+                        >
+                          {openCategoryPicker === key ? "Close" : "Choose from product photos"}
+                        </button>
+                        <label className="image-reorder-button category-photo-upload">
+                          Upload
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => {
+                              setCategoryPhotoFile(key, event.target.files?.[0]);
+                              event.target.value = "";
+                            }}
+                          />
+                        </label>
+                        {current && (
+                          <button type="button" className="image-reorder-button" onClick={() => clearCategoryPhoto(key)}>
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="edit-image-link-row">
+                        <input
+                          className="form-input"
+                          type="text"
+                          placeholder="Ya photo ka link paste karo (https://...)"
+                          value={categoryLinkInputs[key] || ""}
+                          onChange={(event) =>
+                            setCategoryLinkInputs((previous) => ({ ...previous, [key]: event.target.value }))
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="image-reorder-button"
+                          onClick={() => {
+                            const link = (categoryLinkInputs[key] || "").trim();
+                            if (!/^https?:\/\//i.test(link)) {
+                              alert("Please paste a full image link starting with https://");
+                              return;
+                            }
+                            setCategoryPhotoUrl(key, link);
+                            setCategoryLinkInputs((previous) => ({ ...previous, [key]: "" }));
+                          }}
+                        >
+                          Use link
+                        </button>
+                      </div>
+                      {openCategoryPicker === key && (
+                        <div className="category-photo-choices">
+                          {choices.length === 0 ? (
+                            <span className="customer-info">Is category mein abhi koi product photo nahi hai.</span>
+                          ) : (
+                            choices.map((url) => (
+                              <button
+                                type="button"
+                                key={url}
+                                className={`category-photo-choice${
+                                  !pending && categoryImageDraft[key] === url ? " selected" : ""
+                                }`}
+                                onClick={() => setCategoryPhotoUrl(key, url)}
+                              >
+                                <img src={getImageUrl(url)} alt="" loading="lazy" />
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {categoryImagesMessage && (
+              <p className="customer-info" style={{ marginTop: 14 }}>{categoryImagesMessage}</p>
+            )}
+            <button
+              type="button"
+              className="save-product-button"
+              style={{ marginTop: 16 }}
+              disabled={savingCategoryImages}
+              onClick={saveCategoryImages}
+            >
+              {savingCategoryImages ? "SAVING..." : "SAVE CATEGORY PHOTOS"}
             </button>
           </div>
         )}
@@ -6355,6 +6744,26 @@ function Admin() {
                                       alt={`${color} photo ${index + 1}`}
                                     />
                                     <span className="color-photo-existing-tag">Saved</span>
+                                    <div className="image-reorder-row">
+                                      <button
+                                        type="button"
+                                        className="image-reorder-button"
+                                        onClick={() => moveEditExistingColorImage(color, index, -1)}
+                                        disabled={index === 0}
+                                        title="Move earlier"
+                                      >
+                                        ◀
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="image-reorder-button"
+                                        onClick={() => moveEditExistingColorImage(color, index, 1)}
+                                        disabled={index === existingUrls.length - 1}
+                                        title="Move later"
+                                      >
+                                        ▶
+                                      </button>
+                                    </div>
                                     <button
                                       type="button"
                                       className="image-remove-button"
@@ -6583,7 +6992,86 @@ function Admin() {
 
                 <div className="form-group full">
                   <label className="form-label">
-                    Replace Product Images
+                    Product Photos
+                  </label>
+                  <div className="customer-info">
+                    ◀ ▶ se order badlo, "Make main" se koi bhi photo pehli (main)
+                    photo banao, ✕ se hatao. Link se aayi photos bhi isi tarah arrange
+                    hoti hain. Changes "SAVE CHANGES" dabane par save honge.
+                  </div>
+                  {editExistingImages.length > 0 ? (
+                    <div className="image-preview">
+                      {editExistingImages.map((url, index) => (
+                        <div className="image-preview-card" key={`saved-${url}`}>
+                          <img src={getImageUrl(url)} alt={`Photo ${index + 1}`} />
+                          <span className="image-number">
+                            Photo {index + 1}
+                            {index === 0 ? " (main)" : ""}
+                          </span>
+                          <div className="image-reorder-row">
+                            <button
+                              type="button"
+                              className="image-reorder-button"
+                              onClick={() => moveEditExistingImage(index, -1)}
+                              disabled={index === 0}
+                              title="Move earlier"
+                            >
+                              ◀
+                            </button>
+                            <button
+                              type="button"
+                              className="image-reorder-button"
+                              onClick={() => moveEditExistingImage(index, 1)}
+                              disabled={index === editExistingImages.length - 1}
+                              title="Move later"
+                            >
+                              ▶
+                            </button>
+                          </div>
+                          {index > 0 && (
+                            <button
+                              type="button"
+                              className="image-reorder-button image-make-main-button"
+                              onClick={() => makeEditExistingImageMain(index)}
+                              title="Make this the main photo"
+                            >
+                              Make main
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="image-remove-button"
+                            onClick={() => removeEditExistingImage(index)}
+                            title="Remove this photo"
+                          >
+                            ✕ Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="customer-info">No saved photos - add a link or upload below.</div>
+                  )}
+                  <div className="edit-image-link-row">
+                    <input
+                      className="form-input"
+                      type="text"
+                      placeholder="Image link paste karo (https://...)"
+                      value={editImageLink}
+                      onChange={(event) => setEditImageLink(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addEditImageLink();
+                        }
+                      }}
+                    />
+                    <button type="button" className="image-reorder-button" onClick={addEditImageLink}>
+                      + Add link
+                    </button>
+                  </div>
+                  <label className="form-label" style={{ marginTop: 12 }}>
+                    Upload new photos (added after the photos above)
                   </label>
                   <input
                     className="form-input"
@@ -6594,10 +7082,6 @@ function Admin() {
                       handleEditImagesChange
                     }
                   />
-                  <div className="customer-info">
-                    Leave empty to keep the
-                    existing images.
-                  </div>
                   {editImages.length > 0 && (
                     <div className="image-preview">
                       {editImages.map(

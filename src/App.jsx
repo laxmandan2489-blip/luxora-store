@@ -390,6 +390,18 @@ const CATEGORY_PAGE_COPY = {
     description:
       "Every SHRIMOH bag in one place - handbags, shoulder bags, crossbody bags, totes and more, each designed for everyday elegance.",
   },
+  "New Arrivals": {
+    edit: "Fresh from the Studio",
+    line: "Our newest pieces, just arrived.",
+    description:
+      "The latest SHRIMOH designs, newest first - be the first to carry them.",
+  },
+  Bestsellers: {
+    edit: "Best Sellers for a Reason",
+    line: "Effortless designs, premium craftsmanship, everyday versatility.",
+    description:
+      "The pieces our customers keep coming back for - loved, reordered and carried every day.",
+  },
   All: {
     edit: "The SHRIMOH Collection",
     line: "Every piece, thoughtfully designed for modern moments.",
@@ -705,6 +717,119 @@ function getImageUrl(image, width = 1000) {
 const THUMB_IMAGE_WIDTH = 480;
 
 /*
+ * Same weserv.nl photo at a different width. Lets banners use srcSet so
+ * a phone downloads an ~800px photo instead of the 1600px desktop one,
+ * and lets the blurred hero background use a tiny copy (it is blurred
+ * anyway, so nobody can tell). Non-weserv URLs are returned unchanged.
+ */
+function withImageWidth(url, width) {
+  if (!url || !url.includes("images.weserv.nl")) return url;
+  return url.replace(/([?&])w=\d+/, `$1w=${width}`);
+}
+
+/*
+ * DRAG-TO-SCROLL (2026-10-05)
+ * The category rows already scroll by finger-swipe on phones, but on a
+ * laptop/desktop a normal mouse can't scroll a sideways row at all
+ * (only a trackpad or Shift+wheel can) - which is why customers "category
+ * ko scroll nahi kar pa rahe". This lets a mouse click-and-drag the row
+ * like a phone swipe, converts a plain vertical mouse-wheel into sideways
+ * scrolling while the pointer is over the row (only while there is still
+ * room to scroll that way, so the page scroll is never trapped), and
+ * marks the row with data-overflow so arrows only show when there is
+ * actually more to see. Used as a React ref callback; returns cleanup.
+ */
+function attachRowScroll(element) {
+  if (!element) return undefined;
+
+  let pointerDown = false;
+  let dragging = false;
+  let startX = 0;
+  let startScroll = 0;
+
+  const updateOverflow = () => {
+    const overflow = element.scrollWidth - element.clientWidth > 4;
+    element.dataset.overflow = overflow ? "true" : "false";
+    if (element.parentElement) element.parentElement.dataset.rowOverflow = overflow ? "true" : "false";
+  };
+
+  const onPointerDown = (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    pointerDown = true;
+    dragging = false;
+    startX = event.clientX;
+    startScroll = element.scrollLeft;
+  };
+
+  const onPointerMove = (event) => {
+    if (!pointerDown) return;
+    const dx = event.clientX - startX;
+    if (!dragging && Math.abs(dx) > 6) {
+      dragging = true;
+      element.classList.add("lux-row-dragging");
+    }
+    if (dragging) element.scrollLeft = startScroll - dx;
+  };
+
+  const endDrag = () => {
+    if (!pointerDown) return;
+    pointerDown = false;
+    if (!dragging) return;
+    dragging = false;
+    element.classList.remove("lux-row-dragging");
+    // A drag must not also count as a click on the tile under the mouse.
+    const swallowClick = (clickEvent) => {
+      clickEvent.stopPropagation();
+      clickEvent.preventDefault();
+    };
+    element.addEventListener("click", swallowClick, { capture: true, once: true });
+    window.setTimeout(() => element.removeEventListener("click", swallowClick, { capture: true }), 80);
+  };
+
+  const onWheel = (event) => {
+    if (element.dataset.overflow !== "true") return;
+    if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return; // trackpad already scrolls sideways
+    const max = element.scrollWidth - element.clientWidth;
+    const goingRight = event.deltaY > 0;
+    if ((goingRight && element.scrollLeft >= max - 1) || (!goingRight && element.scrollLeft <= 0)) return;
+    event.preventDefault();
+    element.scrollBy({ left: event.deltaY, behavior: "auto" });
+  };
+
+  const onDragStart = (event) => event.preventDefault();
+
+  element.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointermove", onPointerMove);
+  window.addEventListener("pointerup", endDrag);
+  window.addEventListener("pointercancel", endDrag);
+  element.addEventListener("wheel", onWheel, { passive: false });
+  element.addEventListener("dragstart", onDragStart);
+
+  updateOverflow();
+  const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateOverflow) : null;
+  resizeObserver?.observe(element);
+  // Children (tiles) appear/disappear as products load.
+  const mutationObserver = typeof MutationObserver !== "undefined" ? new MutationObserver(updateOverflow) : null;
+  mutationObserver?.observe(element, { childList: true });
+
+  return () => {
+    element.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", endDrag);
+    window.removeEventListener("pointercancel", endDrag);
+    element.removeEventListener("wheel", onWheel);
+    element.removeEventListener("dragstart", onDragStart);
+    resizeObserver?.disconnect();
+    mutationObserver?.disconnect();
+  };
+}
+
+function bannerSrcSet(url) {
+  if (!url || !url.includes("images.weserv.nl")) return undefined;
+  return [800, 1200, 1600].map((w) => `${withImageWidth(url, w)} ${w}w`).join(", ");
+}
+
+/*
  * If the weserv.nl compression proxy above ever fails to fetch/serve a
  * photo (rare, but it's a third-party service), fall back to the
  * original un-compressed URL once before giving up and dimming the
@@ -777,6 +902,41 @@ function writeCache(key, data) {
   }
 }
 
+/*
+ * COLD-START RETRY (2026-10-05)
+ * The backend is on Render's free plan, which goes to sleep when nobody
+ * visits for ~15 minutes. The first request after that can hang for
+ * 30-60s or come back as a 502/503 while the server boots. Before this,
+ * a single failed request meant the page just gave up: no products, and
+ * "Shop by Category" never appeared (it is built from the product list)
+ * - that is the "kabhi dikhta hai, kabhi gayab" problem on a first visit.
+ *
+ * fetchJsonWithRetry keeps trying (each attempt capped by a timeout,
+ * with a growing pause between attempts) for roughly 90 seconds total,
+ * which comfortably covers a Render wake-up. Returns parsed JSON or
+ * throws after the last attempt.
+ */
+async function fetchJsonWithRetry(url, { attempts = 6, timeoutMs = 25000 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+    try {
+      const response = await fetch(url, controller ? { signal: controller.signal } : undefined);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, Math.min(2000 * (attempt + 1), 8000)));
+      }
+    } finally {
+      if (timer) window.clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error("Request failed");
+}
+
 const PRODUCTS_CACHE_KEY = "shrimoh_cache_products_v1";
 const BESTSELLERS_CACHE_KEY = "shrimoh_cache_bestsellers_v1";
 const SITE_SETTINGS_CACHE_KEY = "shrimoh_cache_site_settings_v1";
@@ -846,7 +1006,26 @@ function App() {
    * flag only controls which JSX renders (homepage teasers vs the
    * full listing).
    */
-  const isShopAllPage = location.pathname === "/shop";
+  /*
+   * COLLECTION PAGES (2026-10-05) - like miramoss.com, every hero
+   * button ("Discover Products", "Shop Bestsellers", "Explore
+   * Collections") and the header's New Arrivals / Bestsellers links now
+   * OPEN THEIR OWN PAGE (banner + Shop by categories + Filters/Sort +
+   * grid) instead of scrolling down the homepage:
+   *   /shop          -> Shop All
+   *   /new-arrivals  -> New Arrivals (newest first)
+   *   /bestsellers   -> Bestsellers (best selling first)
+   * They all reuse the Shop All listing (isShopAllPage) - only the
+   * banner text and the starting sort differ.
+   */
+  const COLLECTION_PAGES = {
+    "/shop": { key: "All", sort: "featured" },
+    "/new-arrivals": { key: "New Arrivals", sort: "newest" },
+    "/bestsellers": { key: "Bestsellers", sort: "best-selling" },
+  };
+  const collectionPage = COLLECTION_PAGES[location.pathname] || null;
+  const isShopAllPage = Boolean(collectionPage);
+  const isPlainShopAllPage = location.pathname === "/shop";
 
   /*
    * TRACK ORDER PAGE
@@ -1223,10 +1402,7 @@ function App() {
   useEffect(() => {
     async function loadBestsellers() {
       try {
-        const response = await fetch(`${API}/api/bestsellers?limit=8`);
-        if (!response.ok) return;
-
-        const data = await response.json();
+        const data = await fetchJsonWithRetry(`${API}/api/bestsellers?limit=8`, { attempts: 4 });
 
         if (data.success && Array.isArray(data.products)) {
           setBestsellers(data.products.map(normalizeProduct));
@@ -1278,23 +1454,41 @@ function App() {
   const [heroImages, setHeroImages] = useState(
     () => extractSiteImages(readCache(SITE_SETTINGS_CACHE_KEY)).hero
   );
+  /* Owner-chosen lifestyle photo per category (Admin -> Site Content ->
+     Category Lifestyle Photos), raw URLs keyed by category name. */
+  const [categoryImages, setCategoryImages] = useState(() => {
+    const cached = readCache(SITE_SETTINGS_CACHE_KEY);
+    return cached && cached.categoryImages && typeof cached.categoryImages === "object"
+      ? cached.categoryImages
+      : {};
+  });
   const [brandStoryImageUrl, setBrandStoryImageUrl] = useState(
     () => extractSiteImages(readCache(SITE_SETTINGS_CACHE_KEY)).story
   );
   const [activeHeroSlide, setActiveHeroSlide] = useState(0);
+  /* Only the first slide (plus the one coming up next) downloads on page
+     load - the other banner photos load just before they rotate in,
+     instead of all 3-5 full-size photos competing with the product
+     photos for bandwidth on the first visit. */
+  const [heroLoadUpTo, setHeroLoadUpTo] = useState(1);
+  useEffect(() => {
+    setHeroLoadUpTo((previous) => Math.max(previous, activeHeroSlide + 1));
+  }, [activeHeroSlide]);
 
   useEffect(() => {
     async function loadSiteSettings() {
       try {
-        const response = await fetch(`${API}/api/site-settings`);
-        if (!response.ok) return;
-
-        const data = await response.json();
+        const data = await fetchJsonWithRetry(`${API}/api/site-settings`, { attempts: 4 });
 
         if (data.success && data.settings) {
           const { hero, story } = extractSiteImages(data.settings);
           setHeroImages(hero);
           setBrandStoryImageUrl(story);
+          setCategoryImages(
+            data.settings.categoryImages && typeof data.settings.categoryImages === "object"
+              ? data.settings.categoryImages
+              : {}
+          );
           writeCache(SITE_SETTINGS_CACHE_KEY, data.settings);
         }
       } catch (error) {
@@ -1361,19 +1555,19 @@ function App() {
       lines: ["Carry Your", "Everyday Elegance."],
       text: "Curated bags designed for the woman who carries confidence everywhere.",
       primaryLabel: "Discover Products",
-      primaryTarget: "lux-new-arrivals",
+      primaryPath: "/new-arrivals",
     },
     {
       lines: ["Structured Shapes.", "Quiet Luxury."],
       text: "Refined silhouettes designed for everyday elegance, from desk to dinner.",
       primaryLabel: "Shop Bestsellers",
-      primaryTarget: "lux-bestsellers",
+      primaryPath: "/bestsellers",
     },
     {
       lines: ["Details That", "Feel Considered."],
       text: "Thoughtful hardware and honest materials, made to be carried every day.",
       primaryLabel: "Explore Collections",
-      primaryTarget: "lux-shop-by-category",
+      primaryPath: "/shop",
     },
   ];
 
@@ -1604,13 +1798,7 @@ function App() {
       try {
         setApiError("");
 
-        const response = await fetch(`${API}/api/products`);
-
-        if (!response.ok) {
-          throw new Error("Unable to load products");
-        }
-
-        const data = await response.json();
+        const data = await fetchJsonWithRetry(`${API}/api/products`);
 
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products.map(normalizeProduct));
@@ -1695,8 +1883,16 @@ function App() {
      full shop already sorted "Best Selling") so the destination page
      actually matches what the row promised. */
   function goToShopAllSorted(sortValue) {
+    setOpenMegaMenu(null);
+    if (sortValue === "newest") return navigate("/new-arrivals");
+    if (sortValue === "best-selling") return navigate("/bestsellers");
     if (sortValue) setSortBy(sortValue);
     goToShopAll();
+  }
+
+  function goToCollectionPage(path) {
+    setOpenMegaMenu(null);
+    navigate(path);
   }
 
   /* Scrolls a horizontally-scrolling product row (New Arrivals,
@@ -1763,21 +1959,18 @@ function App() {
     return real
       .map((category) => {
         const productsInCategory = products.filter((product) => product.category === category);
-        const withImage = productsInCategory.find(
-          (product) => getProductImages(product, THUMB_IMAGE_WIDTH)[0]
-        );
-        const firstImage = withImage ? getProductImages(withImage, THUMB_IMAGE_WIDTH)[0] : null;
 
         return {
           category,
           count: productsInCategory.length,
-          image: firstImage,
+          image: categoryPhotoFor(category, 800) || null,
         };
       })
       .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [categories, products]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, products, categoryImages, heroImages]);
 
   /*
    * CATEGORY PAGE TOP (banner + "Shop by categories" thumbnails).
@@ -1786,26 +1979,24 @@ function App() {
    * look the same; if none are uploaded it falls back to a photo of a
    * product from that category.
    */
-  const listingTitle = isShopAllPage
-    ? "Shop All"
-    : selectedCategory === "All"
-    ? "Shop All"
-    : selectedCategory;
+  const listingKey = collectionPage ? collectionPage.key : selectedCategory;
+
+  const listingTitle = listingKey === "All" ? "Shop All" : listingKey;
 
   const listingCopy =
-    CATEGORY_PAGE_COPY[isShopAllPage ? "All" : selectedCategory] || {
+    CATEGORY_PAGE_COPY[listingKey] || {
       edit: `The ${selectedCategory} Edit`,
       line: "Thoughtfully designed for everyday elegance.",
       description: "",
     };
 
   const listingBannerImage = useMemo(() => {
-    const key = isShopAllPage ? "All" : selectedCategory;
-    const order = ["All", ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES];
+    const key = listingKey;
+    const order = ["All", "New Arrivals", "Bestsellers", ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES];
     const index = Math.max(0, order.indexOf(key));
     if (heroImages.length > 0) return heroImages[index % heroImages.length];
     const inListing = products.find((product) =>
-      key === "All"
+      key === "All" || key === "New Arrivals" || key === "Bestsellers"
         ? true
         : key === ALL_BAGS_LABEL
         ? isBagCategory(product.category)
@@ -1813,13 +2004,9 @@ function App() {
     );
     return inListing ? getProductImages(inListing, BANNER_IMAGE_WIDTH)[0] || "" : "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isShopAllPage, selectedCategory, heroImages, products]);
+  }, [listingKey, heroImages, products]);
 
   const shopByCategoryTiles = useMemo(() => {
-    const firstImageFor = (predicate) => {
-      const product = products.find(predicate);
-      return product ? getProductImages(product, THUMB_IMAGE_WIDTH)[0] || "" : "";
-    };
     const withProducts = (list) =>
       list.filter((category) => products.some((product) => product.category === category));
 
@@ -1838,16 +2025,11 @@ function App() {
     return names.map((category) => ({
       category,
       label: category === "All" ? "Shop All" : category,
-      active: isShopAllPage ? category === "All" : category === selectedCategory,
-      image:
-        category === "All"
-          ? firstImageFor(() => true)
-          : category === ALL_BAGS_LABEL
-          ? firstImageFor((product) => isBagCategory(product.category))
-          : firstImageFor((product) => product.category === category),
+      active: isShopAllPage ? isPlainShopAllPage && category === "All" : category === selectedCategory,
+      image: categoryPhotoFor(category, 300),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, selectedCategory, isShopAllPage]);
+  }, [products, selectedCategory, isShopAllPage, isPlainShopAllPage, categoryImages, heroImages]);
 
   /*
    * (2026-10-02) The old one-pair-at-a-time slider (categorySlidePairs +
@@ -1857,6 +2039,25 @@ function App() {
    * and the arrows just scroll the row (scrollRowBy).
    */
   const CATEGORY_SCROLL_ID = "lux-category-scroll";
+  const SHOP_CATS_SCROLL_ID = "lux-shop-cats-scroll";
+
+  /*
+   * (2026-10-05) "Shop by Category" never disappears any more. It is
+   * built from the product list, so before products arrive (first visit
+   * while the backend wakes up) or if loading fails, it used to be
+   * skipped entirely. Now it shows the main categories as placeholder
+   * tiles instead - shimmering while loading, plain dark tiles with the
+   * category name otherwise - and they still open the category page.
+   */
+  const homeCategoryTiles = useMemo(() => {
+    if (categoryShowcase.length > 0) return categoryShowcase;
+    return PRODUCT_CATEGORIES.slice(0, 6).map((category) => ({
+      category,
+      count: null,
+      image: null,
+      placeholder: true,
+    }));
+  }, [categoryShowcase]);
 
   /*
    * HOMEPAGE CATEGORY TEASER ROWS - one short product row per top
@@ -1957,6 +2158,16 @@ function App() {
 
   function scrollToSection(sectionId) {
     setOpenMegaMenu(null);
+    // New Arrivals / Bestsellers are their own pages now (see
+    // COLLECTION_PAGES) - open them instead of scrolling the homepage.
+    const pageForSection = {
+      "lux-new-arrivals": "/new-arrivals",
+      "lux-bestsellers": "/bestsellers",
+    }[sectionId];
+    if (pageForSection) {
+      navigate(pageForSection);
+      return;
+    }
     // Opens the section directly (no scrolling animation), even when
     // coming from another page.
     if (location.pathname !== "/") {
@@ -1985,6 +2196,14 @@ function App() {
   // animation every time a category was opened.
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, [location.pathname]);
+
+  // Each collection page opens with its own sort (New Arrivals ->
+  // newest first, Bestsellers -> best selling, Shop All -> featured).
+  // The customer can still change it with the Sort box.
+  useEffect(() => {
+    if (collectionPage) setSortBy(collectionPage.sort);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
   /* Keeps --lux-header-h equal to the real (sticky) header height, so the
@@ -2188,6 +2407,29 @@ function App() {
     }
 
     return Array.from(new Set(images.filter(Boolean).map((img) => getImageUrl(img, width))));
+  }
+
+  /*
+   * CATEGORY TILE PHOTO (2026-10-05) - every category tile on the site
+   * (homepage category banners, "Explore Our Collections", and the
+   * "Shop by categories" thumbnails on each listing page) uses the
+   * owner's chosen LIFESTYLE photo for that category when one is set in
+   * Admin -> Site Content. Only when none is set does it fall back to a
+   * product photo from that category ("All" falls back to the first
+   * hero banner photo, which is already a lifestyle shot).
+   */
+  function categoryPhotoFor(category, width = THUMB_IMAGE_WIDTH) {
+    const chosen = categoryImages && categoryImages[category];
+    if (chosen) return getImageUrl(chosen, width);
+    if (category === "All") {
+      if (heroImages[0]) return withImageWidth(heroImages[0], width);
+      const any = products.find((product) => getProductImages(product, width)[0]);
+      return any ? getProductImages(any, width)[0] : "";
+    }
+    const matches = (product) =>
+      category === ALL_BAGS_LABEL ? isBagCategory(product.category) : product.category === category;
+    const product = products.find((item) => matches(item) && getProductImages(item, width)[0]);
+    return product ? getProductImages(product, width)[0] : "";
   }
 
   /*
@@ -3357,7 +3599,7 @@ function App() {
           <nav className="lux-nav">
             <button
               type="button"
-              className={isShopAllPage ? "active" : ""}
+              className={isPlainShopAllPage ? "active" : ""}
               onClick={goToShopAll}
             >
               SHOP ALL
@@ -3595,23 +3837,29 @@ function App() {
                * never fully removes it for every possible photo shape.
                */
               <Fragment key={image}>
-                <img
-                  src={image}
-                  alt=""
-                  aria-hidden="true"
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onError={handleImageFallback}
-                  className={`lux-hero-slide-bg ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
-                />
-                <img
-                  src={image}
-                  alt="SHRIMOH collection"
-                  decoding="async"
-                  fetchPriority={index === 0 ? "high" : "low"}
-                  onError={handleImageFallback}
-                  className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
-                />
+                {index <= heroLoadUpTo && (
+                  <>
+                    <img
+                      src={withImageWidth(image, 240)}
+                      alt=""
+                      aria-hidden="true"
+                      decoding="async"
+                      fetchPriority={index === 0 ? "high" : "low"}
+                      onError={handleImageFallback}
+                      className={`lux-hero-slide-bg ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
+                    />
+                    <img
+                      src={image}
+                      srcSet={bannerSrcSet(image)}
+                      sizes="100vw"
+                      alt="SHRIMOH collection"
+                      decoding="async"
+                      fetchPriority={index === 0 ? "high" : "low"}
+                      onError={handleImageFallback}
+                      className={`lux-hero-slide ${index === activeHeroSlide ? "lux-hero-slide-active" : ""}`}
+                    />
+                  </>
+                )}
               </Fragment>
             ))
           ) : filteredProducts[0] && getProductImages(filteredProducts[0])[0] ? (
@@ -3673,12 +3921,7 @@ function App() {
           <div className="lux-hero-buttons">
             <button
               type="button"
-              onClick={() =>
-                document.getElementById(activeHeroCopy.primaryTarget)?.scrollIntoView({
-                  behavior: "instant",
-                  block: "start",
-                })
-              }
+              onClick={() => goToCollectionPage(activeHeroCopy.primaryPath)}
             >
               {activeHeroCopy.primaryLabel}
               <LuxIcon name="arrow-right" size={18} />
@@ -3746,7 +3989,7 @@ function App() {
       {categoryTeaserRows.length > 0 && (
         <div className="lux-cat-banners">
           {categoryTeaserRows.map((row) => {
-            const photo = getProductImages(row.products[0], 1200)[0];
+            const photo = categoryPhotoFor(row.category, 1200);
             return (
               <section className="lux-cat-banner lux-reveal" key={row.category}>
                 <button
@@ -3857,7 +4100,7 @@ function App() {
           shown at a time; prev/next arrows below page through the rest
           (up to 3 pairs / 6 categories) - matches Mira & Moss's "Explore
           Our Collections" slider instead of a static grid. */}
-      {categoryShowcase.length > 0 && (
+      {homeCategoryTiles.length > 0 && (
         <>
           <section className="lux-section-header lux-section-header-center" id="lux-shop-by-category">
             <div>
@@ -3873,15 +4116,19 @@ function App() {
           <div
             className="lux-category-tiles"
             id={CATEGORY_SCROLL_ID}
+            ref={attachRowScroll}
             role="list"
             aria-label="Shop by category"
+            aria-busy={loadingProducts && categoryShowcase.length === 0 ? "true" : undefined}
           >
-            {categoryShowcase.map((entry, index) => (
+            {homeCategoryTiles.map((entry, index) => (
               <button
                 type="button"
                 role="listitem"
                 key={entry.category}
-                className={`lux-category-tile${entry.image ? "" : " lux-category-tile-noimg"}`}
+                className={`lux-category-tile${
+                  entry.image || (entry.placeholder && loadingProducts) ? "" : " lux-category-tile-noimg"
+                }`}
                 onClick={() => goToCategory(entry.category)}
               >
                 {entry.image && (
@@ -3907,14 +4154,20 @@ function App() {
                 )}
                 <div className="lux-category-tile-label">
                   <strong>Shop {entry.category}</strong>
-                  <small>{entry.count} {entry.count === 1 ? "piece" : "pieces"}</small>
+                  {entry.count !== null && (
+                    <small>{entry.count} {entry.count === 1 ? "piece" : "pieces"}</small>
+                  )}
                 </div>
               </button>
             ))}
           </div>
 
-          {categoryShowcase.length > 2 && (
-            <div className="lux-row-controls lux-category-slide-controls">
+          {homeCategoryTiles.length > 1 && (
+            <div
+              className={`lux-row-controls lux-category-slide-controls${
+                homeCategoryTiles.length === 2 ? " lux-category-slide-controls-pair" : ""
+              }`}
+            >
               <button
                 type="button"
                 className="lux-row-arrow"
@@ -4020,7 +4273,16 @@ function App() {
       {shopByCategoryTiles.length > 1 && (
         <section className="lux-shop-cats" aria-label="Shop by categories">
           <span className="lux-shop-cats-label">SHOP BY CATEGORIES</span>
-          <div className="lux-shop-cats-row">
+          <div className="lux-shop-cats-wrap">
+          <button
+            type="button"
+            className="lux-shop-cats-arrow lux-shop-cats-arrow-prev"
+            onClick={() => scrollRowBy(SHOP_CATS_SCROLL_ID, -1)}
+            aria-label="Previous categories"
+          >
+            <LuxIcon name="arrow-left" size={18} />
+          </button>
+          <div className="lux-shop-cats-row" id={SHOP_CATS_SCROLL_ID} ref={attachRowScroll}>
             {shopByCategoryTiles.map((tile) => (
               <button
                 type="button"
@@ -4031,12 +4293,21 @@ function App() {
               >
                 <span className="lux-shop-cat-photo">
                   {tile.image ? (
-                    <img src={tile.image} alt="" loading="lazy" decoding="async" onError={handleImageFallback} />
+                    <img src={tile.image} alt="" loading="lazy" decoding="async" draggable="false" onError={handleImageFallback} />
                   ) : null}
                 </span>
                 <span className="lux-shop-cat-name">{tile.label}</span>
               </button>
             ))}
+          </div>
+          <button
+            type="button"
+            className="lux-shop-cats-arrow lux-shop-cats-arrow-next"
+            onClick={() => scrollRowBy(SHOP_CATS_SCROLL_ID, 1)}
+            aria-label="Next categories"
+          >
+            <LuxIcon name="arrow-right" size={18} />
+          </button>
           </div>
         </section>
       )}
@@ -4068,7 +4339,7 @@ function App() {
             aria-label="Sort products"
           >
             <option value="featured">Sort: Featured</option>
-            {bestsellers.length > 0 && (
+            {(bestsellers.length > 0 || sortBy === "best-selling") && (
               <option value="best-selling">Sort: Best Selling</option>
             )}
             <option value="newest">Sort: Newest First</option>
@@ -5317,7 +5588,7 @@ function App() {
                 <button
                   type="button"
                   style={{ "--lux-nav-stagger": 0 }}
-                  className={isShopAllPage ? "active" : ""}
+                  className={isPlainShopAllPage ? "active" : ""}
                   onClick={() => {
                     goToShopAll();
                     closeMobileMenu();

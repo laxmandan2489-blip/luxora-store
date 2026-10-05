@@ -7026,3 +7026,84 @@ section[id^="lux-"] {
     padding: 8px 4vw;
   }
 }
+
+/* =========================================================
+   CATEGORY ROW SCROLLING (2026-10-05)
+   Mouse drag + wheel scrolling (see attachRowScroll in App.jsx),
+   grab cursor on desktop, and prev/next arrows on the category-page
+   "Shop by categories" row that only show when the row has more to
+   scroll.
+========================================================= */
+@media (hover: hover) and (pointer: fine) {
+  .lux-category-tiles[data-overflow="true"],
+  .lux-shop-cats-row[data-overflow="true"] {
+    cursor: grab;
+  }
+}
+
+.lux-category-tiles.lux-row-dragging,
+.lux-shop-cats-row.lux-row-dragging {
+  cursor: grabbing;
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+  user-select: none;
+}
+
+.lux-category-tiles.lux-row-dragging *,
+.lux-shop-cats-row.lux-row-dragging * {
+  pointer-events: none;
+}
+
+.lux-shop-cat img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.lux-shop-cats-row {
+  touch-action: pan-x pan-y;
+  overscroll-behavior-x: contain;
+}
+
+.lux-shop-cats-wrap {
+  position: relative;
+}
+
+.lux-shop-cats-arrow {
+  display: none;
+  position: absolute;
+  top: calc(clamp(92px, 22vw, 132px) / 2);
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e6e0d6;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.94);
+  color: #1b1b1b;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.lux-shop-cats-arrow-prev {
+  left: -6px;
+}
+
+.lux-shop-cats-arrow-next {
+  right: -6px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lux-shop-cats-wrap[data-row-overflow="true"] .lux-shop-cats-arrow {
+    display: flex;
+  }
+}
+
+/* Exactly two category tiles fit side by side on desktop - nothing to
+   scroll there, so the arrows only appear on phones (one tile + peek). */
+@media (min-width: 701px) {
+  .lux-category-slide-controls-pair {
+    display: none;
+  }
+}

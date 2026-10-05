@@ -1,9 +1,17 @@
-import { StrictMode } from "react";
+import { StrictMode, Suspense, lazy } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import "./index.css";
 import App from "./App.jsx";
-import Admin from "./Admin.jsx";
+/*
+ * SPEED FIX (2026-10-05): the Admin panel is ~230KB of code that no
+ * customer ever needs. It used to be bundled into the same file as the
+ * storefront, so every shopper downloaded + parsed it before the first
+ * product could show. Now it is a separate file loaded only when
+ * someone actually opens /admin.
+ */
+// oxlint-disable-next-line react/only-export-components -- entry file, never hot-reloaded
+const Admin = lazy(() => import("./Admin.jsx"));
 
 const root = createRoot(document.getElementById("root"));
 
@@ -31,7 +39,14 @@ root.render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
-        <Route path="/admin/*" element={<Admin />} />
+        <Route
+          path="/admin/*"
+          element={
+            <Suspense fallback={<div style={{ padding: 40, textAlign: "center" }}>Loading admin…</div>}>
+              <Admin />
+            </Suspense>
+          }
+        />
         <Route path="/category/:slug" element={<App />} />
         <Route path="/track-order" element={<App />} />
         <Route path="/product/:id" element={<App />} />
