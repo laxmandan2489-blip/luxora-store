@@ -1152,8 +1152,38 @@ function formatSiteSettings(row) {
 
   return {
     heroImageUrls,
-    brandStoryImageUrl: row?.brand_story_image_url || ""
+    brandStoryImageUrl: row?.brand_story_image_url || "",
+    categoryImages: normalizeCategoryImages(row?.category_images)
   };
+}
+
+/*
+ * CATEGORY LIFESTYLE PHOTOS (2026-10-05)
+ * { "Handbags": "https://...", "Shoulder Bags": "https://...", ... }
+ * One owner-chosen lifestyle photo per category, used by the
+ * storefront's category tiles (homepage banners, "Explore Our
+ * Collections", and the "Shop by categories" thumbnails on every
+ * category page) instead of a plain product shot. Stored in the
+ * site_settings.category_images jsonb column - see the SQL in the
+ * apply instructions.
+ */
+function normalizeCategoryImages(raw) {
+  let parsed = raw;
+  if (typeof raw === "string") {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const result = {};
+  for (const key of Object.keys(parsed)) {
+    const category = String(key).trim();
+    const url = typeof parsed[key] === "string" ? parsed[key].trim() : "";
+    if (category && url && /^https?:\/\//i.test(url)) result[category] = url;
+  }
+  return result;
 }
 
 app.get("/api/site-settings", async function (req, res) {
@@ -1163,7 +1193,60 @@ app.get("/api/site-settings", async function (req, res) {
   } catch (error) {
     console.error("GET SITE SETTINGS ERROR:", error);
     // Non-fatal for the storefront - it just falls back to defaults.
-    return res.json({ success: true, settings: { heroImageUrls: [], brandStoryImageUrl: "" } });
+    return res.json({ success: true, settings: { heroImageUrls: [], brandStoryImageUrl: "", categoryImages: {} } });
+  }
+});
+
+/*
+ * Save category lifestyle photos. Body (multipart or JSON):
+ *   categoryImages: JSON map { category: url } - the full desired map
+ *                   (a category left out / set to "" is cleared)
+ *   files named categoryImage__<encoded category> - an uploaded photo
+ *                   for that category (wins over its url above)
+ */
+app.put("/api/admin/category-images", requireAdmin, upload.any(), async function (req, res) {
+  const uploadedUrls = [];
+  try {
+    const body = req.body || {};
+    const categoryImages = normalizeCategoryImages(body.categoryImages);
+    const files = (Array.isArray(req.files) ? req.files : []).filter((file) =>
+      file.fieldname.startsWith("categoryImage__")
+    );
+    for (const file of files) {
+      const category = decodeURIComponent(file.fieldname.slice("categoryImage__".length)).trim();
+      if (!category) continue;
+      const url = await uploadImage(file);
+      uploadedUrls.push(url);
+      categoryImages[category] = url;
+    }
+
+    const { data, error } = await supabase
+      .from("site_settings")
+      .upsert({ id: 1, category_images: categoryImages, updated_at: new Date().toISOString() })
+      .select()
+      .single();
+    if (error) {
+      if (/category_images/.test(error.message || "")) {
+        throw new Error(
+          "Database column missing: run the one-line SQL from the apply instructions in Supabase (site_settings.category_images)."
+        );
+      }
+      throw error;
+    }
+
+    // Old category photos are deliberately NOT deleted from storage: a
+    // category photo is often one of a product's own photos, and
+    // deleting it would break that product.
+
+    return res.json({
+      success: true,
+      message: "Category photos saved.",
+      settings: formatSiteSettings(data)
+    });
+  } catch (error) {
+    console.error("UPDATE CATEGORY IMAGES ERROR:", error);
+    if (uploadedUrls.length) await deleteStorageImages(uploadedUrls);
+    return res.status(500).json({ success: false, message: error.message || "Unable to save category photos." });
   }
 });
 
@@ -2151,7 +2234,37 @@ async function updateProduct(req, res) {
     const colorFiles = allFiles.filter((file) => file.fieldname.startsWith("colorImage__"));
     let oldImages = [];
 
-    if (galleryFiles.length > 0) {
+    /*
+     * REORDER / REMOVE SAVED PHOTOS (2026-10-05)
+     * body.keepImages = JSON array of the product's EXISTING photo URLs
+     * in the exact order the admin arranged them (any left out were
+     * removed with ✕). This works the same for photos that were
+     * uploaded and photos that came in as links (CSV / Quick Add /
+     * imgbb), which before could never be re-ordered after saving.
+     * Any newly uploaded "images" files are added AFTER the kept ones.
+     * When keepImages is not sent, the old behaviour stays: uploaded
+     * files replace the whole gallery.
+     */
+    if (body.keepImages !== undefined) {
+      const previousImages = normalizeImages(existing.images);
+      const keptImages = normalizeImages(body.keepImages);
+      let addedUrls = [];
+      if (galleryFiles.length > 0) {
+        addedUrls = await mapWithConcurrencyLimit(
+          galleryFiles,
+          IMAGE_UPLOAD_CONCURRENCY,
+          (file) => uploadImage(file)
+        );
+        newUploadedUrls.push(...addedUrls);
+      }
+      const finalImages = uniqueImages([...keptImages, ...addedUrls]);
+      if (finalImages.length === 0) {
+        if (newUploadedUrls.length) await deleteStorageImages(newUploadedUrls);
+        return res.status(400).json({ success: false, message: "A product needs at least one photo." });
+      }
+      updateData.images = finalImages;
+      oldImages = previousImages.filter((url) => !finalImages.includes(url));
+    } else if (galleryFiles.length > 0) {
       oldImages = normalizeImages(existing.images);
       // Upload a few replacement photos at a time - same speed-up (and
       // same connection-limit safety) as the "Add Product" route.
@@ -2230,8 +2343,14 @@ async function updateProduct(req, res) {
       .single();
     if (error) throw error;
 
-    if (galleryFiles.length > 0 && oldImages.length) {
-      await deleteStorageImages(oldImages);
+    if (oldImages.length) {
+      // Only files in our own Supabase storage are deleted - external
+      // links (imgbb etc.) are simply dropped from the product. A photo
+      // still used as a color photo is never deleted.
+      const colorImageMap = normalizeColorImages(data?.color_images ?? existing.color_images);
+      const stillUsed = new Set(Object.values(colorImageMap).flat());
+      const removable = oldImages.filter((url) => !stillUsed.has(url));
+      if (removable.length) await deleteStorageImages(removable);
     }
 
     return res.json({ success: true, message: "Product updated successfully.", product: formatProductAdmin(data) });
