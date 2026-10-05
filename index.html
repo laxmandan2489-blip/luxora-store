@@ -16,6 +16,16 @@
     -->
     <link rel="preconnect" href="https://images.weserv.nl" crossorigin />
     <link rel="dns-prefetch" href="https://images.weserv.nl" />
+    <!--
+      Backend (Render free plan) sleeps when idle. Connect to it and send
+      a tiny wake-up ping the moment the HTML arrives, before the app's
+      JavaScript has even downloaded, so it is already booting by the
+      time the storefront asks for products.
+    -->
+    <link rel="preconnect" href="https://luxora-store-mkva.onrender.com" crossorigin />
+    <script>
+      try { fetch("https://luxora-store-mkva.onrender.com/api/health", { mode: "no-cors", cache: "no-store" }).catch(function () {}); } catch (e) {}
+    </script>
     <title>SHRIMOH - The Luxury Store</title>
   </head>
   <body>
