@@ -9,6 +9,19 @@ import {
   canonicalizeCategory,
   isBagCategory,
 } from "./categories";
+import useSeo from "./useSeo";
+import {
+  CATEGORY_SEO,
+  COLLECTION_SEO,
+  HOME_SEO,
+  breadcrumbJsonLd,
+  collectionJsonLd,
+  productImages as seoProductImages,
+  productJsonLd,
+  productMetaDescription,
+  productPath,
+  productTitle,
+} from "./seo";
 
 /*
  * LUX ICON SET
@@ -976,6 +989,11 @@ function App() {
     return !(Array.isArray(cached) && cached.length > 0);
   });
   const [apiError, setApiError] = useState("");
+  // SEO: true once the live product list has actually arrived from the
+  // backend (not just this browser's cached copy). "Product not found" /
+  // empty-category pages are only marked noindex after this, so a
+  // sleeping backend can never get real pages dropped from Google.
+  const [productsLoadedLive, setProductsLoadedLive] = useState(false);
 
   /* =========================================================
      NAVIGATION
@@ -1746,7 +1764,7 @@ function App() {
     const contact = trackContact.trim();
 
     if (!reference) {
-      setTrackError("Please enter your order reference (e.g. LUX-...).");
+      setTrackError("Please enter your order reference (e.g. SHR-...).");
       return;
     }
     if (!contact) {
@@ -1803,6 +1821,7 @@ function App() {
         if (data.success && Array.isArray(data.products)) {
           setProducts(data.products.map(normalizeProduct));
           writeCache(PRODUCTS_CACHE_KEY, data.products);
+          setProductsLoadedLive(true);
         } else {
           setProducts([]);
         }
@@ -2549,7 +2568,8 @@ function App() {
                 <img
                   className="lux-card-image-hover"
                   src={hoverImage}
-                  alt={displayName}
+                  alt=""
+                  aria-hidden="true"
                   loading="lazy"
                   decoding="async"
                 />
@@ -2646,7 +2666,15 @@ function App() {
         <div className="lux-card-info">
           <div>
             <span>{product.category || "COLLECTION"}</span>
-            <h3>{displayName}</h3>
+            <h3>
+              <a
+                className="lux-card-link"
+                href={`${productPath(product)}${activeColor && hasMultipleColors ? `?color=${encodeURIComponent(activeColor)}` : ""}`}
+                onClick={(event) => handleSeoLinkClick(event)}
+              >
+                {displayName}
+              </a>
+            </h3>
           </div>
 
           {/*
@@ -3501,6 +3529,147 @@ function App() {
   }, [checkoutOpen, cartOpen, wishlistOpen, mobileMenuOpen, activePage]);
 
   /* =========================================================
+     SEO (2026-10-06)
+     Unique title / description / canonical / robots / JSON-LD for
+     every page - see src/seo.js and src/useSeo.js. Nothing here
+     changes what the page looks like.
+  ========================================================= */
+
+  const pageSeo = useMemo(() => {
+    const path = location.pathname.replace(/\/+$/, "") || "/";
+
+    if (isTrackOrderPage) {
+      return {
+        title: "Track Your Order | SHRIMOH",
+        description: "Check the delivery status of your SHRIMOH order.",
+        canonicalPath: "/track-order",
+        robots: "noindex, follow",
+      };
+    }
+
+    if (isProductPage) {
+      if (selectedProduct) {
+        const canonicalPath = productPath(selectedProduct);
+        const category = selectedProduct.category;
+        const crumbs = [{ name: "Home", path: "/" }];
+        if (CATEGORY_SEO[category]) {
+          crumbs.push({ name: category, path: `/category/${slugifyCategory(category)}` });
+        }
+        crumbs.push({ name: selectedProduct.name, path: canonicalPath });
+        return {
+          title: productTitle(selectedProduct),
+          description: productMetaDescription(selectedProduct),
+          canonicalPath,
+          type: "product",
+          image: seoProductImages(selectedProduct)[0],
+          jsonLd: [productJsonLd(selectedProduct), breadcrumbJsonLd(crumbs)],
+        };
+      }
+      if (!loadingProducts && productsLoadedLive) {
+        return {
+          title: "Product not found | SHRIMOH",
+          description: "This product may have been removed or the link is incorrect.",
+          canonicalPath: null,
+          robots: "noindex, follow",
+        };
+      }
+      return { skip: true };
+    }
+
+    if (collectionPage) {
+      const meta = COLLECTION_SEO[path];
+      if (meta) {
+        return {
+          title: meta.title,
+          description: meta.description,
+          canonicalPath: meta.canonicalPath,
+          jsonLd: [
+            collectionJsonLd({
+              name: meta.heading,
+              description: meta.description,
+              path: meta.canonicalPath,
+              products: path === "/shop" ? products : [],
+            }),
+            breadcrumbJsonLd([
+              { name: "Home", path: "/" },
+              { name: meta.heading, path: meta.canonicalPath },
+            ]),
+          ],
+        };
+      }
+    }
+
+    if (categorySlugFromUrl) {
+      const meta = CATEGORY_SEO[selectedCategory];
+      const canonicalPath = `/category/${slugifyCategory(selectedCategory)}`;
+      const inCategory = products.filter((product) =>
+        selectedCategory === ALL_BAGS_LABEL
+          ? isBagCategory(product.category)
+          : product.category === selectedCategory
+      );
+      if (!meta) return { skip: true };
+      return {
+        title: meta.title,
+        description: meta.description,
+        canonicalPath,
+        // An empty category is a thin page - keep it out of Google
+        // until it has products (links on it are still followed).
+        robots: productsLoadedLive && inCategory.length === 0 ? "noindex, follow" : undefined,
+        jsonLd: [
+          collectionJsonLd({
+            name: meta.heading,
+            description: meta.description,
+            path: canonicalPath,
+            products: inCategory,
+          }),
+          breadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: meta.heading, path: canonicalPath },
+          ]),
+        ],
+      };
+    }
+
+    return {
+      title: HOME_SEO.title,
+      description: HOME_SEO.description,
+      canonicalPath: "/",
+      // Any unknown path that still reaches the app (e.g. during local
+      // development) is never indexed as a copy of the homepage.
+      robots: path === "/" ? undefined : "noindex, follow",
+      // Organization + WebSite JSON-LD for the homepage is already in
+      // index.html (id="seo-site-jsonld") - not added twice here.
+      jsonLd: null,
+    };
+  }, [
+    location.pathname,
+    isTrackOrderPage,
+    isProductPage,
+    selectedProduct,
+    loadingProducts,
+    productsLoadedLive,
+    collectionPage,
+    categorySlugFromUrl,
+    selectedCategory,
+    products,
+  ]);
+
+  useSeo(pageSeo);
+
+  /* Plain-left-click on an SEO link: let the existing click handler do
+     the in-app navigation exactly as before. Ctrl/Cmd/middle-click
+     still opens the real URL in a new tab, like any normal link. */
+  function handleSeoLinkClick(event, action) {
+    if (event.defaultPrevented) return;
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      event.stopPropagation();
+      return;
+    }
+    event.preventDefault();
+    if (action) action();
+  }
+
+  /* =========================================================
      RENDER
   ========================================================= */
 
@@ -3575,19 +3744,23 @@ function App() {
             ☰
           </button>
 
-          <div
+          <a
+            href="/"
             className="lux-logo"
-            onClick={() => {
-              goToCategory("All");
-              setSearchText("");
-            }}
+            aria-label="SHRIMOH home"
+            onClick={(event) =>
+              handleSeoLinkClick(event, () => {
+                goToCategory("All");
+                setSearchText("");
+              })
+            }
           >
-            <img src={shrimohIcon} alt="" className="lux-logo-mark" />
+            <img src={shrimohIcon} alt="" className="lux-logo-mark" width="128" height="128" />
             <div className="lux-logo-text">
               <span>SHRIMOH</span>
               <small>THE LUXURY STORE</small>
             </div>
-          </div>
+          </a>
 
           {/*
             HEADER NAV - "Bags" and "Accessories" used to list every
@@ -3911,6 +4084,7 @@ function App() {
         */}
         <div className="lux-hero-content" key={`hero-copy-${activeHeroSlide % HERO_SLIDE_COPY.length}`}>
           <h1>
+            <span className="lux-hero-brand">SHRIMOH · Premium Women&rsquo;s Handbags &amp; Bags</span>
             {activeHeroCopy.lines[0]}
             <br />
             {activeHeroCopy.lines[1]}
@@ -4531,7 +4705,7 @@ function App() {
 
         <div className="lux-brand-story-mark">
           {brandStoryImageUrl ? (
-            <img src={brandStoryImageUrl} alt="SHRIMOH" className="lux-brand-story-photo" loading="lazy" decoding="async" onError={handleImageFallback} />
+            <img src={brandStoryImageUrl} alt="SHRIMOH women's bags collection" className="lux-brand-story-photo" loading="lazy" decoding="async" onError={handleImageFallback} />
           ) : (
             <>
               <span>S</span>
@@ -4613,6 +4787,27 @@ function App() {
           >
             ← Back
           </button>
+
+          <nav className="lux-breadcrumb lux-product-breadcrumb" aria-label="Breadcrumb">
+            <a href="/" onClick={(event) => handleSeoLinkClick(event, () => goToCategory("All"))}>
+              Home
+            </a>
+            <span aria-hidden="true">/</span>
+            {CATEGORY_SEO[selectedProduct.category] && (
+              <>
+                <a
+                  href={`/category/${slugifyCategory(selectedProduct.category)}`}
+                  onClick={(event) =>
+                    handleSeoLinkClick(event, () => goToCategory(selectedProduct.category))
+                  }
+                >
+                  {selectedProduct.category}
+                </a>
+                <span aria-hidden="true">/</span>
+              </>
+            )}
+            <span aria-current="page">{selectedProduct.name}</span>
+          </nav>
 
           <div className="lux-product-page">
             <button
@@ -5056,12 +5251,20 @@ function App() {
           <div className="lux-footer-links">
             <div>
               <strong>SHOP</strong>
-              <button onClick={goToShopAll}>All Products</button>
+              <a href="/shop" onClick={(event) => handleSeoLinkClick(event, goToShopAll)}>
+                All Products
+              </a>
 
-              {categories.slice(1, 5).map((category) => (
-                <button key={category} onClick={() => goToCategory(category)}>
+              {/* Real links (crawlable by Google) to every category page;
+                  clicking still navigates in-app exactly as before. */}
+              {[ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES].map((category) => (
+                <a
+                  key={category}
+                  href={`/category/${slugifyCategory(category)}`}
+                  onClick={(event) => handleSeoLinkClick(event, () => goToCategory(category))}
+                >
                   {category}
-                </button>
+                </a>
               ))}
             </div>
 
@@ -6123,7 +6326,7 @@ function TrackOrderPage({
                 type="text"
                 value={trackReference}
                 onChange={(e) => setTrackReference(e.target.value)}
-                placeholder="e.g. LUX-172..."
+                placeholder="e.g. SHR-172..."
               />
             </label>
 

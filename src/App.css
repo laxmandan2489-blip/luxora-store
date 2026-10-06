@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap");
+/* Google Fonts (Manrope + Playfair Display) are now loaded from
+   index.html with preconnect, instead of an @import here that the
+   browser could only discover after downloading this whole CSS file. */
 
 /* Urbanist (miramoss.com-style sans) bundled with the site itself -
    no extra request to Google, and it never falls back to Arial. */
@@ -7106,4 +7108,68 @@ section[id^="lux-"] {
   .lux-category-slide-controls-pair {
     display: none;
   }
+}
+
+/* =========================================================
+   SEO ADDITIONS (2026-10-06)
+   Only styles for the new real <a> links (logo, product names,
+   footer, breadcrumb) so they look exactly like the elements
+   they replaced, plus the small brand line in the hero heading.
+========================================================= */
+
+a.lux-logo {
+  color: inherit;
+  text-decoration: none;
+}
+
+.lux-card-link,
+.lux-card-link:hover,
+.lux-card-link:visited {
+  color: inherit;
+  text-decoration: none;
+}
+
+.lux-hero-content h1 .lux-hero-brand {
+  display: block;
+  margin: 0 0 18px;
+  color: #d9b98a;
+  font-family: var(--lux-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .lux-hero-content h1 .lux-hero-brand {
+    margin-bottom: 12px;
+    font-size: 10px;
+    letter-spacing: 2px;
+  }
+}
+
+.lux-product-breadcrumb {
+  width: auto;
+  min-width: 0;
+  padding: 0 0 16px;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.lux-breadcrumb a {
+  color: var(--lux-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.lux-breadcrumb a:hover {
+  color: var(--lux-text);
+}
+
+.lux-product-breadcrumb span[aria-current] {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
