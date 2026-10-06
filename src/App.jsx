@@ -3710,7 +3710,7 @@ function App() {
       <div className="lux-offer-banner">
         <span>🎉</span>
         <p>
-          Use code <strong>WELCOME10</strong> at checkout for 10% off your first order
+          Use code <strong>{NEW_CUSTOMER_OFFER_CODE}</strong> at checkout for {NEW_CUSTOMER_OFFER_TEXT.toLowerCase()} your first order
         </p>
       </div>
 
