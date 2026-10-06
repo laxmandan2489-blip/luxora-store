@@ -1,0 +1,1512 @@
+diff --git a/index.html b/index.html
+index b15a237..b060df0 100644
+--- a/index.html
++++ b/index.html
+@@ -2,9 +2,52 @@
+ <html lang="en">
+   <head>
+     <meta charset="UTF-8" />
+-    <link rel="icon" type="image/png" href="/favicon.png" />
+-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++
++    <!--
++      GOOGLE SEARCH CONSOLE VERIFICATION
++      1. In Search Console choose "URL prefix" -> your SHRIMOH website address
++      2. Pick the "HTML tag" method and copy the content="..." value it shows.
++      3. Remove the two comment markers around the line below and paste
++         your real value in place of PASTE_REAL_TOKEN_HERE. Commit + push.
++      Do NOT publish it with the placeholder text.
++    -->
++    <!-- <meta name="google-site-verification" content="PASTE_REAL_TOKEN_HERE" /> -->
++
++    <!--SEO_HEAD_START-->
++    <title>SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store</title>
++    <meta name="description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
++    <link rel="canonical" href="https://shrimoh-store-phi.vercel.app/" />
++    <meta name="robots" content="index, follow, max-image-preview:large" />
++    <meta property="og:type" content="website" />
++    <meta property="og:url" content="https://shrimoh-store-phi.vercel.app/" />
++    <meta property="og:title" content="SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store" />
++    <meta property="og:description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
++    <meta property="og:image" content="https://shrimoh-store-phi.vercel.app/og-image.png" />
++    <meta name="twitter:card" content="summary_large_image" />
++    <meta name="twitter:title" content="SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store" />
++    <meta name="twitter:description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
++    <meta name="twitter:image" content="https://shrimoh-store-phi.vercel.app/og-image.png" />
++    <!--SEO_HEAD_END-->
++    <meta property="og:site_name" content="SHRIMOH" />
++    <meta property="og:locale" content="en_IN" />
++    <meta property="og:image:width" content="1200" />
++    <meta property="og:image:height" content="630" />
++    <meta property="og:image:alt" content="SHRIMOH – Premium Women's Handbags &amp; Bags" />
++    <meta name="application-name" content="SHRIMOH" />
++    <meta name="apple-mobile-web-app-title" content="SHRIMOH" />
++    <meta name="theme-color" content="#f7f4ef" />
++
++    <link rel="icon" href="/favicon.ico" sizes="48x48" />
++    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
++    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
++    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
++    <link rel="manifest" href="/site.webmanifest" />
++
++    <!--SEO_SITE_JSONLD_START-->
++    <script type="application/ld+json" id="seo-site-jsonld">[{"@context":"https://schema.org","@type":"Organization","@id":"https://shrimoh-store-phi.vercel.app/#organization","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","logo":"https://shrimoh-store-phi.vercel.app/icon-192.png","email":"infoshrimoh@gmail.com"},{"@context":"https://schema.org","@type":"WebSite","@id":"https://shrimoh-store-phi.vercel.app/#website","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","inLanguage":"en-IN","publisher":{"@id":"https://shrimoh-store-phi.vercel.app/#organization"}}]</script>
++    <!--SEO_SITE_JSONLD_END-->
++
+     <!--
+       Every product photo is served through images.weserv.nl (see
+       getImageUrl() in src/App.jsx). Preconnecting here lets the
+@@ -26,10 +69,34 @@
+     <script>
+       try { fetch("https://luxora-store-mkva.onrender.com/api/health", { mode: "no-cors", cache: "no-store" }).catch(function () {}); } catch (e) {}
+     </script>
+-    <title>SHRIMOH - The Luxury Store</title>
++
++    <!-- Fonts (moved here from an @import inside App.css so they start
++         downloading immediately instead of after the CSS file). -->
++    <link rel="preconnect" href="https://fonts.googleapis.com" />
++    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap" />
++
++    <!--
++      (Title, canonical, Open Graph and JSON-LD above are rewritten at
++      build time from SITE_URL in src/seo.js - edit the address there.)
++      Styles for the plain-HTML page summary inside #root below. It is
++      what visitors on a slow connection see for a moment, and what
++      search engines read before JavaScript runs. React replaces it
++      with the real store as soon as the app starts.
++    -->
++    <style>
++      .seo-fallback{min-height:100vh;background:#f7f4ef;color:#1a1a1a;font-family:Urbanist,Manrope,Arial,sans-serif;padding:48px 6vw;box-sizing:border-box;text-align:center}
++      .seo-fallback a{color:#7d6c4f;text-decoration:none}
++      .seo-fallback .seo-logo{display:inline-block;font-family:"Playfair Display",Georgia,serif;font-size:26px;letter-spacing:6px;color:#1a1a1a}
++      .seo-fallback h1{margin:40px auto 14px;max-width:760px;font-size:clamp(26px,4vw,40px);font-weight:300;line-height:1.2}
++      .seo-fallback p{margin:0 auto 26px;max-width:640px;font-size:15px;line-height:1.6;color:#555}
++      .seo-fallback nav,.seo-fallback ul{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin:0 auto 22px;padding:0;list-style:none;max-width:860px;font-size:13px;letter-spacing:1px;text-transform:uppercase}
++      .seo-fallback ul{text-transform:none;letter-spacing:0}
++      .seo-fallback h2{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin:28px 0 12px;color:#8f7d5e}
++    </style>
+   </head>
+   <body>
+-    <div id="root"></div>
++    <div id="root"><!--SEO_FALLBACK_START--><div class="seo-fallback"><a class="seo-logo" href="/">SHRIMOH</a><h1>SHRIMOH – Premium Women's Handbags &amp; Bags</h1><p>SHRIMOH is the official online store for premium women's handbags and bags – structured handbags, shoulder bags, crossbody bags, tote bags, backpacks, clutches and wallets designed for everyday elegance. Free delivery on all orders.</p><nav aria-label="Shop by category"><a href="/shop">Shop All</a><a href="/category/all-bags">All Bags</a><a href="/category/handbags">Handbags</a><a href="/category/shoulder-bags">Shoulder Bags</a><a href="/category/crossbody-bags">Crossbody Bags</a><a href="/category/tote-bags">Tote Bags</a><a href="/category/backpacks">Backpacks</a><a href="/category/clutches">Clutches</a><a href="/category/wallets">Wallets</a><a href="/category/accessories">Accessories</a></nav></div><!--SEO_FALLBACK_END--></div>
+     <script type="module" src="/src/main.jsx"></script>
+   </body>
+ </html>
+diff --git a/package.json b/package.json
+index 58dfc13..a166ee5 100644
+--- a/package.json
++++ b/package.json
+@@ -5,7 +5,7 @@
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+-    "build": "vite build",
++    "build": "vite build && node scripts/prerender-seo.mjs",
+     "lint": "oxlint",
+     "preview": "vite preview"
+   },
+diff --git a/public/favicon.ico b/public/favicon.ico
+new file mode 100644
+index 0000000..7e65586
+Binary files /dev/null and b/public/favicon.ico differ
+diff --git a/public/favicon.svg b/public/favicon.svg
+deleted file mode 100644
+index 6893eb1..0000000
+--- a/public/favicon.svg
++++ /dev/null
+@@ -1 +0,0 @@
+-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="46" fill="none" viewBox="0 0 48 46"><path fill="#863bff" d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" style="fill:#863bff;fill:color(display-p3 .5252 .23 1);fill-opacity:1"/><mask id="a" width="48" height="46" x="0" y="0" maskUnits="userSpaceOnUse" style="mask-type:alpha"><path fill="#000" d="M25.842 44.938c-.664.844-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.183c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.498 0-3.579-1.842-3.579H1.133c-.92 0-1.456-1.04-.92-1.787L9.91.473c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.578 1.842 3.578h11.377c.943 0 1.473 1.088.89 1.832L25.843 44.94z" style="fill:#000;fill-opacity:1"/></mask><g mask="url(#a)"><g filter="url(#b)"><ellipse cx="5.508" cy="14.704" fill="#ede6ff" rx="5.508" ry="14.704" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -4.47 31.516)"/></g><g filter="url(#c)"><ellipse cx="10.399" cy="29.851" fill="#ede6ff" rx="10.399" ry="29.851" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -39.328 7.883)"/></g><g filter="url(#d)"><ellipse cx="5.508" cy="30.487" fill="#7e14ff" rx="5.508" ry="30.487" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -25.913 -14.639)scale(1 -1)"/></g><g filter="url(#e)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.814 -32.644 -3.334)scale(1 -1)"/></g><g filter="url(#f)"><ellipse cx="5.508" cy="30.599" fill="#7e14ff" rx="5.508" ry="30.599" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="matrix(.00324 1 1 -.00324 -34.34 30.47)"/></g><g filter="url(#g)"><ellipse cx="14.072" cy="22.078" fill="#ede6ff" rx="14.072" ry="22.078" style="fill:#ede6ff;fill:color(display-p3 .9275 .9033 1);fill-opacity:1" transform="rotate(93.35 24.506 48.493)scale(-1 1)"/></g><g filter="url(#h)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#i)"><ellipse cx="3.47" cy="21.501" fill="#7e14ff" rx="3.47" ry="21.501" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(89.009 28.708 47.59)scale(-1 1)"/></g><g filter="url(#j)"><ellipse cx=".387" cy="8.972" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(39.51 .387 8.972)"/></g><g filter="url(#k)"><ellipse cx="47.523" cy="-6.092" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 47.523 -6.092)"/></g><g filter="url(#l)"><ellipse cx="41.412" cy="6.333" fill="#47bfff" rx="5.971" ry="9.665" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 41.412 6.333)"/></g><g filter="url(#m)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#n)"><ellipse cx="-1.879" cy="38.332" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 -1.88 38.332)"/></g><g filter="url(#o)"><ellipse cx="35.651" cy="29.907" fill="#7e14ff" rx="4.407" ry="29.108" style="fill:#7e14ff;fill:color(display-p3 .4922 .0767 1);fill-opacity:1" transform="rotate(37.892 35.651 29.907)"/></g><g filter="url(#p)"><ellipse cx="38.418" cy="32.4" fill="#47bfff" rx="5.971" ry="15.297" style="fill:#47bfff;fill:color(display-p3 .2799 .748 1);fill-opacity:1" transform="rotate(37.892 38.418 32.4)"/></g></g><defs><filter id="b" width="60.045" height="41.654" x="-19.77" y="16.149" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="c" width="90.34" height="51.437" x="-54.613" y="-7.533" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="d" width="79.355" height="29.4" x="-49.64" y="2.03" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="e" width="79.579" height="29.4" x="-45.045" y="20.029" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="f" width="79.579" height="29.4" x="-43.513" y="21.178" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="g" width="74.749" height="58.852" x="15.756" y="-17.901" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="7.659"/></filter><filter id="h" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="i" width="61.377" height="25.362" x="23.548" y="2.284" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="j" width="56.045" height="63.649" x="-27.636" y="-22.853" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="k" width="54.814" height="64.646" x="20.116" y="-38.415" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="l" width="33.541" height="35.313" x="24.641" y="-11.323" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="m" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="n" width="54.814" height="64.646" x="-29.286" y="6.009" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="o" width="54.814" height="64.646" x="8.244" y="-2.416" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter><filter id="p" width="39.409" height="43.623" x="18.713" y="10.588" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" result="shape"/><feGaussianBlur result="effect1_foregroundBlur_2002_17158" stdDeviation="4.596"/></filter></defs></svg>
+\ No newline at end of file
+diff --git a/public/icon-192.png b/public/icon-192.png
+new file mode 100644
+index 0000000..16bbb2a
+Binary files /dev/null and b/public/icon-192.png differ
+diff --git a/public/og-image.png b/public/og-image.png
+new file mode 100644
+index 0000000..2db0ac3
+Binary files /dev/null and b/public/og-image.png differ
+diff --git a/public/site.webmanifest b/public/site.webmanifest
+new file mode 100644
+index 0000000..883d0d8
+--- /dev/null
++++ b/public/site.webmanifest
+@@ -0,0 +1,13 @@
++{
++  "name": "SHRIMOH",
++  "short_name": "SHRIMOH",
++  "description": "Premium women's handbags and bags.",
++  "start_url": "/",
++  "display": "browser",
++  "background_color": "#f7f4ef",
++  "theme_color": "#f7f4ef",
++  "icons": [
++    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
++    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
++  ]
++}
+diff --git a/scripts/prerender-seo.mjs b/scripts/prerender-seo.mjs
+new file mode 100644
+index 0000000..9030dc3
+--- /dev/null
++++ b/scripts/prerender-seo.mjs
+@@ -0,0 +1,370 @@
++/*
++ * SHRIMOH build-time SEO step - runs automatically after `vite build`
++ * (see "build" in package.json), so it also runs on every Vercel deploy.
++ *
++ * What it writes into dist/:
++ *   index.html                 homepage (title/meta/canonical/JSON-LD + a
++ *                              plain-HTML summary with links to every
++ *                              category and product)
++ *   seo/shop.html, seo/new-arrivals.html, seo/bestsellers.html
++ *   seo/category/<slug>.html   one per real category
++ *   app-shell.html             used for /product/:id (tags set in-app
++ *                              once the product has loaded)
++ *   private-shell.html         /admin and /track-order (noindex)
++ *   404.html                   real "page not found" page (HTTP 404)
++ *   sitemap.xml                homepage + /shop + categories + products
++ *
++ * vercel.json maps the clean URLs (/category/handbags ...) to these
++ * files. Products are read live from the backend (/api/products). If
++ * the backend can't be reached during the build, the build still
++ * succeeds - the sitemap then just lists the homepage/shop/categories.
++ * Every new product is added to the sitemap on the next deploy.
++ */
++import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { dirname, join } from "node:path";
++import { fileURLToPath } from "node:url";
++import { canonicalizeCategory, isBagCategory } from "../src/categories.js";
++import {
++  ALL_BAGS_LABEL,
++  API_URL,
++  BRAND,
++  CATEGORY_SEO,
++  COLLECTION_SEO,
++  DEFAULT_OG_IMAGE,
++  HOME_SEO,
++  SEO_CATEGORIES,
++  SITE_URL,
++  absoluteUrl,
++  breadcrumbJsonLd,
++  collectionJsonLd,
++  organizationJsonLd,
++  productPath,
++  slugifyCategory,
++  websiteJsonLd,
++} from "../src/seo.js";
++
++const root = join(dirname(fileURLToPath(import.meta.url)), "..");
++const dist = join(root, "dist");
++const template = readFileSync(join(dist, "index.html"), "utf8");
++
++function esc(value) {
++  return String(value ?? "")
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;");
++}
++
++function jsonLdScript(data, id) {
++  const list = (Array.isArray(data) ? data : [data]).filter(Boolean);
++  if (!list.length) return "";
++  const json = JSON.stringify(list.length === 1 ? list[0] : list).replace(/</g, "\\u003c");
++  return `<script type="application/ld+json" id="${id}">${json}</script>`;
++}
++
++function write(relPath, html) {
++  const file = join(dist, relPath);
++  mkdirSync(dirname(file), { recursive: true });
++  writeFileSync(file, html);
++}
++
++/* ------------------------- product data ------------------------- */
++
++function prepare(list) {
++  return list
++    .filter((product) => product && product.id !== undefined && product.name && product.active !== false)
++    .map((product) => ({
++      ...product,
++      category: canonicalizeCategory(product.category, product.name),
++    }));
++}
++
++async function fetchProducts() {
++  if (process.env.SEO_SKIP_PRODUCTS === "1") return null;
++  // Local testing only: SEO_PRODUCTS_FILE=path/to/products.json
++  if (process.env.SEO_PRODUCTS_FILE) {
++    const data = JSON.parse(readFileSync(process.env.SEO_PRODUCTS_FILE, "utf8"));
++    return prepare(Array.isArray(data) ? data : data.products || []);
++  }
++  // The backend sleeps on Render's free plan: first call may only wake it.
++  for (let attempt = 1; attempt <= 3; attempt += 1) {
++    try {
++      const controller = new AbortController();
++      const timer = setTimeout(() => controller.abort(), 45000);
++      const response = await fetch(`${API_URL}/api/products`, { signal: controller.signal });
++      clearTimeout(timer);
++      if (!response.ok) throw new Error(`HTTP ${response.status}`);
++      const data = await response.json();
++      if (!data || !Array.isArray(data.products)) throw new Error("unexpected response");
++      return prepare(data.products);
++    } catch (error) {
++      console.warn(`[seo] products fetch attempt ${attempt} failed: ${error.message}`);
++    }
++  }
++  return null;
++}
++
++const products = await fetchProducts();
++const haveProducts = Array.isArray(products);
++console.log(
++  haveProducts
++    ? `[seo] ${products.length} live products loaded for sitemap/pages`
++    : "[seo] products not available - sitemap will contain static pages only"
++);
++
++function productsIn(category) {
++  if (!haveProducts) return [];
++  if (category === ALL_BAGS_LABEL) return products.filter((p) => isBagCategory(p.category));
++  return products.filter((p) => p.category === category);
++}
++
++/* --------------------------- HTML bits --------------------------- */
++
++const categoryNav = SEO_CATEGORIES.map(
++  (category) => `<a href="/category/${slugifyCategory(category)}">${esc(category)}</a>`
++).join("");
++
++function productList(list, heading) {
++  if (!list.length) return "";
++  const items = list
++    .slice(0, 48)
++    .map((p) => `<li><a href="${esc(productPath(p))}">${esc(p.name)}</a></li>`)
++    .join("");
++  return `<h2>${esc(heading)}</h2><ul>${items}</ul>`;
++}
++
++function fallback({ h1, intro, extra = "" }) {
++  return (
++    `<div class="seo-fallback"><a class="seo-logo" href="/">SHRIMOH</a>` +
++    (h1 ? `<h1>${esc(h1)}</h1>` : "") +
++    (intro ? `<p>${esc(intro)}</p>` : "") +
++    `<nav aria-label="Shop by category"><a href="/shop">Shop All</a>${categoryNav}</nav>` +
++    extra +
++    `</div>`
++  );
++}
++
++function headTags({ title, description, canonicalPath, robots, image, type = "website" }) {
++  const canonical = canonicalPath ? absoluteUrl(canonicalPath) : null;
++  const img = image || DEFAULT_OG_IMAGE;
++  return [
++    `<title>${esc(title)}</title>`,
++    description ? `<meta name="description" content="${esc(description)}" />` : "",
++    canonical ? `<link rel="canonical" href="${esc(canonical)}" />` : "",
++    `<meta name="robots" content="${esc(robots || "index, follow, max-image-preview:large")}" />`,
++    `<meta property="og:type" content="${esc(type)}" />`,
++    canonical ? `<meta property="og:url" content="${esc(canonical)}" />` : "",
++    `<meta property="og:title" content="${esc(title)}" />`,
++    description ? `<meta property="og:description" content="${esc(description)}" />` : "",
++    `<meta property="og:image" content="${esc(img)}" />`,
++    `<meta name="twitter:card" content="summary_large_image" />`,
++    `<meta name="twitter:title" content="${esc(title)}" />`,
++    description ? `<meta name="twitter:description" content="${esc(description)}" />` : "",
++    `<meta name="twitter:image" content="${esc(img)}" />`,
++  ]
++    .filter(Boolean)
++    .join("\n    ");
++}
++
++function replaceBetween(html, start, end, content) {
++  const re = new RegExp(`<!--${start}-->[\\s\\S]*?<!--${end}-->`);
++  if (!re.test(html)) throw new Error(`[seo] marker ${start} missing from dist/index.html`);
++  return html.replace(re, () => `<!--${start}-->${content}<!--${end}-->`);
++}
++
++function page({ head, jsonLd, siteJsonLd = false, body }) {
++  let html = replaceBetween(template, "SEO_HEAD_START", "SEO_HEAD_END", `\n    ${headTags(head)}\n    `);
++  const ld = siteJsonLd
++    ? jsonLdScript([organizationJsonLd(), websiteJsonLd()], "seo-site-jsonld")
++    : jsonLdScript(jsonLd, "seo-page-jsonld");
++  html = replaceBetween(html, "SEO_SITE_JSONLD_START", "SEO_SITE_JSONLD_END", ld);
++  html = replaceBetween(html, "SEO_FALLBACK_START", "SEO_FALLBACK_END", body);
++  return html;
++}
++
++/* ----------------------------- pages ----------------------------- */
++
++// Homepage
++write(
++  "index.html",
++  page({
++    head: { title: HOME_SEO.title, description: HOME_SEO.description, canonicalPath: "/" },
++    siteJsonLd: true,
++    body: fallback({
++      h1: "SHRIMOH – Premium Women's Handbags & Bags",
++      intro:
++        "SHRIMOH is the official online store for premium women's handbags and bags – structured handbags, shoulder bags, crossbody bags, tote bags, backpacks, clutches and wallets designed for everyday elegance. Free delivery on all orders.",
++      extra: haveProducts ? productList(products, "New at SHRIMOH") : "",
++    }),
++  })
++);
++
++// Collection pages
++for (const [path, meta] of Object.entries(COLLECTION_SEO)) {
++  write(
++    `seo${path}.html`,
++    page({
++      head: { title: meta.title, description: meta.description, canonicalPath: meta.canonicalPath },
++      jsonLd: [
++        collectionJsonLd({
++          name: meta.heading,
++          description: meta.description,
++          path: meta.canonicalPath,
++          products: path === "/shop" && haveProducts ? products : [],
++        }),
++        breadcrumbJsonLd([
++          { name: "Home", path: "/" },
++          { name: meta.heading, path: meta.canonicalPath },
++        ]),
++      ],
++      body: fallback({
++        h1: meta.heading,
++        intro: meta.description,
++        extra: haveProducts ? productList(products, "Products") : "",
++      }),
++    })
++  );
++}
++
++// Category pages
++const indexableCategories = [];
++for (const category of SEO_CATEGORIES) {
++  const meta = CATEGORY_SEO[category];
++  const slug = slugifyCategory(category);
++  const path = `/category/${slug}`;
++  const list = productsIn(category);
++  const empty = haveProducts && list.length === 0;
++  if (!empty) indexableCategories.push(path);
++  write(
++    `seo/category/${slug}.html`,
++    page({
++      head: {
++        title: meta.title,
++        description: meta.description,
++        canonicalPath: path,
++        // Empty category = thin page: not indexed until it has products.
++        robots: empty ? "noindex, follow" : undefined,
++      },
++      jsonLd: [
++        collectionJsonLd({ name: meta.heading, description: meta.description, path, products: list }),
++        breadcrumbJsonLd([
++          { name: "Home", path: "/" },
++          { name: meta.heading, path },
++        ]),
++      ],
++      body: fallback({
++        h1: meta.heading,
++        intro: meta.description,
++        extra: productList(list, `${meta.heading} at SHRIMOH`),
++      }),
++    })
++  );
++}
++
++// Product pages: one shared shell; the app fills in the product's own
++// title, description, canonical and Product JSON-LD once it loads.
++write(
++  "app-shell.html",
++  page({
++    head: { title: BRAND, description: HOME_SEO.description, canonicalPath: null, type: "product" },
++    jsonLd: null,
++    body: fallback({}),
++  })
++);
++
++// Admin + order tracking: never indexed.
++write(
++  "private-shell.html",
++  page({
++    head: { title: BRAND, description: "", canonicalPath: null, robots: "noindex, nofollow" },
++    jsonLd: null,
++    body: fallback({}),
++  })
++);
++
++// Real 404 page (Vercel serves dist/404.html with status 404 for any
++// URL that is not a file and not in vercel.json's rewrites).
++write(
++  "404.html",
++  `<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
++    <title>Page not found | SHRIMOH</title>
++    <meta name="robots" content="noindex, follow" />
++    <link rel="icon" href="/favicon.ico" sizes="48x48" />
++    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
++    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
++    <meta name="theme-color" content="#f7f4ef" />
++    <style>
++      body{margin:0;background:#f7f4ef;color:#1a1a1a;font-family:Urbanist,Manrope,Arial,sans-serif}
++      main{min-height:100vh;box-sizing:border-box;padding:56px 6vw;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
++      img{width:72px;height:72px}
++      .logo{font-family:Georgia,"Times New Roman",serif;font-size:26px;letter-spacing:6px;color:#1a1a1a;text-decoration:none;margin-top:8px}
++      small{display:block;margin-top:6px;color:#8f7d5e;font-size:9px;letter-spacing:2.8px}
++      h1{margin:40px 0 10px;font-size:clamp(26px,4vw,40px);font-weight:300}
++      p{margin:0 0 26px;color:#555;font-size:15px;line-height:1.6;max-width:520px}
++      .home{display:inline-block;padding:13px 26px;border-radius:999px;background:#1a1a1a;color:#fff;text-decoration:none;font-size:12px;letter-spacing:1.5px;text-transform:uppercase}
++      nav{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:34px;max-width:760px}
++      nav a{color:#7d6c4f;text-decoration:none;font-size:13px;letter-spacing:1px;text-transform:uppercase;padding:6px 0}
++      nav a:hover,.logo:hover{color:#1a1a1a}
++    </style>
++  </head>
++  <body>
++    <main>
++      <img src="/icon-192.png" alt="" width="72" height="72" />
++      <a class="logo" href="/">SHRIMOH</a>
++      <small>THE LUXURY STORE</small>
++      <h1>Page not found</h1>
++      <p>Sorry, we couldn't find the page you were looking for. It may have been moved, or the link may be incorrect.</p>
++      <a class="home" href="/">Back to homepage</a>
++      <nav aria-label="Shop by category"><a href="/shop">Shop All</a>${categoryNav}</nav>
++    </main>
++  </body>
++</html>
++`
++);
++
++/* ---------------------------- sitemap ---------------------------- */
++
++function isoDate(value) {
++  const date = value ? new Date(value) : null;
++  return date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : null;
++}
++
++const urls = [
++  { path: "/" },
++  { path: "/shop" },
++  ...indexableCategories.map((path) => ({ path })),
++  ...(haveProducts
++    ? products.map((p) => ({ path: productPath(p), lastmod: isoDate(p.updatedAt || p.createdAt) }))
++    : []),
++];
++
++const seen = new Set();
++const sitemap =
++  `<?xml version="1.0" encoding="UTF-8"?>\n` +
++  `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
++  urls
++    .filter((u) => (seen.has(u.path) ? false : seen.add(u.path)))
++    .map(
++      (u) =>
++        `  <url>\n    <loc>${esc(`${SITE_URL}${u.path === "/" ? "/" : u.path}`)}</loc>\n` +
++        (u.lastmod ? `    <lastmod>${u.lastmod}</lastmod>\n` : "") +
++        `  </url>`
++    )
++    .join("\n") +
++  `\n</urlset>\n`;
++
++write("sitemap.xml", sitemap);
++
++// robots.txt is generated too, so it always uses SITE_URL from src/seo.js.
++write(
++  "robots.txt",
++  `# ${BRAND} - ${SITE_URL}\n` +
++    `# Everything public may be crawled. Private pages (admin, order\n` +
++    `# tracking) carry a "noindex" tag instead of being blocked here.\n` +
++    `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`
++);
++console.log(`[seo] wrote sitemap.xml with ${seen.size} URLs, 404.html and per-page HTML`);
+diff --git a/server/server.js b/server/server.js
+index 1810810..4ee909b 100644
+--- a/server/server.js
++++ b/server/server.js
+@@ -423,7 +423,8 @@ const PAYMENT_METHODS = ["Razorpay", "COD"];
+ const STORAGE_BUCKET = "product-images";
+ 
+ const allowedOrigins = [
+-  "https://luxora-store-phi.vercel.app",
++  "https://shrimoh-store-phi.vercel.app",
++  "https://luxora-store-phi.vercel.app", // old address, kept so old links keep working
+   "https://luxora-store-mkva.onrender.com"
+ ];
+ 
+@@ -2895,7 +2896,7 @@ app.post("/api/orders", async function (req, res) {
+       customerRecord = newCustomer;
+     }
+ 
+-    const orderReference = `LUX-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
++    const orderReference = `SHR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+ 
+     /*
+      * IMPORTANT: this must match the ACTUAL columns in the
+diff --git a/src/App.css b/src/App.css
+index b4fb604..90e05f0 100644
+--- a/src/App.css
++++ b/src/App.css
+@@ -1,4 +1,6 @@
+-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap");
++/* Google Fonts (Manrope + Playfair Display) are now loaded from
++   index.html with preconnect, instead of an @import here that the
++   browser could only discover after downloading this whole CSS file. */
+ 
+ /* Urbanist (miramoss.com-style sans) bundled with the site itself -
+    no extra request to Google, and it never falls back to Arial. */
+@@ -7107,3 +7109,67 @@ section[id^="lux-"] {
+     display: none;
+   }
+ }
++
++/* =========================================================
++   SEO ADDITIONS (2026-10-06)
++   Only styles for the new real <a> links (logo, product names,
++   footer, breadcrumb) so they look exactly like the elements
++   they replaced, plus the small brand line in the hero heading.
++========================================================= */
++
++a.lux-logo {
++  color: inherit;
++  text-decoration: none;
++}
++
++.lux-card-link,
++.lux-card-link:hover,
++.lux-card-link:visited {
++  color: inherit;
++  text-decoration: none;
++}
++
++.lux-hero-content h1 .lux-hero-brand {
++  display: block;
++  margin: 0 0 18px;
++  color: #d9b98a;
++  font-family: var(--lux-font-body);
++  font-size: 12px;
++  font-weight: 600;
++  letter-spacing: 3px;
++  line-height: 1.4;
++  text-transform: uppercase;
++}
++
++@media (max-width: 700px) {
++  .lux-hero-content h1 .lux-hero-brand {
++    margin-bottom: 12px;
++    font-size: 10px;
++    letter-spacing: 2px;
++  }
++}
++
++.lux-product-breadcrumb {
++  width: auto;
++  min-width: 0;
++  padding: 0 0 16px;
++  flex-wrap: wrap;
++  row-gap: 4px;
++}
++
++.lux-breadcrumb a {
++  color: var(--lux-muted);
++  text-decoration: underline;
++  text-underline-offset: 3px;
++}
++
++.lux-breadcrumb a:hover {
++  color: var(--lux-text);
++}
++
++.lux-product-breadcrumb span[aria-current] {
++  max-width: 100%;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
+diff --git a/src/App.jsx b/src/App.jsx
+index f07e7dd..216cd8e 100644
+--- a/src/App.jsx
++++ b/src/App.jsx
+@@ -9,6 +9,19 @@ import {
+   canonicalizeCategory,
+   isBagCategory,
+ } from "./categories";
++import useSeo from "./useSeo";
++import {
++  CATEGORY_SEO,
++  COLLECTION_SEO,
++  HOME_SEO,
++  breadcrumbJsonLd,
++  collectionJsonLd,
++  productImages as seoProductImages,
++  productJsonLd,
++  productMetaDescription,
++  productPath,
++  productTitle,
++} from "./seo";
+ 
+ /*
+  * LUX ICON SET
+@@ -976,6 +989,11 @@ function App() {
+     return !(Array.isArray(cached) && cached.length > 0);
+   });
+   const [apiError, setApiError] = useState("");
++  // SEO: true once the live product list has actually arrived from the
++  // backend (not just this browser's cached copy). "Product not found" /
++  // empty-category pages are only marked noindex after this, so a
++  // sleeping backend can never get real pages dropped from Google.
++  const [productsLoadedLive, setProductsLoadedLive] = useState(false);
+ 
+   /* =========================================================
+      NAVIGATION
+@@ -1746,7 +1764,7 @@ function App() {
+     const contact = trackContact.trim();
+ 
+     if (!reference) {
+-      setTrackError("Please enter your order reference (e.g. LUX-...).");
++      setTrackError("Please enter your order reference (e.g. SHR-...).");
+       return;
+     }
+     if (!contact) {
+@@ -1803,6 +1821,7 @@ function App() {
+         if (data.success && Array.isArray(data.products)) {
+           setProducts(data.products.map(normalizeProduct));
+           writeCache(PRODUCTS_CACHE_KEY, data.products);
++          setProductsLoadedLive(true);
+         } else {
+           setProducts([]);
+         }
+@@ -2549,7 +2568,8 @@ function App() {
+                 <img
+                   className="lux-card-image-hover"
+                   src={hoverImage}
+-                  alt={displayName}
++                  alt=""
++                  aria-hidden="true"
+                   loading="lazy"
+                   decoding="async"
+                 />
+@@ -2646,7 +2666,15 @@ function App() {
+         <div className="lux-card-info">
+           <div>
+             <span>{product.category || "COLLECTION"}</span>
+-            <h3>{displayName}</h3>
++            <h3>
++              <a
++                className="lux-card-link"
++                href={`${productPath(product)}${activeColor && hasMultipleColors ? `?color=${encodeURIComponent(activeColor)}` : ""}`}
++                onClick={(event) => handleSeoLinkClick(event)}
++              >
++                {displayName}
++              </a>
++            </h3>
+           </div>
+ 
+           {/*
+@@ -3500,6 +3528,147 @@ function App() {
+     };
+   }, [checkoutOpen, cartOpen, wishlistOpen, mobileMenuOpen, activePage]);
+ 
++  /* =========================================================
++     SEO (2026-10-06)
++     Unique title / description / canonical / robots / JSON-LD for
++     every page - see src/seo.js and src/useSeo.js. Nothing here
++     changes what the page looks like.
++  ========================================================= */
++
++  const pageSeo = useMemo(() => {
++    const path = location.pathname.replace(/\/+$/, "") || "/";
++
++    if (isTrackOrderPage) {
++      return {
++        title: "Track Your Order | SHRIMOH",
++        description: "Check the delivery status of your SHRIMOH order.",
++        canonicalPath: "/track-order",
++        robots: "noindex, follow",
++      };
++    }
++
++    if (isProductPage) {
++      if (selectedProduct) {
++        const canonicalPath = productPath(selectedProduct);
++        const category = selectedProduct.category;
++        const crumbs = [{ name: "Home", path: "/" }];
++        if (CATEGORY_SEO[category]) {
++          crumbs.push({ name: category, path: `/category/${slugifyCategory(category)}` });
++        }
++        crumbs.push({ name: selectedProduct.name, path: canonicalPath });
++        return {
++          title: productTitle(selectedProduct),
++          description: productMetaDescription(selectedProduct),
++          canonicalPath,
++          type: "product",
++          image: seoProductImages(selectedProduct)[0],
++          jsonLd: [productJsonLd(selectedProduct), breadcrumbJsonLd(crumbs)],
++        };
++      }
++      if (!loadingProducts && productsLoadedLive) {
++        return {
++          title: "Product not found | SHRIMOH",
++          description: "This product may have been removed or the link is incorrect.",
++          canonicalPath: null,
++          robots: "noindex, follow",
++        };
++      }
++      return { skip: true };
++    }
++
++    if (collectionPage) {
++      const meta = COLLECTION_SEO[path];
++      if (meta) {
++        return {
++          title: meta.title,
++          description: meta.description,
++          canonicalPath: meta.canonicalPath,
++          jsonLd: [
++            collectionJsonLd({
++              name: meta.heading,
++              description: meta.description,
++              path: meta.canonicalPath,
++              products: path === "/shop" ? products : [],
++            }),
++            breadcrumbJsonLd([
++              { name: "Home", path: "/" },
++              { name: meta.heading, path: meta.canonicalPath },
++            ]),
++          ],
++        };
++      }
++    }
++
++    if (categorySlugFromUrl) {
++      const meta = CATEGORY_SEO[selectedCategory];
++      const canonicalPath = `/category/${slugifyCategory(selectedCategory)}`;
++      const inCategory = products.filter((product) =>
++        selectedCategory === ALL_BAGS_LABEL
++          ? isBagCategory(product.category)
++          : product.category === selectedCategory
++      );
++      if (!meta) return { skip: true };
++      return {
++        title: meta.title,
++        description: meta.description,
++        canonicalPath,
++        // An empty category is a thin page - keep it out of Google
++        // until it has products (links on it are still followed).
++        robots: productsLoadedLive && inCategory.length === 0 ? "noindex, follow" : undefined,
++        jsonLd: [
++          collectionJsonLd({
++            name: meta.heading,
++            description: meta.description,
++            path: canonicalPath,
++            products: inCategory,
++          }),
++          breadcrumbJsonLd([
++            { name: "Home", path: "/" },
++            { name: meta.heading, path: canonicalPath },
++          ]),
++        ],
++      };
++    }
++
++    return {
++      title: HOME_SEO.title,
++      description: HOME_SEO.description,
++      canonicalPath: "/",
++      // Any unknown path that still reaches the app (e.g. during local
++      // development) is never indexed as a copy of the homepage.
++      robots: path === "/" ? undefined : "noindex, follow",
++      // Organization + WebSite JSON-LD for the homepage is already in
++      // index.html (id="seo-site-jsonld") - not added twice here.
++      jsonLd: null,
++    };
++  }, [
++    location.pathname,
++    isTrackOrderPage,
++    isProductPage,
++    selectedProduct,
++    loadingProducts,
++    productsLoadedLive,
++    collectionPage,
++    categorySlugFromUrl,
++    selectedCategory,
++    products,
++  ]);
++
++  useSeo(pageSeo);
++
++  /* Plain-left-click on an SEO link: let the existing click handler do
++     the in-app navigation exactly as before. Ctrl/Cmd/middle-click
++     still opens the real URL in a new tab, like any normal link. */
++  function handleSeoLinkClick(event, action) {
++    if (event.defaultPrevented) return;
++    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
++      event.stopPropagation();
++      return;
++    }
++    event.preventDefault();
++    if (action) action();
++  }
++
+   /* =========================================================
+      RENDER
+   ========================================================= */
+@@ -3575,19 +3744,23 @@ function App() {
+             ☰
+           </button>
+ 
+-          <div
++          <a
++            href="/"
+             className="lux-logo"
+-            onClick={() => {
+-              goToCategory("All");
+-              setSearchText("");
+-            }}
++            aria-label="SHRIMOH home"
++            onClick={(event) =>
++              handleSeoLinkClick(event, () => {
++                goToCategory("All");
++                setSearchText("");
++              })
++            }
+           >
+-            <img src={shrimohIcon} alt="" className="lux-logo-mark" />
++            <img src={shrimohIcon} alt="" className="lux-logo-mark" width="128" height="128" />
+             <div className="lux-logo-text">
+               <span>SHRIMOH</span>
+               <small>THE LUXURY STORE</small>
+             </div>
+-          </div>
++          </a>
+ 
+           {/*
+             HEADER NAV - "Bags" and "Accessories" used to list every
+@@ -3911,6 +4084,7 @@ function App() {
+         */}
+         <div className="lux-hero-content" key={`hero-copy-${activeHeroSlide % HERO_SLIDE_COPY.length}`}>
+           <h1>
++            <span className="lux-hero-brand">SHRIMOH · Premium Women&rsquo;s Handbags &amp; Bags</span>
+             {activeHeroCopy.lines[0]}
+             <br />
+             {activeHeroCopy.lines[1]}
+@@ -4531,7 +4705,7 @@ function App() {
+ 
+         <div className="lux-brand-story-mark">
+           {brandStoryImageUrl ? (
+-            <img src={brandStoryImageUrl} alt="SHRIMOH" className="lux-brand-story-photo" loading="lazy" decoding="async" onError={handleImageFallback} />
++            <img src={brandStoryImageUrl} alt="SHRIMOH women's bags collection" className="lux-brand-story-photo" loading="lazy" decoding="async" onError={handleImageFallback} />
+           ) : (
+             <>
+               <span>S</span>
+@@ -4614,6 +4788,27 @@ function App() {
+             ← Back
+           </button>
+ 
++          <nav className="lux-breadcrumb lux-product-breadcrumb" aria-label="Breadcrumb">
++            <a href="/" onClick={(event) => handleSeoLinkClick(event, () => goToCategory("All"))}>
++              Home
++            </a>
++            <span aria-hidden="true">/</span>
++            {CATEGORY_SEO[selectedProduct.category] && (
++              <>
++                <a
++                  href={`/category/${slugifyCategory(selectedProduct.category)}`}
++                  onClick={(event) =>
++                    handleSeoLinkClick(event, () => goToCategory(selectedProduct.category))
++                  }
++                >
++                  {selectedProduct.category}
++                </a>
++                <span aria-hidden="true">/</span>
++              </>
++            )}
++            <span aria-current="page">{selectedProduct.name}</span>
++          </nav>
++
+           <div className="lux-product-page">
+             <button
+               type="button"
+@@ -5056,12 +5251,20 @@ function App() {
+           <div className="lux-footer-links">
+             <div>
+               <strong>SHOP</strong>
+-              <button onClick={goToShopAll}>All Products</button>
++              <a href="/shop" onClick={(event) => handleSeoLinkClick(event, goToShopAll)}>
++                All Products
++              </a>
+ 
+-              {categories.slice(1, 5).map((category) => (
+-                <button key={category} onClick={() => goToCategory(category)}>
++              {/* Real links (crawlable by Google) to every category page;
++                  clicking still navigates in-app exactly as before. */}
++              {[ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES].map((category) => (
++                <a
++                  key={category}
++                  href={`/category/${slugifyCategory(category)}`}
++                  onClick={(event) => handleSeoLinkClick(event, () => goToCategory(category))}
++                >
+                   {category}
+-                </button>
++                </a>
+               ))}
+             </div>
+ 
+@@ -6123,7 +6326,7 @@ function TrackOrderPage({
+                 type="text"
+                 value={trackReference}
+                 onChange={(e) => setTrackReference(e.target.value)}
+-                placeholder="e.g. LUX-172..."
++                placeholder="e.g. SHR-172..."
+               />
+             </label>
+ 
+diff --git a/src/seo.js b/src/seo.js
+new file mode 100644
+index 0000000..7ba0bad
+--- /dev/null
++++ b/src/seo.js
+@@ -0,0 +1,305 @@
++/*
++ * SHRIMOH SEO CONFIG - single source of truth (2026-10-06)
++ *
++ * Plain JavaScript (no JSX, no asset imports) on purpose: it is used by
++ * BOTH the website (src/App.jsx, via src/useSeo.js) and the build-time
++ * script scripts/prerender-seo.mjs that writes sitemap.xml and the
++ * per-page HTML files Google sees before any JavaScript runs.
++ *
++ * SITE_URL is the live production address found in the project
++ * (server/server.js allowedOrigins). If you ever connect a custom
++ * domain, change it here only - every canonical, sitemap entry,
++ * Open Graph URL and JSON-LD URL follows automatically.
++ */
++
++import { ACCESSORY_CATEGORIES, BAG_CATEGORIES, PRODUCT_CATEGORIES } from "./categories.js";
++
++// ============================================================
++// YOUR WEBSITE ADDRESS - the only line to change when the store
++// moves to a SHRIMOH address (e.g. https://shrimoh.vercel.app).
++// Canonicals, sitemap.xml, robots.txt, Open Graph and JSON-LD are
++// all built from this one value.
++// ============================================================
++export const SITE_URL = "https://shrimoh-store-phi.vercel.app";
++export const BRAND = "SHRIMOH";
++export const API_URL = "https://luxora-store-mkva.onrender.com";
++export const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
++export const LOGO_URL = `${SITE_URL}/icon-192.png`;
++export const SUPPORT_EMAIL = "infoshrimoh@gmail.com";
++export const ALL_BAGS_LABEL = "All Bags";
++
++export const HOME_SEO = {
++  title: "SHRIMOH – Premium Women's Handbags & Bags | Official Store",
++  description:
++    "Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders.",
++};
++
++/* Same slug rule the app uses for /category/:slug URLs. */
++export function slugifyCategory(name) {
++  return String(name || "")
++    .toLowerCase()
++    .trim()
++    .replace(/[^a-z0-9]+/g, "-")
++    .replace(/(^-+|-+$)/g, "");
++}
++
++/* One title/description/heading per real category page. Only the
++   categories that exist in src/categories.js (+ "All Bags"). */
++export const CATEGORY_SEO = {
++  Handbags: {
++    title: "Women's Handbags – Structured Everyday Styles | SHRIMOH",
++    heading: "Women's Handbags",
++    description:
++      "Shop SHRIMOH women's handbags – polished, structured styles made for the commute, the office and dinner plans. Free delivery on all orders.",
++  },
++  "Shoulder Bags": {
++    title: "Shoulder Bags for Women | SHRIMOH",
++    heading: "Shoulder Bags",
++    description:
++      "Discover SHRIMOH shoulder bags for women – soft curves, clean lines and everyday sizes that pair with everything. Free delivery on all orders.",
++  },
++  "Crossbody Bags": {
++    title: "Crossbody & Sling Bags for Women | SHRIMOH",
++    heading: "Crossbody Bags",
++    description:
++      "Shop SHRIMOH crossbody and sling bags – hands-free, versatile styles for city days, errands and weekend plans. Free delivery on all orders.",
++  },
++  "Tote Bags": {
++    title: "Tote Bags for Women – Work & Travel | SHRIMOH",
++    heading: "Tote Bags",
++    description:
++      "Roomy, refined SHRIMOH tote bags for work days, travel and weekends – spacious inside, elegant outside. Free delivery on all orders.",
++  },
++  Backpacks: {
++    title: "Women's Backpacks & Laptop Bags | SHRIMOH",
++    heading: "Backpacks",
++    description:
++      "Shop SHRIMOH backpacks for women – smart compartments, comfortable straps and a polished finish for busy days. Free delivery on all orders.",
++  },
++  Clutches: {
++    title: "Clutches & Evening Bags for Women | SHRIMOH",
++    heading: "Clutches",
++    description:
++      "SHRIMOH clutches and evening bags – small, striking styles for weddings, festive evenings and special dinners. Free delivery on all orders.",
++  },
++  Wallets: {
++    title: "Women's Wallets & Card Holders | SHRIMOH",
++    heading: "Wallets",
++    description:
++      "Slim SHRIMOH wallets and card holders for women, thoughtfully organised to match the bag you carry every day. Free delivery on all orders.",
++  },
++  Accessories: {
++    title: "Bag Accessories | SHRIMOH",
++    heading: "Accessories",
++    description:
++      "Finishing touches from SHRIMOH, designed to pair beautifully with your handbag. Shop bag accessories online with free delivery.",
++  },
++  [ALL_BAGS_LABEL]: {
++    title: "All Women's Bags – Handbags, Totes & More | SHRIMOH",
++    heading: "All Bags",
++    description:
++      "Every SHRIMOH bag in one place – handbags, shoulder bags, crossbody bags, totes, backpacks and clutches for women. Free delivery on all orders.",
++  },
++};
++
++/* Collection pages. /new-arrivals and /bestsellers show the same
++   products as /shop in a different order, so they point their
++   canonical at /shop instead of competing with it. */
++export const COLLECTION_SEO = {
++  "/shop": {
++    title: "Shop All Women's Bags & Accessories | SHRIMOH",
++    heading: "Shop All",
++    description:
++      "Browse the full SHRIMOH collection of premium women's handbags, totes, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders.",
++    canonicalPath: "/shop",
++  },
++  "/new-arrivals": {
++    title: "New Arrivals – Women's Bags | SHRIMOH",
++    heading: "New Arrivals",
++    description:
++      "The newest SHRIMOH handbags and bags for women, freshest designs first. Free delivery on all orders.",
++    canonicalPath: "/shop",
++  },
++  "/bestsellers": {
++    title: "Bestselling Women's Bags | SHRIMOH",
++    heading: "Bestsellers",
++    description:
++      "SHRIMOH's most-loved women's bags – the styles customers reorder and carry every day. Free delivery on all orders.",
++    canonicalPath: "/shop",
++  },
++};
++
++/* Every category that gets its own indexable /category/:slug page. */
++export const SEO_CATEGORIES = [ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES];
++export { ACCESSORY_CATEGORIES, BAG_CATEGORIES, PRODUCT_CATEGORIES };
++
++export function absoluteUrl(path = "/") {
++  if (/^https?:\/\//.test(path)) return path;
++  return `${SITE_URL}${path.startsWith("/") ? "" : "/"}${path}`;
++}
++
++/* Product photos are stored as full https URLs (Supabase) or, for very
++   old products, as /uploads/... paths on the backend. */
++export function absoluteImageUrl(image) {
++  if (!image || typeof image !== "string") return "";
++  if (image.startsWith("data:")) return "";
++  if (/^https?:\/\//.test(image)) return image.replace(/^http:\/\//, "https://");
++  return `${API_URL}${image.startsWith("/") ? "" : "/"}${image}`;
++}
++
++export function productPath(product) {
++  return `/product/${encodeURIComponent(String(product.id))}`;
++}
++
++function cleanText(value) {
++  return String(value || "")
++    .replace(/<[^>]*>/g, " ")
++    .replace(/\s+/g, " ")
++    .trim();
++}
++
++/* Cuts at a word boundary so descriptions don't end mid-word. */
++export function truncate(value, max = 158) {
++  const text = cleanText(value);
++  if (text.length <= max) return text;
++  const cut = text.slice(0, max - 1);
++  const lastSpace = cut.lastIndexOf(" ");
++  return `${(lastSpace > 60 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:–-]+$/, "")}…`;
++}
++
++export function productImages(product) {
++  const list = [];
++  if (Array.isArray(product?.images)) list.push(...product.images);
++  if (product?.image) list.push(product.image);
++  if (product?.colorImages && typeof product.colorImages === "object") {
++    for (const value of Object.values(product.colorImages)) {
++      if (Array.isArray(value)) list.push(...value);
++      else if (value) list.push(value);
++    }
++  }
++  return Array.from(new Set(list.map(absoluteImageUrl).filter(Boolean)));
++}
++
++/* Real description only when it is real text (some test products have
++   descriptions like "10" or "sjfn"); otherwise a plain factual line. */
++export function productMetaDescription(product) {
++  const own = cleanText(product?.description);
++  if (own.split(" ").length >= 6) return truncate(own, 158);
++  const singular = {
++    Handbags: "handbag",
++    "Shoulder Bags": "shoulder bag",
++    "Crossbody Bags": "crossbody bag",
++    "Tote Bags": "tote bag",
++    Backpacks: "backpack",
++    Clutches: "clutch",
++    Wallets: "wallet",
++    Accessories: "bag accessory",
++  }[product?.category] || "bag";
++  return truncate(
++    `Shop the ${cleanText(product?.name)} from SHRIMOH – a women's ${singular}. Free delivery on all orders.`,
++    158
++  );
++}
++
++export function productTitle(product) {
++  return `${cleanText(product?.name) || "Product"} | ${BRAND}`;
++}
++
++/* ---------------------------- JSON-LD ---------------------------- */
++
++export function organizationJsonLd() {
++  return {
++    "@context": "https://schema.org",
++    "@type": "Organization",
++    "@id": `${SITE_URL}/#organization`,
++    name: BRAND,
++    url: `${SITE_URL}/`,
++    logo: LOGO_URL,
++    email: SUPPORT_EMAIL,
++  };
++}
++
++export function websiteJsonLd() {
++  return {
++    "@context": "https://schema.org",
++    "@type": "WebSite",
++    "@id": `${SITE_URL}/#website`,
++    name: BRAND,
++    url: `${SITE_URL}/`,
++    inLanguage: "en-IN",
++    publisher: { "@id": `${SITE_URL}/#organization` },
++  };
++}
++
++export function breadcrumbJsonLd(items) {
++  return {
++    "@context": "https://schema.org",
++    "@type": "BreadcrumbList",
++    itemListElement: items.map((item, index) => ({
++      "@type": "ListItem",
++      position: index + 1,
++      name: item.name,
++      item: absoluteUrl(item.path),
++    })),
++  };
++}
++
++export function collectionJsonLd({ name, description, path, products = [] }) {
++  const data = {
++    "@context": "https://schema.org",
++    "@type": "CollectionPage",
++    name,
++    description,
++    url: absoluteUrl(path),
++    isPartOf: { "@id": `${SITE_URL}/#website` },
++  };
++  if (products.length > 0) {
++    data.mainEntity = {
++      "@type": "ItemList",
++      itemListElement: products.slice(0, 30).map((product, index) => ({
++        "@type": "ListItem",
++        position: index + 1,
++        url: absoluteUrl(productPath(product)),
++        name: cleanText(product.name),
++      })),
++    };
++  }
++  return data;
++}
++
++/* Product + Offer from real product data only. No ratings/reviews
++   (the store has none yet), no invented SKU. */
++export function productJsonLd(product) {
++  const url = absoluteUrl(productPath(product));
++  const price = Number(product?.price);
++  const data = {
++    "@context": "https://schema.org",
++    "@type": "Product",
++    "@id": `${url}#product`,
++    name: cleanText(product?.name),
++    url,
++    brand: { "@type": "Brand", name: BRAND },
++  };
++  const images = productImages(product);
++  if (images.length) data.image = images.slice(0, 6);
++  const description = cleanText(product?.description);
++  if (description.split(" ").length >= 6) data.description = truncate(description, 500);
++  if (product?.category) data.category = cleanText(product.category);
++  if (product?.materials) data.material = cleanText(product.materials);
++  if (Array.isArray(product?.colors) && product.colors.length) data.color = product.colors.join(", ");
++  if (Number.isFinite(price) && price > 0) {
++    data.offers = {
++      "@type": "Offer",
++      url,
++      priceCurrency: "INR",
++      price: price.toFixed(2),
++      availability:
++        Number(product?.stock || 0) > 0
++          ? "https://schema.org/InStock"
++          : "https://schema.org/OutOfStock",
++      itemCondition: "https://schema.org/NewCondition",
++      seller: { "@id": `${SITE_URL}/#organization` },
++    };
++  }
++  return data;
++}
+diff --git a/src/useSeo.js b/src/useSeo.js
+new file mode 100644
+index 0000000..cf3f770
+--- /dev/null
++++ b/src/useSeo.js
+@@ -0,0 +1,103 @@
++/*
++ * useSeo - keeps the page <head> in sync with the page being shown.
++ *
++ * No extra library (react-helmet etc.) - just a few DOM updates, so the
++ * bundle stays small. The static HTML files written at build time by
++ * scripts/prerender-seo.mjs already contain the right tags for the
++ * homepage, every category page and the collection pages; this hook
++ * keeps them correct while a visitor (or Google's renderer) moves
++ * around the site, and adds the product-page tags, which can only be
++ * known once the product data has loaded.
++ */
++import { useEffect } from "react";
++import { BRAND, DEFAULT_OG_IMAGE, absoluteUrl } from "./seo.js";
++
++function upsertMeta(attr, key, content) {
++  let tag = document.head.querySelector(`meta[${attr}="${key}"]`);
++  if (content === null || content === undefined || content === "") {
++    if (tag) tag.remove();
++    return;
++  }
++  if (!tag) {
++    tag = document.createElement("meta");
++    tag.setAttribute(attr, key);
++    document.head.appendChild(tag);
++  }
++  if (tag.getAttribute("content") !== content) tag.setAttribute("content", content);
++}
++
++function upsertCanonical(href) {
++  let link = document.head.querySelector('link[rel="canonical"]');
++  if (!href) {
++    if (link) link.remove();
++    return;
++  }
++  if (!link) {
++    link = document.createElement("link");
++    link.setAttribute("rel", "canonical");
++    document.head.appendChild(link);
++  }
++  if (link.getAttribute("href") !== href) link.setAttribute("href", href);
++}
++
++function upsertJsonLd(data) {
++  const id = "seo-page-jsonld";
++  let script = document.getElementById(id);
++  const list = (Array.isArray(data) ? data : [data]).filter(Boolean);
++  if (list.length === 0) {
++    if (script) script.remove();
++    return;
++  }
++  if (!script) {
++    script = document.createElement("script");
++    script.type = "application/ld+json";
++    script.id = id;
++    document.head.appendChild(script);
++  }
++  const json = JSON.stringify(list.length === 1 ? list[0] : list).replace(/</g, "\\u003c");
++  if (script.textContent !== json) script.textContent = json;
++}
++
++/**
++ * seo = {
++ *   title, description,
++ *   canonicalPath   - e.g. "/category/handbags" (null = no canonical)
++ *   robots          - e.g. "noindex, follow" (default "index, follow")
++ *   image           - absolute image URL for social previews
++ *   type            - og:type ("website" | "product")
++ *   jsonLd          - object or array of JSON-LD objects for this page
++ *   skip            - true while data is still loading: leave tags alone
++ * }
++ */
++export default function useSeo(seo) {
++  const key = JSON.stringify(seo || {});
++
++  useEffect(() => {
++    if (!seo || seo.skip) return;
++
++    const title = seo.title || BRAND;
++    if (document.title !== title) document.title = title;
++
++    const canonical = seo.canonicalPath ? absoluteUrl(seo.canonicalPath) : null;
++    const image = seo.image || DEFAULT_OG_IMAGE;
++
++    upsertMeta("name", "description", seo.description || "");
++    upsertMeta("name", "robots", seo.robots || "index, follow, max-image-preview:large");
++    upsertCanonical(canonical);
++
++    upsertMeta("property", "og:site_name", BRAND);
++    upsertMeta("property", "og:title", title);
++    upsertMeta("property", "og:description", seo.description || "");
++    upsertMeta("property", "og:type", seo.type || "website");
++    upsertMeta("property", "og:url", canonical || absoluteUrl(window.location.pathname));
++    upsertMeta("property", "og:image", image);
++    upsertMeta("name", "twitter:card", "summary_large_image");
++    upsertMeta("name", "twitter:title", title);
++    upsertMeta("name", "twitter:description", seo.description || "");
++    upsertMeta("name", "twitter:image", image);
++
++    upsertJsonLd(seo.jsonLd || null);
++    // `key` captures every field of `seo`.
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [key]);
++}
+diff --git a/vercel.json b/vercel.json
+index 1323cda..0356f80 100644
+--- a/vercel.json
++++ b/vercel.json
+@@ -1,8 +1,120 @@
+ {
++  "trailingSlash": false,
++  "redirects": [
++    {
++      "source": "/:path*",
++      "has": [
++        {
++          "type": "host",
++          "value": "luxora-store-phi.vercel.app"
++        }
++      ],
++      "destination": "https://shrimoh-store-phi.vercel.app/:path*",
++      "permanent": true
++    },
++    {
++      "source": "/category/all",
++      "destination": "/shop",
++      "permanent": true
++    },
++    {
++      "source": "/category/bags",
++      "destination": "/category/all-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/shoulder-bags-totes",
++      "destination": "/category/all-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/sling-bags",
++      "destination": "/category/crossbody-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/sling-bag",
++      "destination": "/category/crossbody-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/cross-body-bags",
++      "destination": "/category/crossbody-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/satchel-handbags",
++      "destination": "/category/handbags",
++      "permanent": true
++    },
++    {
++      "source": "/category/laptop-bags",
++      "destination": "/category/backpacks",
++      "permanent": true
++    },
++    {
++      "source": "/category/travel-bags",
++      "destination": "/category/tote-bags",
++      "permanent": true
++    },
++    {
++      "source": "/category/potli-bags",
++      "destination": "/category/clutches",
++      "permanent": true
++    }
++  ],
+   "rewrites": [
+     {
+-      "source": "/(.*)",
+-      "destination": "/index.html"
++      "source": "/shop",
++      "destination": "/seo/shop.html"
++    },
++    {
++      "source": "/new-arrivals",
++      "destination": "/seo/new-arrivals.html"
++    },
++    {
++      "source": "/bestsellers",
++      "destination": "/seo/bestsellers.html"
++    },
++    {
++      "source": "/category/:slug(all-bags|handbags|shoulder-bags|crossbody-bags|tote-bags|backpacks|clutches|wallets|accessories)",
++      "destination": "/seo/category/:slug.html"
++    },
++    {
++      "source": "/product/:id",
++      "destination": "/app-shell.html"
++    },
++    {
++      "source": "/track-order",
++      "destination": "/private-shell.html"
++    },
++    {
++      "source": "/admin",
++      "destination": "/private-shell.html"
++    },
++    {
++      "source": "/admin/:path*",
++      "destination": "/private-shell.html"
++    }
++  ],
++  "headers": [
++    {
++      "source": "/assets/(.*)",
++      "headers": [
++        {
++          "key": "Cache-Control",
++          "value": "public, max-age=31536000, immutable"
++        }
++      ]
++    },
++    {
++      "source": "/(sitemap.xml|robots.txt)",
++      "headers": [
++        {
++          "key": "Cache-Control",
++          "value": "public, max-age=0, must-revalidate"
++        }
++      ]
+     }
+   ]
+ }

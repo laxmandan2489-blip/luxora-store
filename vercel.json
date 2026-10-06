@@ -1,8 +1,120 @@
 {
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "luxora-store-phi.vercel.app"
+        }
+      ],
+      "destination": "https://shrimoh-store-phi.vercel.app/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/category/all",
+      "destination": "/shop",
+      "permanent": true
+    },
+    {
+      "source": "/category/bags",
+      "destination": "/category/all-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/shoulder-bags-totes",
+      "destination": "/category/all-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/sling-bags",
+      "destination": "/category/crossbody-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/sling-bag",
+      "destination": "/category/crossbody-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/cross-body-bags",
+      "destination": "/category/crossbody-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/satchel-handbags",
+      "destination": "/category/handbags",
+      "permanent": true
+    },
+    {
+      "source": "/category/laptop-bags",
+      "destination": "/category/backpacks",
+      "permanent": true
+    },
+    {
+      "source": "/category/travel-bags",
+      "destination": "/category/tote-bags",
+      "permanent": true
+    },
+    {
+      "source": "/category/potli-bags",
+      "destination": "/category/clutches",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/shop",
+      "destination": "/seo/shop.html"
+    },
+    {
+      "source": "/new-arrivals",
+      "destination": "/seo/new-arrivals.html"
+    },
+    {
+      "source": "/bestsellers",
+      "destination": "/seo/bestsellers.html"
+    },
+    {
+      "source": "/category/:slug(all-bags|handbags|shoulder-bags|crossbody-bags|tote-bags|backpacks|clutches|wallets|accessories)",
+      "destination": "/seo/category/:slug.html"
+    },
+    {
+      "source": "/product/:id",
+      "destination": "/app-shell.html"
+    },
+    {
+      "source": "/track-order",
+      "destination": "/private-shell.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/private-shell.html"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/private-shell.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/(sitemap.xml|robots.txt)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
   ]
 }

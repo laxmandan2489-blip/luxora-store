@@ -2,9 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      GOOGLE SEARCH CONSOLE VERIFICATION
+      1. In Search Console choose "URL prefix" -> your SHRIMOH website address
+      2. Pick the "HTML tag" method and copy the content="..." value it shows.
+      3. Remove the two comment markers around the line below and paste
+         your real value in place of PASTE_REAL_TOKEN_HERE. Commit + push.
+      Do NOT publish it with the placeholder text.
+    -->
+    <!-- <meta name="google-site-verification" content="PASTE_REAL_TOKEN_HERE" /> -->
+
+    <!--SEO_HEAD_START-->
+    <title>SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store</title>
+    <meta name="description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
+    <link rel="canonical" href="https://shrimoh-store-phi.vercel.app/" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://shrimoh-store-phi.vercel.app/" />
+    <meta property="og:title" content="SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store" />
+    <meta property="og:description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
+    <meta property="og:image" content="https://shrimoh-store-phi.vercel.app/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="SHRIMOH – Premium Women's Handbags &amp; Bags | Official Store" />
+    <meta name="twitter:description" content="Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders." />
+    <meta name="twitter:image" content="https://shrimoh-store-phi.vercel.app/og-image.png" />
+    <!--SEO_HEAD_END-->
+    <meta property="og:site_name" content="SHRIMOH" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="SHRIMOH – Premium Women's Handbags &amp; Bags" />
+    <meta name="application-name" content="SHRIMOH" />
+    <meta name="apple-mobile-web-app-title" content="SHRIMOH" />
+    <meta name="theme-color" content="#f7f4ef" />
+
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!--SEO_SITE_JSONLD_START-->
+    <script type="application/ld+json" id="seo-site-jsonld">[{"@context":"https://schema.org","@type":"Organization","@id":"https://shrimoh-store-phi.vercel.app/#organization","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","logo":"https://shrimoh-store-phi.vercel.app/icon-192.png","email":"infoshrimoh@gmail.com"},{"@context":"https://schema.org","@type":"WebSite","@id":"https://shrimoh-store-phi.vercel.app/#website","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","inLanguage":"en-IN","publisher":{"@id":"https://shrimoh-store-phi.vercel.app/#organization"}}]</script>
+    <!--SEO_SITE_JSONLD_END-->
+
     <!--
       Every product photo is served through images.weserv.nl (see
       getImageUrl() in src/App.jsx). Preconnecting here lets the
@@ -26,10 +69,34 @@
     <script>
       try { fetch("https://luxora-store-mkva.onrender.com/api/health", { mode: "no-cors", cache: "no-store" }).catch(function () {}); } catch (e) {}
     </script>
-    <title>SHRIMOH - The Luxury Store</title>
+
+    <!-- Fonts (moved here from an @import inside App.css so they start
+         downloading immediately instead of after the CSS file). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=Playfair+Display:wght@400;500;600;700&display=swap" />
+
+    <!--
+      (Title, canonical, Open Graph and JSON-LD above are rewritten at
+      build time from SITE_URL in src/seo.js - edit the address there.)
+      Styles for the plain-HTML page summary inside #root below. It is
+      what visitors on a slow connection see for a moment, and what
+      search engines read before JavaScript runs. React replaces it
+      with the real store as soon as the app starts.
+    -->
+    <style>
+      .seo-fallback{min-height:100vh;background:#f7f4ef;color:#1a1a1a;font-family:Urbanist,Manrope,Arial,sans-serif;padding:48px 6vw;box-sizing:border-box;text-align:center}
+      .seo-fallback a{color:#7d6c4f;text-decoration:none}
+      .seo-fallback .seo-logo{display:inline-block;font-family:"Playfair Display",Georgia,serif;font-size:26px;letter-spacing:6px;color:#1a1a1a}
+      .seo-fallback h1{margin:40px auto 14px;max-width:760px;font-size:clamp(26px,4vw,40px);font-weight:300;line-height:1.2}
+      .seo-fallback p{margin:0 auto 26px;max-width:640px;font-size:15px;line-height:1.6;color:#555}
+      .seo-fallback nav,.seo-fallback ul{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin:0 auto 22px;padding:0;list-style:none;max-width:860px;font-size:13px;letter-spacing:1px;text-transform:uppercase}
+      .seo-fallback ul{text-transform:none;letter-spacing:0}
+      .seo-fallback h2{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin:28px 0 12px;color:#8f7d5e}
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><!--SEO_FALLBACK_START--><div class="seo-fallback"><a class="seo-logo" href="/">SHRIMOH</a><h1>SHRIMOH – Premium Women's Handbags &amp; Bags</h1><p>SHRIMOH is the official online store for premium women's handbags and bags – structured handbags, shoulder bags, crossbody bags, tote bags, backpacks, clutches and wallets designed for everyday elegance. Free delivery on all orders.</p><nav aria-label="Shop by category"><a href="/shop">Shop All</a><a href="/category/all-bags">All Bags</a><a href="/category/handbags">Handbags</a><a href="/category/shoulder-bags">Shoulder Bags</a><a href="/category/crossbody-bags">Crossbody Bags</a><a href="/category/tote-bags">Tote Bags</a><a href="/category/backpacks">Backpacks</a><a href="/category/clutches">Clutches</a><a href="/category/wallets">Wallets</a><a href="/category/accessories">Accessories</a></nav></div><!--SEO_FALLBACK_END--></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
