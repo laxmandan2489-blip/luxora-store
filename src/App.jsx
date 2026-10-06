@@ -469,7 +469,7 @@ const API = "https://luxora-store-mkva.onrender.com";
  * the wa.me link for the floating WhatsApp button.
  */
 const SUPPORT_EMAIL = "infoshrimoh@gmail.com";
-const WHATSAPP_NUMBER = "9461515979"; // TODO: replace with your real WhatsApp business number
+const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp business number
 
 /*
  * NEW CUSTOMER WELCOME POPUP
