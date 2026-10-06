@@ -480,6 +480,23 @@ const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp bu
  * a coupon with this exact code exists and is active in the admin
  * panel's coupon list.
  */
+/*
+ * CASH ON DELIVERY (2026-10-06)
+ * Checkout is prepaid only (Razorpay). Any "Cash on Delivery" badge
+ * typed into a product in Admin is hidden on the product page so
+ * the site never promises COD that checkout can't give. If COD is
+ * switched on at checkout later, set this to true.
+ */
+const COD_AVAILABLE = false;
+
+function visibleTrustSignals(signals) {
+  if (!Array.isArray(signals)) return [];
+  return signals.filter(
+    (signal) =>
+      COD_AVAILABLE || !/cash\s*on\s*delivery|\bcod\b/i.test(String(signal || ""))
+  );
+}
+
 const NEW_CUSTOMER_OFFER_CODE = "NEW15";
 const NEW_CUSTOMER_OFFER_TEXT = "15% OFF";
 const NEW_CUSTOMER_OFFER_SEEN_KEY = "shrimoh_seen_welcome_offer";
@@ -5027,9 +5044,9 @@ function App() {
                 </button>
               </div>
 
-              {Array.isArray(selectedProduct.trustSignals) && selectedProduct.trustSignals.length > 0 && (
+              {visibleTrustSignals(selectedProduct.trustSignals).length > 0 && (
                 <div className="lux-trust-signals">
-                  {selectedProduct.trustSignals.map((signal, index) => (
+                  {visibleTrustSignals(selectedProduct.trustSignals).map((signal, index) => (
                     <span className="lux-trust-badge" key={index}>
                       <span className="lux-trust-badge-tick">✓</span>
                       {signal}
