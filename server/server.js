@@ -423,7 +423,8 @@ const PAYMENT_METHODS = ["Razorpay", "COD"];
 const STORAGE_BUCKET = "product-images";
 
 const allowedOrigins = [
-  "https://luxora-store-phi.vercel.app",
+  "https://shrimoh-store-phi.vercel.app",
+  "https://luxora-store-phi.vercel.app", // old address, kept so old links keep working
   "https://luxora-store-mkva.onrender.com"
 ];
 
@@ -2895,7 +2896,7 @@ app.post("/api/orders", async function (req, res) {
       customerRecord = newCustomer;
     }
 
-    const orderReference = `LUX-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    const orderReference = `SHR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
 
     /*
      * IMPORTANT: this must match the ACTUAL columns in the
