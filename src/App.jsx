@@ -5250,9 +5250,11 @@ function App() {
                 All Products
               </a>
 
-              {/* Real links (crawlable by Google) to every category page;
-                  clicking still navigates in-app exactly as before. */}
-              {[ALL_BAGS_LABEL, ...PRODUCT_CATEGORIES].map((category) => (
+              {/* Real links (crawlable by Google) to every category page
+                  that has products (empty ones are left out so customers
+                  never land on a blank page); clicking still navigates
+                  in-app exactly as before. */}
+              {[ALL_BAGS_LABEL, ...bagNavCategories, ...accessoryNavCategories].map((category) => (
                 <a
                   key={category}
                   href={`/category/${slugifyCategory(category)}`}
