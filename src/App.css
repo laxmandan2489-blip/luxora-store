@@ -7805,3 +7805,70 @@ a.lux-logo {
     letter-spacing: 1.6px;
   }
 }
+
+/* =========================================================
+   PHOTO FILL FIX (2026-10-06, after live check)
+   SHRIMOH product photos are square and many have their own
+   grey/beige backdrop, so the earlier "multiply" trick left a
+   visible box inside a taller tile. Tiles are now square and the
+   photo fills the whole tile edge to edge, with no tint.
+========================================================= */
+
+.lux-product-card .lux-card-image {
+  aspect-ratio: 1 / 1;
+}
+
+.lux-product-card .lux-card-image img {
+  padding: 0;
+  object-fit: cover;
+  mix-blend-mode: normal;
+}
+
+.lux-pdp .lux-gallery-stage,
+.lux-pdp-thumb,
+.lux-pdp-color-photo {
+  aspect-ratio: 1 / 1;
+}
+
+.lux-pdp .lux-main-image img,
+.lux-pdp-thumb img {
+  object-fit: cover;
+  mix-blend-mode: normal;
+}
+
+.lux-pdp-color-photo {
+  background-size: cover;
+  background-blend-mode: normal;
+}
+
+@media (max-width: 900px) {
+  .lux-pdp .lux-gallery-stage {
+    aspect-ratio: 1 / 1;
+  }
+}
+
+/* Colour tiles: up to 4 always sit on one line, sharing the width */
+.lux-pdp-colors {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 380px;
+}
+
+.lux-pdp-color {
+  width: auto;
+  min-width: 0;
+}
+
+/* Big product photo: never crop it (square photos still fill fully) */
+.lux-pdp .lux-main-image img {
+  object-fit: contain;
+}
+
+/* Heart stays visible on dark or busy photos */
+.lux-product-card .lux-wishlist-heart,
+.lux-product-card .lux-wishlist-heart.active {
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.82);
+}
