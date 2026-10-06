@@ -2580,7 +2580,6 @@ function App() {
           )}
 
           {badge === "bestseller" && <div className="lux-card-badge lux-badge-best">BESTSELLER</div>}
-          {badge === "sale" && hasDiscount && <div className="lux-card-badge">SALE</div>}
 
           {isSoldOut && <div className="lux-card-sold">SOLD OUT</div>}
 
@@ -2590,7 +2589,7 @@ function App() {
             onClick={(e) => toggleWishlist(product, e)}
             aria-label={isWishlisted(product.id) ? "Remove from wishlist" : "Add to wishlist"}
           >
-            {isWishlisted(product.id) ? "♥" : "♡"}
+            <LuxIcon name="heart" size={22} filled={isWishlisted(product.id)} />
           </button>
 
           {showOverlayActions && (
@@ -2624,6 +2623,39 @@ function App() {
               </button>
             </div>
           )}
+        </div>
+
+        <div className="lux-card-info">
+          <div>
+            <h3>
+              <a
+                className="lux-card-link"
+                href={`${productPath(product)}${activeColor && hasMultipleColors ? `?color=${encodeURIComponent(activeColor)}` : ""}`}
+                onClick={(event) => handleSeoLinkClick(event)}
+              >
+                {displayName}
+              </a>
+            </h3>
+          </div>
+
+          {/*
+           * One compact line - current price, old price struck through,
+           * discount % - same as the quick-view/product-page price row
+           * (Mira & Moss keeps all three together on one line in the
+           * grid too, instead of stacking price/old-price on separate
+           * lines with no % shown, which took up extra vertical space).
+           */}
+          <div className="lux-card-price">
+            <strong>₹{product.price.toLocaleString("en-IN")}</strong>
+            {showDiscountPrice && hasDiscount && (
+              <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>
+            )}
+            {showDiscountPrice && hasDiscount && (
+              <span className="lux-card-discount">
+                {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
+              </span>
+            )}
+          </div>
         </div>
 
         {hasMultipleColors && (
@@ -2663,39 +2695,6 @@ function App() {
           </div>
         )}
 
-        <div className="lux-card-info">
-          <div>
-            <span>{product.category || "COLLECTION"}</span>
-            <h3>
-              <a
-                className="lux-card-link"
-                href={`${productPath(product)}${activeColor && hasMultipleColors ? `?color=${encodeURIComponent(activeColor)}` : ""}`}
-                onClick={(event) => handleSeoLinkClick(event)}
-              >
-                {displayName}
-              </a>
-            </h3>
-          </div>
-
-          {/*
-           * One compact line - current price, old price struck through,
-           * discount % - same as the quick-view/product-page price row
-           * (Mira & Moss keeps all three together on one line in the
-           * grid too, instead of stacking price/old-price on separate
-           * lines with no % shown, which took up extra vertical space).
-           */}
-          <div className="lux-card-price">
-            <strong>₹{product.price.toLocaleString("en-IN")}</strong>
-            {showDiscountPrice && hasDiscount && (
-              <del>₹{product.oldPrice.toLocaleString("en-IN")}</del>
-            )}
-            {showDiscountPrice && hasDiscount && (
-              <span className="lux-card-discount">
-                {Math.round(((product.oldPrice - product.price) / product.oldPrice) * 100)}% OFF
-              </span>
-            )}
-          </div>
-        </div>
 
         {/*
          * Mira & Moss-style "ADD TO BAG" - a plain outlined button sitting
@@ -2758,20 +2757,6 @@ function App() {
     if (!product) return;
     const query = color ? `?color=${encodeURIComponent(color)}` : "";
     navigate(`/product/${product.id}${query}`);
-  }
-
-  /*
-   * "Back" on the product page - goes back in history when there is
-   * somewhere to go back to (the normal case: came from the grid,
-   * search, a related product, etc.), otherwise falls back to the
-   * homepage (e.g. someone opened a shared product link directly).
-   */
-  function goBackFromProduct() {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-    } else {
-      navigate("/");
-    }
   }
 
   /*
@@ -4779,15 +4764,7 @@ function App() {
       )}
 
       {isProductPage && selectedProduct && (
-        <div className="lux-product-page-wrap">
-          <button
-            type="button"
-            className="lux-product-back"
-            onClick={goBackFromProduct}
-          >
-            ← Back
-          </button>
-
+        <div className="lux-product-page-wrap lux-pdp">
           <nav className="lux-breadcrumb lux-product-breadcrumb" aria-label="Breadcrumb">
             <a href="/" onClick={(event) => handleSeoLinkClick(event, () => goToCategory("All"))}>
               Home
@@ -4806,37 +4783,31 @@ function App() {
                 <span aria-hidden="true">/</span>
               </>
             )}
-            <span aria-current="page">{selectedProduct.name}</span>
+            <span aria-current="page">{getDisplayName(selectedProduct, detailColor)}</span>
           </nav>
 
           <div className="lux-product-page">
-            <button
-              type="button"
-              className={`lux-product-wishlist${
-                isWishlisted(selectedProduct.id) ? " active" : ""
-              }`}
-              onClick={() => toggleWishlist(selectedProduct)}
-              aria-label={
-                isWishlisted(selectedProduct.id)
-                  ? "Remove from wishlist"
-                  : "Add to wishlist"
-              }
-            >
-              {isWishlisted(selectedProduct.id) ? "♥" : "♡"}
-            </button>
-
+            {/*
+             * PRODUCT GALLERY (redesigned 2026-10-06)
+             * Full-width photo with no white frame around it, sale badge
+             * top-left, wishlist heart top-right, and a strip of small
+             * thumbnails underneath (tap one to show it big) instead of
+             * the old dots / "01 / 05" counter / "Swipe to explore" label.
+             */}
             <section className="lux-gallery">
               {(() => {
                 const images = getDisplayImages(selectedProduct, detailColor);
+                const isSoldOut = Number(selectedProduct.stock || 0) <= 0;
+                const hasDiscount = selectedProduct.oldPrice > selectedProduct.price;
 
                 return (
-                  <div
-                    className="lux-gallery-stage"
-                    onTouchStart={handleGalleryTouchStart}
-                    onTouchEnd={handleGalleryTouchEnd}
-                  >
-                    {images.length > 0 ? (
-                      <>
+                  <>
+                    <div
+                      className="lux-gallery-stage"
+                      onTouchStart={handleGalleryTouchStart}
+                      onTouchEnd={handleGalleryTouchEnd}
+                    >
+                      {images.length > 0 ? (
                         <div className="lux-main-image">
                           <img
                             key={selectedImage}
@@ -4849,67 +4820,85 @@ function App() {
                             onError={handleImageFallback}
                           />
                         </div>
-
-                        {images.length > 1 && (
-                          <>
-                            <button
-                              type="button"
-                              className="lux-gallery-arrow lux-gallery-prev"
-                              onClick={() => changeProductImage("prev")}
-                              aria-label="Previous image"
-                            >
-                              <span>‹</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              className="lux-gallery-arrow lux-gallery-next"
-                              onClick={() => changeProductImage("next")}
-                              aria-label="Next image"
-                            >
-                              <span>›</span>
-                            </button>
-                          </>
-                        )}
-
-                        <div className="lux-gallery-counter">
-                          {String(selectedImageIndex + 1).padStart(2, "0")}
-                          <span>/</span>
-                          {String(images.length).padStart(2, "0")}
+                      ) : (
+                        <div className="lux-image-empty">
+                          <span>SHRIMOH</span>
                         </div>
+                      )}
 
-                        {images.length > 1 && (
-                          <div className="lux-gallery-dots">
-                            {images.map((image, index) => (
-                              <button
-                                type="button"
-                                key={`${image}-${index}`}
-                                className={index === selectedImageIndex ? "active" : ""}
-                                onClick={() => selectProductImage(index)}
-                                aria-label={`Image ${index + 1}`}
-                              />
-                            ))}
-                          </div>
-                        )}
+                      {isSoldOut ? (
+                        <div className="lux-pdp-badge">Sold out</div>
+                      ) : (
+                        hasDiscount && <div className="lux-pdp-badge">Sale</div>
+                      )}
 
-                        <div className="lux-gallery-brand">SHRIMOH</div>
-                        <div className="lux-gallery-swipe-label">SWIPE TO EXPLORE</div>
-                      </>
-                    ) : (
-                      <div className="lux-image-empty">
-                        <span>SHRIMOH</span>
+                      <button
+                        type="button"
+                        className={`lux-product-wishlist${
+                          isWishlisted(selectedProduct.id) ? " active" : ""
+                        }`}
+                        onClick={() => toggleWishlist(selectedProduct)}
+                        aria-label={
+                          isWishlisted(selectedProduct.id)
+                            ? "Remove from wishlist"
+                            : "Add to wishlist"
+                        }
+                      >
+                        <LuxIcon name="heart" size={20} filled={isWishlisted(selectedProduct.id)} />
+                      </button>
+
+                      {images.length > 1 && (
+                        <>
+                          <button
+                            type="button"
+                            className="lux-gallery-arrow lux-gallery-prev"
+                            onClick={() => changeProductImage("prev")}
+                            aria-label="Previous image"
+                          >
+                            <LuxIcon name="chevron-left" size={18} />
+                          </button>
+
+                          <button
+                            type="button"
+                            className="lux-gallery-arrow lux-gallery-next"
+                            onClick={() => changeProductImage("next")}
+                            aria-label="Next image"
+                          >
+                            <LuxIcon name="chevron-right" size={18} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {images.length > 1 && (
+                      <div className="lux-pdp-thumbs" role="list">
+                        {images.map((image, index) => (
+                          <button
+                            type="button"
+                            role="listitem"
+                            key={`${image}-${index}`}
+                            className={`lux-pdp-thumb${index === selectedImageIndex ? " active" : ""}`}
+                            onClick={() => selectProductImage(index)}
+                            aria-label={`Show photo ${index + 1} of ${images.length}`}
+                            aria-current={index === selectedImageIndex ? "true" : undefined}
+                          >
+                            <img
+                              src={withImageWidth(image, 200)}
+                              alt=""
+                              loading="lazy"
+                              decoding="async"
+                              draggable="false"
+                            />
+                          </button>
+                        ))}
                       </div>
                     )}
-                  </div>
+                  </>
                 );
               })()}
             </section>
 
             <section className="lux-product-info">
-              <div className="lux-product-eyebrow">
-                {selectedProduct.category || "SHRIMOH COLLECTION"}
-              </div>
-
               <h1 className="lux-product-title lux-variant-fade" key={`title-${detailColor}`}>
                 {getDisplayName(selectedProduct, detailColor)}
               </h1>
@@ -4937,15 +4926,15 @@ function App() {
                 )}
               </div>
 
-              <p className="lux-price-note">Tax included · Free delivery on all orders</p>
+              <p className="lux-price-note">Inclusive of all taxes</p>
 
               {Array.isArray(selectedProduct.colors) && selectedProduct.colors.length > 1 && (
                 <div className="lux-color-section">
                   <span className="lux-option-label">
-                    COLOR{detailColor ? `: ${detailColor}` : ""}
+                    Color{detailColor ? `: ${detailColor}` : ""}
                   </span>
 
-                  <div className="lux-color-swatches">
+                  <div className="lux-pdp-colors">
                     {selectedProduct.colors.map((color) => {
                       const colorPhotos = selectedProduct.colorImages?.[color];
                       const photo = Array.isArray(colorPhotos) ? colorPhotos[0] : colorPhotos;
@@ -4954,36 +4943,43 @@ function App() {
                         <button
                           key={color}
                           type="button"
-                          className={`lux-color-swatch${
-                            detailColor === color ? " active" : ""
-                          }${photo ? " has-photo" : ""}`}
-                          style={
-                            photo
-                              ? { backgroundImage: `url(${getImageUrl(photo, 80)})` }
-                              : { backgroundColor: colorToCss(color) }
-                          }
+                          className={`lux-pdp-color${detailColor === color ? " active" : ""}`}
                           onClick={() => selectDetailColor(color)}
                           aria-label={color}
                           aria-pressed={detailColor === color}
-                          title={color}
-                        />
+                        >
+                          <span
+                            className="lux-pdp-color-photo"
+                            style={
+                              photo
+                                ? { backgroundImage: `url(${getImageUrl(photo, 200)})` }
+                                : { backgroundColor: colorToCss(color) }
+                            }
+                          />
+                          <span className="lux-pdp-color-name">{color}</span>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
               )}
 
-              <div className="lux-divider" />
+              <ul className="lux-pdp-perks">
+                <li>
+                  <LuxIcon name="box" size={22} />
+                  <span>Free delivery<br />across India</span>
+                </li>
+                <li>
+                  <LuxIcon name="refresh" size={22} />
+                  <span>7-day easy<br />returns</span>
+                </li>
+                <li>
+                  <LuxIcon name="lock" size={22} />
+                  <span>Secure payment<br />via Razorpay</span>
+                </li>
+              </ul>
 
-              {selectedProduct.description && (
-                <div className="lux-description">
-                  <p>{selectedProduct.description}</p>
-                </div>
-              )}
-
-              <div className="lux-quantity-section">
-                <span className="lux-option-label">QUANTITY</span>
-
+              <div className="lux-pdp-buy">
                 <div className="lux-quantity">
                   <button
                     type="button"
@@ -4993,7 +4989,7 @@ function App() {
                     −
                   </button>
 
-                  <span>{detailQuantity}</span>
+                  <span aria-live="polite">{detailQuantity}</span>
 
                   <button
                     type="button"
@@ -5007,9 +5003,7 @@ function App() {
                     +
                   </button>
                 </div>
-              </div>
 
-              <div className="lux-product-actions">
                 <button
                   type="button"
                   className="lux-add-button"
@@ -5019,8 +5013,8 @@ function App() {
                     setCartOpen(true);
                   }}
                 >
-                  ADD TO BAG
-                  <span>→</span>
+                  <LuxIcon name="bag" size={18} />
+                  {Number(selectedProduct.stock || 0) <= 0 ? "Sold out" : "Add to bag"}
                 </button>
 
                 <button
@@ -5029,7 +5023,7 @@ function App() {
                   disabled={Number(selectedProduct.stock || 0) <= 0}
                   onClick={buyNow}
                 >
-                  BUY NOW
+                  Buy it now
                 </button>
               </div>
 
@@ -5044,32 +5038,11 @@ function App() {
                 </div>
               )}
 
-              <div className="lux-service-list">
-                <div className="lux-service-item">
-                  <span>01</span>
-                  <div>
-                    <strong>PREMIUM QUALITY</strong>
-                    <p>Carefully selected materials and refined finishing.</p>
-                  </div>
+              {selectedProduct.description && (
+                <div className="lux-description">
+                  <p>{selectedProduct.description}</p>
                 </div>
-
-                <div className="lux-service-item">
-                  <span>02</span>
-                  <div>
-                    <strong>FREE DELIVERY</strong>
-                    <p>On all orders, every time.</p>
-                  </div>
-                </div>
-
-                <div className="lux-service-item">
-                  <span>03</span>
-                  <div>
-                    <strong>SECURE SHOPPING</strong>
-                    <p>Safe and secure checkout.</p>
-                  </div>
-                </div>
-              </div>
-
+              )}
               <div className="lux-details">
                 <details open>
                   <summary>
@@ -5078,10 +5051,9 @@ function App() {
                   </summary>
 
                   <div className="lux-details-content">
-                    <p>
-                      {selectedProduct.description ||
-                        "A refined SHRIMOH piece designed for everyday elegance."}
-                    </p>
+                    {!selectedProduct.description && (
+                      <p>A refined SHRIMOH piece designed for everyday elegance.</p>
+                    )}
 
                     {Array.isArray(selectedProduct.keyFeatures) && selectedProduct.keyFeatures.length > 0 && (
                       <ul className="lux-key-features">
@@ -5131,8 +5103,14 @@ function App() {
                   </summary>
 
                   <div className="lux-details-content">
-                    <p>Free delivery is available on all orders.</p>
-                    <p>Orders are securely packed and processed with care.</p>
+                    <p>
+                      Free delivery on all orders. Orders are packed and dispatched within 1-3
+                      business days and usually arrive in 5-9 business days.
+                    </p>
+                    <p>
+                      Not the right fit? Request a return or exchange within 7 days of delivery
+                      (unused, with original packaging and tags).
+                    </p>
                   </div>
                 </details>
 

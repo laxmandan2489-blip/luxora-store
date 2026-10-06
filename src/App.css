@@ -7173,3 +7173,635 @@ a.lux-logo {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* =========================================================
+   PRODUCT PHOTOS WITHOUT A WHITE FRAME (2026-10-06)
+   Product photos are shot on pure white. On the ivory page that
+   white showed up as a visible box/border around every photo.
+   The photo tile now uses one soft "studio" tone and the photo is
+   multiplied onto it, so the photo's white background takes the
+   tile's tone and the bag looks like it sits directly on the page.
+   Lifestyle photos are unaffected (multiply over a near-white
+   tone barely changes real colours).
+========================================================= */
+
+:root {
+  --lux-studio: #efebe4;
+}
+
+.lux-card-image {
+  background: var(--lux-studio);
+}
+
+.lux-card-image img {
+  padding: 4%;
+  mix-blend-mode: multiply;
+}
+
+@media (max-width: 640px) {
+  .lux-card-image img {
+    padding: 4%;
+  }
+}
+
+/* =========================================================
+   PRODUCT PAGE (redesigned 2026-10-06)
+   Big edge-to-edge photo, thumbnail strip, then name, price,
+   colour tiles, three perks, quantity + Add to bag on one row,
+   Buy it now underneath. Everything is scoped under ".lux-pdp"
+   so it overrides the older product-page rules above without
+   touching any other page.
+========================================================= */
+
+.lux-pdp.lux-product-page-wrap {
+  width: min(1240px, 100%);
+  padding: 22px 32px 10px;
+}
+
+.lux-pdp .lux-product-breadcrumb {
+  padding: 0 0 18px;
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.lux-pdp .lux-breadcrumb a {
+  text-decoration: none;
+}
+
+.lux-pdp .lux-product-page {
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 48px;
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+/* ---- gallery ---- */
+
+.lux-pdp .lux-gallery {
+  height: auto;
+  background: transparent;
+  overflow: visible;
+}
+
+.lux-pdp .lux-gallery-stage {
+  height: auto;
+  aspect-ratio: 1 / 1;
+  background: var(--lux-studio);
+  overflow: hidden;
+}
+
+.lux-pdp .lux-main-image {
+  width: 100%;
+  height: 100%;
+}
+
+.lux-pdp .lux-main-image img {
+  padding: 0;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.lux-pdp .lux-main-image:hover img {
+  transform: none;
+}
+
+.lux-pdp-badge {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 3;
+  padding: 7px 14px;
+  background: var(--lux-dark);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+}
+
+.lux-pdp .lux-product-wishlist {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  left: auto;
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--lux-text);
+  box-shadow: none;
+}
+
+.lux-pdp .lux-product-wishlist.active {
+  color: #c23a2c;
+}
+
+.lux-pdp .lux-gallery-arrow {
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--lux-line);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--lux-text);
+  box-shadow: none;
+  font-size: 0;
+}
+
+.lux-pdp .lux-gallery-prev {
+  left: 12px;
+}
+
+.lux-pdp .lux-gallery-next {
+  right: 12px;
+}
+
+.lux-pdp-thumbs {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.lux-pdp-thumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.lux-pdp-thumb {
+  flex: 0 0 auto;
+  width: 84px;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  border: 1px solid transparent;
+  background: var(--lux-studio);
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s ease, border-color 0.2s ease;
+}
+
+.lux-pdp-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+
+.lux-pdp-thumb:hover,
+.lux-pdp-thumb.active {
+  opacity: 1;
+}
+
+.lux-pdp-thumb.active {
+  border-color: var(--lux-text);
+}
+
+/* ---- info column ---- */
+
+.lux-pdp .lux-product-info {
+  padding: 4px 0 40px;
+  background: transparent;
+}
+
+.lux-pdp .lux-product-title {
+  margin: 0;
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: -0.3px;
+}
+
+.lux-pdp .lux-price-row {
+  margin-top: 16px;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.lux-pdp .lux-current-price {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+.lux-pdp .lux-old-price {
+  color: #9a958c;
+  font-size: 16px;
+}
+
+.lux-pdp .lux-discount {
+  padding: 0;
+  background: none;
+  color: #c23a2c;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.lux-pdp .lux-price-note {
+  margin-top: 6px;
+  color: var(--lux-muted);
+  font-size: 13px;
+}
+
+.lux-pdp .lux-color-section {
+  margin-top: 24px;
+}
+
+.lux-pdp .lux-option-label {
+  display: block;
+  color: var(--lux-text);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+
+.lux-pdp-colors {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.lux-pdp-color {
+  width: 84px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--lux-line);
+  background: #fff;
+  cursor: pointer;
+}
+
+.lux-pdp-color.active {
+  border-color: var(--lux-text);
+}
+
+.lux-pdp-color-photo {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background-color: var(--lux-studio);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-blend-mode: multiply;
+}
+
+.lux-pdp-color-name {
+  padding: 5px 4px;
+  border-top: 1px solid var(--lux-line);
+  color: var(--lux-text);
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lux-pdp-perks {
+  margin: 24px 0 0;
+  padding: 18px 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  list-style: none;
+  background: var(--lux-soft);
+}
+
+.lux-pdp-perks li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--lux-text);
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.lux-pdp-buy {
+  margin-top: 20px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+}
+
+.lux-pdp .lux-quantity {
+  height: 54px;
+  border: 1px solid var(--lux-line-dark);
+  background: #fff;
+}
+
+.lux-pdp .lux-quantity button {
+  width: 44px;
+  height: 52px;
+  font-size: 20px;
+}
+
+.lux-pdp .lux-quantity button:hover {
+  background: var(--lux-soft);
+}
+
+.lux-pdp .lux-quantity span {
+  min-width: 30px;
+  font-size: 16px;
+}
+
+.lux-pdp .lux-add-button,
+.lux-pdp .lux-buy-button {
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+.lux-pdp .lux-add-button {
+  border-color: var(--lux-dark);
+  background: var(--lux-dark);
+}
+
+.lux-pdp .lux-buy-button {
+  grid-column: 1 / -1;
+  border-color: var(--lux-dark);
+}
+
+.lux-pdp .lux-add-button:hover {
+  background: var(--lux-dark-2);
+  transform: none;
+}
+
+.lux-pdp .lux-buy-button:hover {
+  background: var(--lux-dark);
+  color: #fff;
+  transform: none;
+}
+
+.lux-pdp .lux-trust-signals {
+  margin-top: 16px;
+}
+
+.lux-pdp .lux-trust-badge {
+  font-size: 11px;
+}
+
+.lux-pdp .lux-description {
+  margin-top: 24px;
+}
+
+.lux-pdp .lux-description p {
+  color: var(--lux-text);
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.lux-pdp .lux-details {
+  margin-top: 24px;
+}
+
+.lux-pdp .lux-details summary {
+  font-size: 13px;
+}
+
+@media (min-width: 901px) {
+  .lux-pdp .lux-product-info {
+    position: sticky;
+    top: 110px;
+  }
+}
+
+@media (max-width: 900px) {
+  .lux-pdp.lux-product-page-wrap {
+    width: 100%;
+    padding: 0 0 10px;
+  }
+
+  .lux-pdp .lux-product-breadcrumb {
+    padding: 12px 16px;
+    font-size: 10.5px;
+    border-bottom: 1px solid var(--lux-line);
+  }
+
+  .lux-pdp .lux-product-page {
+    display: block;
+  }
+
+  .lux-pdp .lux-gallery,
+  .lux-pdp .lux-gallery-stage {
+    width: 100%;
+    min-height: 0;
+  }
+
+  .lux-pdp .lux-gallery-stage {
+    aspect-ratio: 4 / 5;
+  }
+
+  .lux-pdp-thumbs {
+    margin-top: 0;
+    padding: 10px 16px;
+    background: var(--lux-studio);
+  }
+
+  .lux-pdp-thumb {
+    width: 72px;
+    background: #fff;
+    border-color: var(--lux-line);
+  }
+
+  .lux-pdp-thumb.active {
+    border-color: var(--lux-text);
+  }
+
+  .lux-pdp .lux-product-info {
+    padding: 22px 16px 40px;
+  }
+
+  .lux-pdp .lux-product-title {
+    font-size: 26px;
+  }
+
+  .lux-pdp .lux-current-price {
+    font-size: 24px;
+  }
+
+  .lux-pdp .lux-related-section {
+    padding: 0 16px;
+  }
+}
+
+@media (max-width: 360px) {
+  .lux-pdp-perks li {
+    font-size: 11px;
+  }
+
+  .lux-pdp .lux-add-button,
+  .lux-pdp .lux-buy-button {
+    font-size: 12.5px;
+    letter-spacing: 1.2px;
+  }
+}
+
+/* Product page: details accordion + spec table (2026-10-06) */
+.lux-pdp .lux-details summary {
+  padding: 18px 0;
+  color: var(--lux-text);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+}
+
+.lux-pdp .lux-key-features li {
+  color: var(--lux-text);
+  font-size: 14px;
+}
+
+.lux-pdp .lux-details-content p {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.lux-pdp .lux-specs {
+  margin-top: 12px;
+  display: block;
+  border-top: 1px solid var(--lux-line);
+}
+
+.lux-pdp .lux-specs div {
+  padding: 11px 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  background: none;
+  border-bottom: 1px solid var(--lux-line);
+}
+
+.lux-pdp .lux-specs span {
+  flex: 0 0 auto;
+  color: var(--lux-muted);
+  font-size: 13px;
+}
+
+.lux-pdp .lux-specs strong {
+  margin: 0;
+  color: var(--lux-text);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: right;
+}
+
+/* =========================================================
+   PRODUCT CARDS, clean look (2026-10-06)
+   Tall photo tile with no frame, plain heart icon, no SALE tag
+   (the red "% OFF" under the name already says it), name, price
+   row, then round colour dots and the Add to bag button.
+========================================================= */
+
+.lux-product-card .lux-card-image {
+  aspect-ratio: 0.72;
+}
+
+.lux-product-card .lux-card-image img {
+  padding: 6%;
+}
+
+.lux-product-card .lux-wishlist-heart {
+  top: 10px;
+  right: 10px;
+  width: 38px;
+  height: 38px;
+  background: transparent;
+  color: var(--lux-text);
+}
+
+.lux-product-card .lux-wishlist-heart.active {
+  background: transparent;
+  color: #c23a2c;
+}
+
+.lux-product-card .lux-card-info {
+  padding-top: 14px;
+  display: block;
+}
+
+.lux-product-card .lux-card-info h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.lux-product-card .lux-card-price {
+  margin-top: 8px;
+  justify-content: flex-start;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lux-product-card .lux-card-price strong {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.lux-product-card .lux-card-price del {
+  color: #9a958c;
+  font-size: 13px;
+}
+
+.lux-product-card .lux-card-discount {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.lux-product-card .lux-card-swatches {
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.lux-product-card .lux-card-swatch {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--lux-line-dark);
+  border-radius: 50%;
+  background-color: var(--lux-studio);
+  background-size: cover;
+}
+
+.lux-product-card .lux-card-swatch.active {
+  border: 1px solid var(--lux-text);
+  box-shadow: 0 0 0 2px var(--lux-bg), 0 0 0 3px var(--lux-text);
+}
+
+@media (max-width: 640px) {
+  .lux-product-card .lux-card-info h3 {
+    font-size: 14.5px;
+  }
+
+  .lux-product-card .lux-card-price strong {
+    font-size: 14px;
+  }
+
+  .lux-product-card .lux-card-price del,
+  .lux-product-card .lux-card-discount {
+    font-size: 12px;
+  }
+
+  .lux-product-card .lux-card-add-mobile {
+    padding: 12px 8px;
+    font-size: 11px;
+    letter-spacing: 1.6px;
+  }
+}
