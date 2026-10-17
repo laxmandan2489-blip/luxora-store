@@ -9,7 +9,7 @@
           "value": "luxora-store-phi.vercel.app"
         }
       ],
-      "destination": "https://shrimoh-store-phi.vercel.app/:path*",
+      "destination": "https://shrimoh.vercel.app/:path*",
       "permanent": true
     },
     {
