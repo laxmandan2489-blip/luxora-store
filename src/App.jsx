@@ -489,12 +489,24 @@ const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp bu
  */
 const COD_AVAILABLE = false;
 
+/*
+ * The product page already shows a fixed box with Free delivery,
+ * 5-day easy returns and Secure payment. Any badge typed into a product
+ * in Admin that repeats delivery / returns / payment (or promises a
+ * warranty) is hidden, so nothing is said twice or with a different
+ * number of days.
+ */
+const DUPLICATE_TRUST_SIGNAL =
+  /deliver|shipping|return|exchange|refund|payment|secure|razorpay|warrant|guarantee/i;
+
 function visibleTrustSignals(signals) {
   if (!Array.isArray(signals)) return [];
-  return signals.filter(
-    (signal) =>
-      COD_AVAILABLE || !/cash\s*on\s*delivery|\bcod\b/i.test(String(signal || ""))
-  );
+  return signals.filter((signal) => {
+    const text = String(signal || "");
+    if (!text.trim()) return false;
+    if (!COD_AVAILABLE && /cash\s*on\s*delivery|\bcod\b/i.test(text)) return false;
+    return !DUPLICATE_TRUST_SIGNAL.test(text);
+  });
 }
 
 const NEW_CUSTOMER_OFFER_CODE = "NEW15";
