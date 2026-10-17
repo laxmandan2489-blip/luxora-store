@@ -592,6 +592,16 @@ const INFO_PAGES = {
             <span>SUPPORT HOURS</span>
             <p>Monday - Saturday, 10:00 AM - 6:00 PM IST</p>
           </div>
+          <div>
+            <span>ADDRESS</span>
+            <p>
+              Shrimoh Craft
+              <br />
+              Kudi Bhagtasni, Sector 4
+              <br />
+              Jodhpur, Rajasthan, India
+            </p>
+          </div>
         </div>
         <p>We typically reply within 24 hours on business days.</p>
       </>

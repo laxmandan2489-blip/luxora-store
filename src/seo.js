@@ -217,6 +217,13 @@ export function organizationJsonLd() {
     logo: LOGO_URL,
     email: SUPPORT_EMAIL,
     alternateName: ["Shrimoh", "Shreemo", "Shrimo", "श्रीमो"],
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "Shrimoh Craft, Kudi Bhagtasni, Sector 4",
+      addressLocality: "Jodhpur",
+      addressRegion: "Rajasthan",
+      addressCountry: "IN",
+    },
   };
 }
 
