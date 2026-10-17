@@ -20,7 +20,7 @@ import { ACCESSORY_CATEGORIES, BAG_CATEGORIES, PRODUCT_CATEGORIES } from "./cate
 // Canonicals, sitemap.xml, robots.txt, Open Graph and JSON-LD are
 // all built from this one value.
 // ============================================================
-export const SITE_URL = "https://shrimoh-store-phi.vercel.app";
+export const SITE_URL = "https://shrimoh.vercel.app";
 export const BRAND = "SHRIMOH";
 export const API_URL = "https://luxora-store-mkva.onrender.com";
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/og-image.png`;
@@ -216,6 +216,7 @@ export function organizationJsonLd() {
     url: `${SITE_URL}/`,
     logo: LOGO_URL,
     email: SUPPORT_EMAIL,
+    alternateName: ["Shrimoh", "Shreemo", "Shrimo", "श्रीमो"],
   };
 }
 
