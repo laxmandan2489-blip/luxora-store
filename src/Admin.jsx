@@ -1722,7 +1722,7 @@ function Admin() {
         "32cm (W) x 28cm (H) x 12cm (D)",
         "Top-grain genuine leather, brass-tone hardware",
         "Wipe with a soft dry cloth. Avoid water & direct sunlight. Store in the dust bag when not in use.",
-        "100% Genuine Leather|7-Day Easy Returns|1-Year Warranty",
+        "100% Genuine Leather|5-Day Easy Returns|Free Delivery",
         "",
         "",
         "",
@@ -1744,7 +1744,7 @@ function Admin() {
         "24cm (W) x 20cm (H) x 8cm (D)",
         "Durable canvas fabric, matte gold hardware",
         "Spot clean with a damp cloth. Do not machine wash.",
-        "7-Day Easy Returns",
+        "5-Day Easy Returns",
         "AliExpress Seller XYZ",
         "800",
         "40",
@@ -5572,7 +5572,7 @@ function Admin() {
                       rows="3"
                       value={trustSignals}
                       onChange={(event) => setTrustSignals(event.target.value)}
-                      placeholder={"100% Genuine Leather\n7-Day Easy Returns\n1-Year Warranty"}
+                      placeholder={"100% Genuine Leather\n5-Day Easy Returns\nFree Delivery"}
                     />
                   </div>
 
@@ -6893,7 +6893,7 @@ function Admin() {
                     rows="3"
                     value={editTrustSignals}
                     onChange={(event) => setEditTrustSignals(event.target.value)}
-                    placeholder={"100% Genuine Leather\n7-Day Easy Returns\n1-Year Warranty"}
+                    placeholder={"100% Genuine Leather\n5-Day Easy Returns\nFree Delivery"}
                   />
                 </div>
 

@@ -537,7 +537,7 @@ const INFO_PAGES = {
 
           <div>
             <span>↺</span>
-            <strong>EASY 7-DAY RETURNS</strong>
+            <strong>EASY 5-DAY RETURNS</strong>
             <p>Not the right fit? Send it back, hassle-free.</p>
           </div>
 
@@ -638,7 +638,7 @@ const INFO_PAGES = {
       <>
         <p>
           We want you to love what you ordered. If something isn't right, you can request a
-          return or exchange within <strong>7 days</strong> of delivery.
+          return or exchange within <strong>5 days</strong> of delivery.
         </p>
         <p>
           To be eligible, the item must be unused, in its original packaging, with all tags
@@ -4738,7 +4738,7 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="refresh" size={26} />
           </span>
-          <strong>Easy 7-Day Returns</strong>
+          <strong>Easy 5-Day Returns</strong>
           <p>Not the right fit? Send it back, hassle-free.</p>
         </div>
 
@@ -4983,7 +4983,7 @@ function App() {
                 </li>
                 <li>
                   <LuxIcon name="refresh" size={22} />
-                  <span>7-day easy<br />returns</span>
+                  <span>5-day easy<br />returns</span>
                 </li>
                 <li>
                   <LuxIcon name="lock" size={22} />
@@ -5120,7 +5120,7 @@ function App() {
                       business days and usually arrive in 5-9 business days.
                     </p>
                     <p>
-                      Not the right fit? Request a return or exchange within 7 days of delivery
+                      Not the right fit? Request a return or exchange within 5 days of delivery
                       (unused, with original packaging and tags).
                     </p>
                   </div>
