@@ -4046,23 +4046,8 @@ function App() {
 
           {heroImages.length > 1 && (
             <>
-              <button
-                type="button"
-                className="lux-hero-arrow lux-hero-arrow-prev"
-                aria-label="Previous slide"
-                onClick={() => goToHeroSlide(-1)}
-              >
-                ←
-              </button>
-              <button
-                type="button"
-                className="lux-hero-arrow lux-hero-arrow-next"
-                aria-label="Next slide"
-                onClick={() => goToHeroSlide(1)}
-              >
-                →
-              </button>
-
+              {/* Prev/next arrow buttons removed on purpose - slides change
+                  automatically and the dots below still let visitors pick one. */}
               <div className="lux-hero-dots">
                 {heroImages.map((image, index) => (
                   <button
