@@ -419,7 +419,7 @@ async function sendShippingUpdateEmail({
 
 const ORDER_STATUSES = ["Received", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
 const PAYMENT_STATUSES = ["Pending", "Paid", "Failed", "Refunded"];
-const PAYMENT_METHODS = ["Razorpay", "COD"];
+const PAYMENT_METHODS = ["Razorpay"]; // prepaid only - COD switched off
 const STORAGE_BUCKET = "product-images";
 
 const allowedOrigins = [
@@ -2835,6 +2835,31 @@ app.post("/api/orders", async function (req, res) {
 
       if (duplicatePayment) {
         return res.status(409).json({ success: false, message: "This payment has already been used for an order." });
+      }
+
+      // Security: make sure the money actually paid matches THIS cart's
+      // total, so a cheap payment can never be reused for costly items.
+      const expectedPaise = Math.round(cart.total * 100);
+      let razorpayPayment = null;
+      try {
+        razorpayPayment = await razorpay.payments.fetch(razorpayPaymentId);
+      } catch (fetchError) {
+        console.error("RAZORPAY PAYMENT FETCH ERROR:", fetchError);
+        return res.status(502).json({ success: false, message: "Could not confirm payment with Razorpay. Please contact support with your payment ID." });
+      }
+      if (
+        !razorpayPayment ||
+        razorpayPayment.order_id !== razorpayOrderId ||
+        Number(razorpayPayment.amount) !== expectedPaise ||
+        !["captured", "authorized"].includes(razorpayPayment.status)
+      ) {
+        console.error("RAZORPAY AMOUNT MISMATCH:", {
+          paymentId: razorpayPaymentId,
+          paidPaise: razorpayPayment && razorpayPayment.amount,
+          expectedPaise,
+          status: razorpayPayment && razorpayPayment.status
+        });
+        return res.status(400).json({ success: false, message: "Payment amount does not match the order total." });
       }
 
       paymentStatus = "Paid";
