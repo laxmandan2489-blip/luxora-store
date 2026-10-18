@@ -2195,7 +2195,18 @@ function App() {
 
   const featuredTabProducts = useMemo(() => {
     if (featuredTab === "Featured") {
-      return (bestsellers.length > 0 ? bestsellers : newArrivals).slice(0, 8);
+      // Real bestsellers first, then topped up with the newest products
+      // so the row is always full (not just the 1-2 bags sold so far).
+      const seen = new Set();
+      const merged = [];
+      for (const product of [...bestsellers, ...newArrivals, ...products]) {
+        const key = String(product.id);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        merged.push(product);
+        if (merged.length >= 8) break;
+      }
+      return merged;
     }
     return products.filter((product) => product.category === featuredTab).slice(0, 8);
   }, [featuredTab, bestsellers, newArrivals, products]);
@@ -4613,9 +4624,6 @@ function App() {
                 )}
                 <div className="lux-category-tile-label">
                   <strong>Shop {entry.category}</strong>
-                  {entry.count !== null && (
-                    <small>{entry.count} {entry.count === 1 ? "piece" : "pieces"}</small>
-                  )}
                 </div>
               </button>
             ))}
@@ -4724,9 +4732,6 @@ function App() {
       <section className="lux-collection-intro" id="lux-products">
         <h2>{listingTitle}</h2>
         <p>{listingCopy.description}</p>
-        <span>
-          {filteredProducts.length} {filteredProducts.length === 1 ? "piece" : "pieces"}
-        </span>
       </section>
 
       {shopByCategoryTiles.length > 1 && (

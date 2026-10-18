@@ -7872,3 +7872,103 @@ a.lux-logo {
   height: 36px;
   background: rgba(255, 255, 255, 0.82);
 }
+
+
+/* =========================================================
+   2026-10-18 OWNER REQUESTS
+========================================================= */
+
+/* Desktop: Miraggio-style "Add to Bag" row that appears under the
+   price when the mouse is over a product card (replaces the dark bar
+   that used to sit on top of the photo). Space is reserved so the
+   grid never jumps. Phones keep the always-visible button. */
+@media (hover: hover) and (pointer: fine) and (min-width: 651px) {
+  .lux-card-overlay {
+    display: none;
+  }
+
+  .lux-product-card {
+    transition: background 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .lux-product-card:hover {
+    background: #ffffff;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+  }
+
+  .lux-card-info,
+  .lux-card-swatches {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .lux-card-add-mobile {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 12px 10px;
+    border: 0;
+    border-top: 1px solid #ece6dc;
+    background: #ffffff;
+    color: var(--lux-dark);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.25s ease, background 0.2s ease, color 0.2s ease;
+  }
+
+  .lux-product-card:hover .lux-card-add-mobile {
+    opacity: 1;
+  }
+
+  .lux-card-add-mobile:hover:not(:disabled) {
+    background: var(--lux-dark);
+    color: #ffffff;
+  }
+
+  .lux-card-add-mobile:disabled {
+    cursor: not-allowed;
+  }
+
+  .lux-product-card:hover .lux-card-add-mobile:disabled {
+    opacity: 0.45;
+  }
+}
+
+/* Laptop/desktop: "Shop by categories" tiles grow to fill the whole
+   row (no big empty gap on the right); centred when there are few. */
+@media (min-width: 900px) {
+  .lux-shop-cats-row {
+    gap: 16px;
+  }
+
+  /* auto margins centre the tiles but never hide the first ones when
+     there are more tiles than fit (unlike justify-content: center) */
+  .lux-shop-cat:first-child {
+    margin-left: auto;
+  }
+
+  .lux-shop-cat:last-child {
+    margin-right: auto;
+  }
+
+  .lux-shop-cat {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 150px;
+    max-width: 240px;
+  }
+
+  .lux-shop-cat-name {
+    font-size: 14px;
+  }
+
+  .lux-shop-cats-arrow {
+    top: 42%;
+  }
+}
