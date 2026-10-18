@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
+import { pixelContents, pixelItemId, trackPixel } from "./metaPixel";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
 import {
   BAG_CATEGORIES,
@@ -2979,6 +2980,46 @@ function App() {
   );
 
   /* =========================================================
+     META PIXEL EVENTS (see src/metaPixel.js)
+  ========================================================= */
+
+  // PageView on every page change (the site is one app, so the
+  // browser never reloads between pages).
+  useEffect(() => {
+    trackPixel("PageView");
+  }, [location.pathname, location.search]);
+
+  // ViewContent when a product page (or another color of it) opens.
+  const viewedProductId = selectedProduct ? selectedProduct.id : null;
+  useEffect(() => {
+    if (!selectedProduct) return;
+    trackPixel("ViewContent", {
+      content_ids: [pixelItemId(selectedProduct, detailColor)],
+      content_type: "product",
+      content_name: getDisplayName(selectedProduct, detailColor),
+      content_category: selectedProduct.category || "Bags",
+      value: Number(selectedProduct.price || 0),
+      currency: "INR",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewedProductId, detailColor]);
+
+  // InitiateCheckout each time the checkout opens.
+  useEffect(() => {
+    if (!checkoutOpen || !checkoutItems.length) return;
+    const contents = pixelContents(checkoutItems);
+    trackPixel("InitiateCheckout", {
+      content_ids: contents.map((item) => item.id),
+      contents,
+      content_type: "product",
+      num_items: contents.reduce((total, item) => total + item.quantity, 0),
+      value: checkoutSubtotal,
+      currency: "INR",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutOpen]);
+
+  /* =========================================================
      COUPON: APPLY / REMOVE
   ========================================================= */
 
@@ -3072,6 +3113,14 @@ function App() {
       alert("This product is currently sold out.");
       return;
     }
+
+    trackPixel("AddToCart", {
+      content_ids: [pixelItemId(product, safeColor)],
+      content_type: "product",
+      content_name: displayName,
+      value: Number(product.price || 0) * safeQuantity,
+      currency: "INR",
+    });
 
     setCart((previousCart) => {
       const existingIndex = previousCart.findIndex(
@@ -3464,6 +3513,22 @@ function App() {
 
             setOrderReference(finalReference);
             setOrderPlaced(true);
+
+            {
+              const contents = pixelContents(checkoutItems);
+              trackPixel(
+                "Purchase",
+                {
+                  content_ids: contents.map((item) => item.id),
+                  contents,
+                  content_type: "product",
+                  num_items: contents.reduce((total, item) => total + item.quantity, 0),
+                  value: checkoutGrandTotal,
+                  currency: "INR",
+                },
+                finalReference ? { eventID: `order-${finalReference}` } : undefined
+              );
+            }
 
             // Remember these details on THIS device only, so checkout
             // is pre-filled (still fully editable) next time - see the
