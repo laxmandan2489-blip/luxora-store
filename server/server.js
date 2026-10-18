@@ -2824,6 +2824,229 @@ app.post("/api/create-order", async function (req, res) {
   }
 });
 
+/* =========================================================
+   RAZORPAY MAGIC CHECKOUT
+   One-click checkout: the customer logs in with an OTP inside the
+   Razorpay popup and their saved address is filled in automatically.
+   Razorpay calls the three public endpoints below (set them in the
+   Razorpay Dashboard -> Magic Checkout settings):
+     Shipping info URL:      /api/magic/shipping-info
+     URL for get promotions: /api/magic/promotions
+     URL for apply promotions: /api/magic/apply-promotion
+   After payment, /api/orders (with payment.magic = true) reads the
+   customer's name/address straight from the Razorpay order.
+========================================================= */
+
+// Coupons listed inside the Magic Checkout popup. Any other valid
+// coupon still works if the customer types it in.
+const MAGIC_LISTED_COUPONS = ["NEW15"];
+const MAGIC_SITE_URL = "https://shrimoh.vercel.app";
+
+function magicBody(req) {
+  if (req.body && typeof req.body === "object" && Object.keys(req.body).length) return req.body;
+  return req.query || {};
+}
+
+function magicVariantId(productId, color) {
+  if (!color) return String(productId);
+  const slug = String(color).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `${productId}-${slug || "color"}`;
+}
+
+function couponSummary(coupon) {
+  const value = safeNumber(coupon.discount_value);
+  const min = safeNumber(coupon.min_order_amount);
+  const main = coupon.discount_type === "percentage"
+    ? `${value}% off on your order`
+    : `₹${value.toLocaleString("en-IN")} off on your order`;
+  return {
+    summary: main,
+    description: min > 0 ? `${main} above ₹${min.toLocaleString("en-IN")}` : main
+  };
+}
+
+// Finds the cart value (in rupees, before coupon) of a Magic order
+// from its receipt, which is what Razorpay sends as "order_id".
+async function magicCartValueFromReceipt(receipt) {
+  if (!receipt) return null;
+  try {
+    const list = await razorpay.orders.all({ receipt: String(receipt), count: 1 });
+    const order = list && Array.isArray(list.items) ? list.items[0] : null;
+    if (!order) return null;
+    const paise = safeNumber(order.line_items_total) || safeNumber(order.amount);
+    return paise > 0 ? paise / 100 : null;
+  } catch (error) {
+    console.error("MAGIC RECEIPT LOOKUP ERROR:", error);
+    return null;
+  }
+}
+
+app.post("/api/magic/create-order", async function (req, res) {
+  try {
+    if (!razorpay) {
+      return res.status(500).json({ success: false, message: "Razorpay is not configured on the server." });
+    }
+
+    const cart = await calculateCart(req.body?.items, null);
+
+    const lineItems = cart.items.map(function (item) {
+      const pricePaise = Math.round(item.price * 100);
+      return {
+        type: "e-commerce",
+        sku: String(item.productId),
+        variant_id: magicVariantId(item.productId, item.selectedColor),
+        price: pricePaise,
+        offer_price: pricePaise,
+        tax_amount: 0,
+        quantity: item.quantity,
+        name: String(item.name || "SHRIMOH Bag").slice(0, 120),
+        description: String(
+          item.selectedColor ? `${item.name} - ${item.selectedColor}` : item.name || "SHRIMOH Bag"
+        ).slice(0, 250),
+        image_url: item.image || "",
+        product_url: `${MAGIC_SITE_URL}/product/${encodeURIComponent(String(item.productId))}`
+      };
+    });
+
+    const lineItemsTotal = lineItems.reduce((total, item) => total + item.offer_price * item.quantity, 0);
+    if (!Number.isInteger(lineItemsTotal) || lineItemsTotal < 100) {
+      return res.status(400).json({ success: false, message: "Order amount must be at least ₹1." });
+    }
+
+    const receipt = `SHRIMOH_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+
+    const razorpayOrder = await razorpay.orders.create({
+      amount: lineItemsTotal,
+      currency: "INR",
+      receipt,
+      line_items_total: lineItemsTotal,
+      line_items: lineItems,
+      notes: { source: "magic_checkout" }
+    });
+
+    return res.json({
+      success: true,
+      order_id: razorpayOrder.id,
+      amount: razorpayOrder.amount,
+      currency: razorpayOrder.currency,
+      receipt: razorpayOrder.receipt
+    });
+  } catch (error) {
+    console.error("MAGIC CREATE ORDER ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: error?.error?.description || error?.message || "Unable to start checkout."
+    });
+  }
+});
+
+// Free delivery to every Indian pincode; no Cash on Delivery.
+app.all("/api/magic/shipping-info", function (req, res) {
+  const body = magicBody(req);
+  const addresses = Array.isArray(body.addresses) ? body.addresses : [];
+  return res.json({
+    addresses: addresses.map(function (address) {
+      const country = String(address.country || "IN").toUpperCase();
+      const serviceable = country === "IN";
+      return {
+        id: String(address.id ?? "0"),
+        zipcode: String(address.zipcode || ""),
+        state_code: address.state_code || undefined,
+        country,
+        shipping_methods: [
+          {
+            id: "free_delivery",
+            name: "Free Delivery",
+            description: "Delivered in 5-9 business days",
+            serviceable,
+            shipping_fee: 0,
+            cod: false,
+            cod_fee: 0
+          }
+        ]
+      };
+    })
+  });
+});
+
+app.all("/api/magic/promotions", async function (req, res) {
+  try {
+    const { data: coupons, error } = await supabase
+      .from("coupons")
+      .select("*")
+      .in("code", MAGIC_LISTED_COUPONS);
+    if (error) throw error;
+
+    const now = Date.now();
+    const promotions = (Array.isArray(coupons) ? coupons : [])
+      .filter(function (coupon) {
+        if (!coupon.active) return false;
+        if (coupon.expiry_date && new Date(coupon.expiry_date).getTime() < now) return false;
+        if (coupon.usage_limit !== null && coupon.usage_limit !== undefined &&
+            Math.floor(safeNumber(coupon.times_used)) >= Math.floor(safeNumber(coupon.usage_limit))) return false;
+        return true;
+      })
+      .map(function (coupon) {
+        return { code: coupon.code, ...couponSummary(coupon) };
+      });
+
+    return res.json({ promotions });
+  } catch (error) {
+    console.error("MAGIC PROMOTIONS ERROR:", error);
+    return res.json({ promotions: [] });
+  }
+});
+
+app.all("/api/magic/apply-promotion", async function (req, res) {
+  const body = magicBody(req);
+  const code = String(body.code || "").trim().toUpperCase();
+  try {
+    if (!code) {
+      return res.status(400).json({ failure_code: "INVALID_PROMOTION", failure_reason: "Please enter a coupon code." });
+    }
+    const cartValue = await magicCartValueFromReceipt(body.order_id);
+    if (!cartValue) {
+      return res.status(400).json({ failure_code: "INVALID_PROMOTION", failure_reason: "Could not read this order. Please try again." });
+    }
+    const { coupon, discountAmount } = await getValidCoupon(code, cartValue);
+    return res.json({
+      promotion: {
+        reference_id: String(coupon.id || coupon.code),
+        type: "coupon",
+        code: coupon.code,
+        value: Math.round(discountAmount * 100),
+        value_type: "fixed_amount",
+        description: couponSummary(coupon).summary
+      }
+    });
+  } catch (error) {
+    const message = error?.message || "This coupon cannot be applied.";
+    const failureCode = /minimum order/i.test(message) ? "REQUIREMENT_NOT_MET" : "INVALID_PROMOTION";
+    return res.status(400).json({ failure_code: failureCode, failure_reason: message });
+  }
+});
+
+// Turns the address Magic Checkout collected into this store's
+// customer format. Missing pieces get safe placeholders so the order
+// is never lost after a successful payment.
+function customerFromMagicOrder(rzpOrder, rzpPayment) {
+  const details = (rzpOrder && rzpOrder.customer_details) || {};
+  const address = details.shipping_address || details.billing_address || {};
+  const contact = String(details.contact || address.contact || (rzpPayment && rzpPayment.contact) || "");
+  const mobile = contact.replace(/\D/g, "").slice(-10);
+  const email = String(details.email || (rzpPayment && rzpPayment.email) || "").trim().toLowerCase();
+  const lines = [address.line1, address.line2].filter(Boolean).map((part) => String(part).trim());
+  return {
+    name: String(address.name || "SHRIMOH Customer").trim(),
+    mobile: /^[0-9]{10}$/.test(mobile) ? mobile : "0000000000",
+    email: email && email.includes("@") ? email : `guest-${mobile || Date.now()}@guest.shrimoh.invalid`,
+    address: lines.join(", ") || "Address not received - please contact customer",
+    city: String(address.city || "-").trim(),
+    state: String(address.state || "-").trim(),
+    pincode: String(address.zipcode || "").replace(/\D/g, "").slice(0, 6) || "000000"
+  };
+}
+
 app.post("/api/verify-payment", async function (req, res) {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
@@ -2887,20 +3110,61 @@ app.post("/api/verify-payment", async function (req, res) {
 app.post("/api/orders", async function (req, res) {
   try {
     const body = req.body || {};
-    const customer = body.customer;
-    const customerError = validateCustomer(customer);
-    if (customerError) return res.status(400).json({ success: false, message: customerError });
-
     const items = body.items;
-    const couponCode = body.couponCode || null;
     const payment = body.payment || {};
     const paymentMethod = payment.method || "Razorpay";
+    const isMagic = payment.magic === true;
 
     if (!PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ success: false, message: "Invalid payment method." });
     }
 
-    const cart = await calculateCart(items, couponCode);
+    let customer = body.customer;
+    let couponCode = body.couponCode || null;
+    let magicOrder = null;
+    let magicPayment = null;
+
+    if (isMagic) {
+      // Magic Checkout: the address and any coupon live on the
+      // Razorpay order, not in the request.
+      const magicOrderId = payment.razorpayOrderId || payment.razorpay_order_id;
+      const magicPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id;
+      if (!magicOrderId || !magicPaymentId) {
+        return res.status(400).json({ success: false, message: "Razorpay payment details are required." });
+      }
+      try {
+        magicOrder = await razorpay.orders.fetch(magicOrderId);
+        magicPayment = await razorpay.payments.fetch(magicPaymentId);
+      } catch (fetchError) {
+        console.error("MAGIC ORDER FETCH ERROR:", fetchError);
+        return res.status(502).json({ success: false, message: "Could not confirm payment with Razorpay. Please contact support with your payment ID." });
+      }
+      customer = customerFromMagicOrder(magicOrder, magicPayment);
+      const promotions = Array.isArray(magicOrder.promotions) ? magicOrder.promotions : [];
+      couponCode = promotions.length && promotions[0].code ? String(promotions[0].code) : null;
+    } else {
+      const customerError = validateCustomer(customer);
+      if (customerError) return res.status(400).json({ success: false, message: customerError });
+    }
+
+    let cart;
+    try {
+      cart = await calculateCart(items, couponCode);
+    } catch (cartError) {
+      // A coupon that was valid inside Magic Checkout may have just
+      // run out; the customer has already paid, so price it without
+      // the coupon and let the amount check below decide.
+      if (!isMagic || !couponCode) throw cartError;
+      console.error("MAGIC COUPON RECHECK FAILED:", cartError?.message);
+      cart = await calculateCart(items, null);
+      const paidRupees = safeNumber(magicPayment && magicPayment.amount) / 100;
+      if (paidRupees > 0 && paidRupees < cart.total) {
+        // Record what was actually paid, keeping the coupon on the order.
+        cart.discount = Math.round((cart.subtotal + cart.delivery - paidRupees) * 100) / 100;
+        cart.total = paidRupees;
+        cart.couponCode = String(couponCode).toUpperCase();
+      }
+    }
     let paymentStatus = "Pending";
 
     let razorpayOrderId = null;
@@ -2942,17 +3206,24 @@ app.post("/api/orders", async function (req, res) {
       // Security: make sure the money actually paid matches THIS cart's
       // total, so a cheap payment can never be reused for costly items.
       const expectedPaise = Math.round(cart.total * 100);
-      let razorpayPayment = null;
-      try {
-        razorpayPayment = await razorpay.payments.fetch(razorpayPaymentId);
-      } catch (fetchError) {
-        console.error("RAZORPAY PAYMENT FETCH ERROR:", fetchError);
-        return res.status(502).json({ success: false, message: "Could not confirm payment with Razorpay. Please contact support with your payment ID." });
+      let razorpayPayment = magicPayment;
+      if (!razorpayPayment) {
+        try {
+          razorpayPayment = await razorpay.payments.fetch(razorpayPaymentId);
+        } catch (fetchError) {
+          console.error("RAZORPAY PAYMENT FETCH ERROR:", fetchError);
+          return res.status(502).json({ success: false, message: "Could not confirm payment with Razorpay. Please contact support with your payment ID." });
+        }
       }
+      // Magic Checkout: the paid amount can never be below this cart's
+      // price after a coupon this store itself allows (Re 1 rounding room).
+      const amountOk = isMagic
+        ? Number(razorpayPayment && razorpayPayment.amount) >= expectedPaise - 100
+        : Number(razorpayPayment && razorpayPayment.amount) === expectedPaise;
       if (
         !razorpayPayment ||
         razorpayPayment.order_id !== razorpayOrderId ||
-        Number(razorpayPayment.amount) !== expectedPaise ||
+        !amountOk ||
         !["captured", "authorized"].includes(razorpayPayment.status)
       ) {
         console.error("RAZORPAY AMOUNT MISMATCH:", {
@@ -3147,7 +3418,7 @@ app.post("/api/orders", async function (req, res) {
      * ALREADY been saved successfully above, so we must never
      * let an email problem turn into a failed order response.
      */
-    sendOrderConfirmationEmail({
+    if (!cleanCustomer.email.endsWith(".invalid")) sendOrderConfirmationEmail({
       to: cleanCustomer.email,
       customerName: cleanCustomer.name,
       orderReference,
