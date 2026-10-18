@@ -717,6 +717,20 @@ const INFO_PAGES = {
           banking details on our servers at any point.
         </p>
         <p>
+          Checkout is powered by Razorpay Magic Checkout. If you choose to verify your mobile
+          number there with an OTP, Razorpay may save your delivery address so it can be filled in
+          automatically on your next order. This is handled by Razorpay under its own privacy
+          policy.
+        </p>
+        <p>
+          <strong>Cookies and advertising.</strong> We use cookies and similar technologies,
+          including the Meta Pixel, to understand how visitors use our website (for example, which
+          products are viewed, added to the bag or purchased) and to measure and improve our ads
+          on Facebook and Instagram. Meta may use this information to show you relevant SHRIMOH
+          ads. You can control ad personalisation in your Facebook/Instagram ad settings, and you
+          can block or delete cookies in your browser settings at any time.
+        </p>
+        <p>
           Your cart and wishlist are stored locally in your own browser for convenience and are
           never shared with anyone. We do not sell or rent your personal information to third
           parties. Your details are shared only with the delivery and payment partners strictly
