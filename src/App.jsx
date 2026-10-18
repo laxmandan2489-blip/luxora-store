@@ -2377,14 +2377,15 @@ function App() {
   }, [filteredProducts, sortBy, bestsellers]);
 
   /*
-   * LISTING PAGINATION - miramoss.com's "View All"/category pages show
-   * numbered pages (1 2 3 ... 7 ›) at the bottom instead of one long
-   * grid with everything in it. Paginates the already-expanded (one
-   * card per color variant) list so the page count matches what's
-   * actually visible in the grid, not the raw product count.
+   * LISTING - ENDLESS SCROLL
+   * View All / category / New / Bestseller pages show 12 bags first and
+   * quietly add the next 12 as the visitor scrolls near the bottom - no
+   * page numbers to tap. Works on the already-expanded (one card per
+   * color variant) list, same as before.
    */
   const LISTING_PAGE_SIZE = 12;
   const [listingPage, setListingPage] = useState(1);
+  const listingSentinelRef = useRef(null);
 
   const expandedListingProducts = useMemo(
     () => expandProductVariants(sortedProducts),
@@ -2397,27 +2398,43 @@ function App() {
   );
 
   // Any change to what's being shown (category, filters, sort, search)
-  // jumps back to page 1 - otherwise switching categories could leave
-  // you stranded on "page 4" of a collection that only has 1 page.
+  // starts again from the first 12.
   useEffect(() => {
     setListingPage(1);
   }, [selectedCategory, isShopAllPage, sortBy, priceMin, priceMax, colorFilter, searchText]);
 
-  // Guards against being stuck on a page number that no longer exists
-  // (e.g. a filter just shrank the results from 3 pages down to 1).
   useEffect(() => {
     if (listingPage > listingTotalPages) setListingPage(listingTotalPages);
   }, [listingPage, listingTotalPages]);
 
-  const pagedListingProducts = useMemo(() => {
-    const start = (listingPage - 1) * LISTING_PAGE_SIZE;
-    return expandedListingProducts.slice(start, start + LISTING_PAGE_SIZE);
-  }, [expandedListingProducts, listingPage]);
+  const pagedListingProducts = useMemo(
+    () => expandedListingProducts.slice(0, listingPage * LISTING_PAGE_SIZE),
+    [expandedListingProducts, listingPage]
+  );
 
-  function goToListingPage(page) {
-    setListingPage(page);
-    document.getElementById("lux-products")?.scrollIntoView({ behavior: "instant", block: "start" });
-  }
+  const hasMoreListingProducts = listingPage < listingTotalPages;
+
+  // When the invisible marker under the grid comes near the screen,
+  // load the next 12. Starts loading a little early (600px) so the
+  // visitor never waits at the bottom.
+  useEffect(() => {
+    const sentinel = listingSentinelRef.current;
+    if (!sentinel || !hasMoreListingProducts) return undefined;
+    if (typeof IntersectionObserver === "undefined") {
+      setListingPage(listingTotalPages);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setListingPage((page) => Math.min(page + 1, listingTotalPages));
+        }
+      },
+      { rootMargin: "0px 0px 600px 0px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMoreListingProducts, listingTotalPages, pagedListingProducts.length]);
 
   /*
    * SEARCH SUGGESTIONS
@@ -4644,42 +4661,14 @@ function App() {
             )}
           </main>
 
-          {/*
-           * PAGINATION - numbered pages instead of one endless grid,
-           * same "1 2 3 ... 7 ›" pattern miramoss.com uses on its own
-           * View All/category pages. Only shown once there's more than
-           * one page, so a small collection never shows a pointless
-           * lone "1".
-           */}
-          {listingTotalPages > 1 && (
-            <nav className="lux-pagination" aria-label="Product page navigation">
-              {getPaginationItems(listingPage, listingTotalPages).map((item, index) =>
-                item === "..." ? (
-                  <span key={`dots-${index}`} className="lux-pagination-dots">
-                    …
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    key={item}
-                    className={`lux-pagination-page${item === listingPage ? " active" : ""}`}
-                    onClick={() => goToListingPage(item)}
-                    aria-current={item === listingPage ? "page" : undefined}
-                  >
-                    {item}
-                  </button>
-                )
-              )}
-              <button
-                type="button"
-                className="lux-pagination-next"
-                onClick={() => goToListingPage(Math.min(listingPage + 1, listingTotalPages))}
-                disabled={listingPage >= listingTotalPages}
-                aria-label="Next page"
-              >
-                <LuxIcon name="chevron-right" size={16} />
-              </button>
-            </nav>
+          {/* Endless scroll: invisible marker that loads the next 12 bags. */}
+          {hasMoreListingProducts && (
+            <div
+              ref={listingSentinelRef}
+              className="lux-pagination"
+              aria-hidden="true"
+              style={{ minHeight: "40px" }}
+            />
           )}
         </>
       )}
