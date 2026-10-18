@@ -1134,6 +1134,39 @@ function Admin() {
     }
   }
 
+  const [photoZipLoading, setPhotoZipLoading] = useState(false);
+
+  async function downloadAllProductPhotos() {
+    if (photoZipLoading) return;
+    setPhotoZipLoading(true);
+    try {
+      const response = await adminFetch(`${API}/api/admin/download-images`);
+      if (!response.ok) {
+        let message = "Could not prepare the photos.";
+        try {
+          const data = await response.json();
+          message = data.message || message;
+        } catch {
+          // not JSON
+        }
+        throw new Error(message);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "shrimoh-product-photos.zip";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (error) {
+      alert(error.message || "Could not download the photos.");
+    } finally {
+      setPhotoZipLoading(false);
+    }
+  }
+
   async function adminFetch(
     url,
     options = {}
@@ -5297,6 +5330,27 @@ function Admin() {
 
         {activeTab === "products" && (
           <>
+            <div className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">
+                  Product Photos
+                </h2>
+              </div>
+              <p style={{ margin: "0 0 14px", color: "#666", fontSize: 14 }}>
+                Download every product photo (all colors) as one ZIP of JPG files, named by
+                product - ready for ads and Instagram. Best done on a laptop. It can take up
+                to a minute.
+              </p>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={photoZipLoading}
+                onClick={downloadAllProductPhotos}
+              >
+                {photoZipLoading ? "Preparing photos..." : "⬇ Download all product photos (ZIP)"}
+              </button>
+            </div>
+
             <div className="panel">
               <div className="panel-header">
                 <h2 className="panel-title">
