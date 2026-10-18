@@ -1392,6 +1392,14 @@ function catalogCsvCell(value) {
   return `"${text.replace(/"/g, '""')}"`;
 }
 
+// Catalog item id: the product id, or "<id>-<color>" for one color of a
+// multi-color product. The Meta Pixel must send the SAME ids.
+function catalogItemId(productId, color) {
+  if (!color) return String(productId);
+  const slug = String(color).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `${productId}-${slug || "color"}`;
+}
+
 function catalogPrice(amount) {
   return `${Number(amount || 0).toFixed(2)} INR`;
 }
@@ -1406,36 +1414,56 @@ app.get("/api/facebook-catalog.csv", async function (req, res) {
     if (error) throw error;
 
     const header = [
-      "id", "title", "description", "availability", "condition", "price",
-      "sale_price", "link", "image_link", "additional_image_link", "brand",
-      "product_type", "google_product_category"
+      "id", "item_group_id", "title", "description", "availability", "condition",
+      "price", "sale_price", "link", "image_link", "additional_image_link",
+      "brand", "color", "product_type", "google_product_category"
     ];
     const rows = [header.join(",")];
+    const isHttpUrl = (url) => typeof url === "string" && /^https?:\/\//.test(url);
 
     for (const raw of Array.isArray(data) ? data : []) {
       const product = formatProduct(raw);
-      if (!product || !product.image || !(product.price > 0)) continue;
+      if (!product || !(product.price > 0)) continue;
 
       const hasSale = product.oldPrice > product.price;
-      const extraImages = product.images
-        .slice(1, 10)
-        .filter((url) => typeof url === "string" && /^https?:\/\//.test(url));
+      const baseLink = `${CATALOG_SITE_URL}/product/${encodeURIComponent(String(product.id))}`;
 
-      rows.push([
-        catalogCsvCell(product.id),
-        catalogCsvCell(product.name.slice(0, 150)),
-        catalogCsvCell((product.description || product.name).slice(0, 5000)),
-        catalogCsvCell(product.stock > 0 ? "in stock" : "out of stock"),
-        catalogCsvCell("new"),
-        catalogCsvCell(catalogPrice(hasSale ? product.oldPrice : product.price)),
-        catalogCsvCell(hasSale ? catalogPrice(product.price) : ""),
-        catalogCsvCell(`${CATALOG_SITE_URL}/product/${encodeURIComponent(String(product.id))}`),
-        catalogCsvCell(product.image),
-        catalogCsvCell(extraImages.join(",")),
-        catalogCsvCell("SHRIMOH"),
-        catalogCsvCell(product.category || "Bags"),
-        catalogCsvCell("Apparel & Accessories > Handbags, Wallets & Cases > Handbags")
-      ].join(","));
+      // Same rule as the website's listing grid: a product with 2+
+      // colors shows one card per color, so the catalog gets one item
+      // per color too (grouped together with item_group_id).
+      const colors = product.colors.length > 1 ? product.colors : [null];
+
+      for (const color of colors) {
+        const colorPhotos = color && Array.isArray(product.colorImages[color])
+          ? product.colorImages[color].filter(isHttpUrl)
+          : [];
+        const photos = colorPhotos.length ? colorPhotos : product.images.filter(isHttpUrl);
+        if (!photos.length) continue;
+
+        const colorLabel = color ? (product.colorNames[color] || color) : "";
+        const looksLikeCode = /^#|^rgb/i.test(colorLabel);
+        const title = color
+          ? (product.colorNames[color] || (looksLikeCode ? product.name : `${product.name} - ${colorLabel}`))
+          : product.name;
+
+        rows.push([
+          catalogCsvCell(catalogItemId(product.id, color)),
+          catalogCsvCell(color ? product.id : ""),
+          catalogCsvCell(title.slice(0, 150)),
+          catalogCsvCell((product.description || product.name).slice(0, 5000)),
+          catalogCsvCell(product.stock > 0 ? "in stock" : "out of stock"),
+          catalogCsvCell("new"),
+          catalogCsvCell(catalogPrice(hasSale ? product.oldPrice : product.price)),
+          catalogCsvCell(hasSale ? catalogPrice(product.price) : ""),
+          catalogCsvCell(color ? `${baseLink}?color=${encodeURIComponent(color)}` : baseLink),
+          catalogCsvCell(photos[0]),
+          catalogCsvCell(photos.slice(1, 10).join(",")),
+          catalogCsvCell("SHRIMOH"),
+          catalogCsvCell(color && !/^#|^rgb/i.test(color) ? color : ""),
+          catalogCsvCell(product.category || "Bags"),
+          catalogCsvCell("Apparel & Accessories > Handbags, Wallets & Cases > Handbags")
+        ].join(","));
+      }
     }
 
     res.set("Content-Type", "text/csv; charset=utf-8");
