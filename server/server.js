@@ -2539,6 +2539,158 @@ app.delete("/api/products/:id", requireAdmin, async function (req, res) {
  * them. The Admin panel should use THIS endpoint, not the
  * public one, for its product management screen.
  */
+/*
+ * DOWNLOAD ALL PRODUCT PHOTOS (admin only)
+ * Returns one ZIP with every product photo (all colors) converted to
+ * JPG, named after the product - for ads, Instagram posts etc., so the
+ * owner never needs to keep separate copies of the photos.
+ */
+const CRC32_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i++) crc = CRC32_TABLE[(crc ^ buffer[i]) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+// Minimal "stored" (no compression - JPGs are already compressed) ZIP.
+function buildZip(files) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const file of files) {
+    const nameBuf = Buffer.from(file.name, "utf8");
+    const data = file.data;
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6); // UTF-8 names
+    local.writeUInt16LE(0, 8);
+    local.writeUInt32LE(0, 10);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, nameBuf, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0x0800, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt32LE(0, 12);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, nameBuf);
+
+    offset += local.length + nameBuf.length + data.length;
+  }
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...localParts, ...centralParts, end]);
+}
+
+function safeFileName(text) {
+  return String(text || "photo")
+    .replace(/[\\/:*?"<>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80) || "photo";
+}
+
+app.get("/api/admin/download-images", requireAdmin, async function (req, res) {
+  try {
+    const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false });
+    if (error) throw error;
+
+    // One job per photo: product name (+ color name) and the image URL.
+    const jobs = [];
+    const seenUrls = new Set();
+    for (const raw of Array.isArray(data) ? data : []) {
+      const product = formatProduct(raw);
+      if (!product) continue;
+      const folder = safeFileName(product.name);
+      const groups = [];
+      for (const color of product.colors) {
+        const urls = product.colorImages[color];
+        if (Array.isArray(urls) && urls.length) {
+          groups.push({ label: product.colorNames[color] || `${product.name} ${color}`, urls });
+        }
+      }
+      groups.push({ label: product.name, urls: product.images });
+      for (const group of groups) {
+        let index = 0;
+        for (const url of group.urls) {
+          if (typeof url !== "string" || !/^https?:\/\//.test(url) || seenUrls.has(url)) continue;
+          seenUrls.add(url);
+          index += 1;
+          jobs.push({ url, name: `${folder}/${safeFileName(group.label)} ${index}.jpg` });
+        }
+      }
+    }
+
+    if (!jobs.length) {
+      return res.status(404).json({ success: false, message: "No product photos found." });
+    }
+
+    const files = [];
+    const usedNames = new Set();
+    let cursor = 0;
+    async function worker() {
+      while (cursor < jobs.length) {
+        const job = jobs[cursor++];
+        try {
+          const response = await fetch(job.url);
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const original = Buffer.from(await response.arrayBuffer());
+          const jpg = await sharp(original).rotate().flatten({ background: "#ffffff" }).jpeg({ quality: 92 }).toBuffer();
+          let name = job.name;
+          let n = 2;
+          while (usedNames.has(name)) name = job.name.replace(/\.jpg$/, ` (${n++}).jpg`);
+          usedNames.add(name);
+          files.push({ name, data: jpg });
+        } catch (photoError) {
+          console.error("PHOTO DOWNLOAD SKIPPED:", job.url, photoError?.message);
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker));
+
+    if (!files.length) {
+      return res.status(502).json({ success: false, message: "Could not read the product photos. Please try again." });
+    }
+
+    files.sort((a, b) => a.name.localeCompare(b.name));
+    const zip = buildZip(files);
+    res.set("Content-Type", "application/zip");
+    res.set("Content-Disposition", 'attachment; filename="shrimoh-product-photos.zip"');
+    res.set("Cache-Control", "no-store");
+    return res.send(zip);
+  } catch (zipError) {
+    console.error("DOWNLOAD IMAGES ERROR:", zipError);
+    return res.status(500).json({ success: false, message: zipError?.message || "Unable to prepare photos." });
+  }
+});
+
 app.get("/api/admin/products", requireAdmin, async function (req, res) {
   try {
     const { data, error } = await supabase
