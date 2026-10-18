@@ -1374,6 +1374,80 @@ app.get("/api/products", async function (req, res) {
 });
 
 /*
+ * FACEBOOK / META CATALOG FEED
+ * Meta Commerce Manager reads this link once a day ("scheduled feed")
+ * and keeps the SHRIMOH catalog in sync with the store automatically:
+ * new products appear, price / stock changes update, deleted or
+ * hidden products disappear. One row per active product; the "id"
+ * column is the same product id the Meta Pixel sends, so catalog ads
+ * can show each visitor the exact bag they looked at.
+ */
+const CATALOG_SITE_URL = "https://shrimoh.vercel.app";
+
+function catalogCsvCell(value) {
+  const text = String(value === null || value === undefined ? "" : value)
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function catalogPrice(amount) {
+  return `${Number(amount || 0).toFixed(2)} INR`;
+}
+
+app.get("/api/facebook-catalog.csv", async function (req, res) {
+  try {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+
+    const header = [
+      "id", "title", "description", "availability", "condition", "price",
+      "sale_price", "link", "image_link", "additional_image_link", "brand",
+      "product_type", "google_product_category"
+    ];
+    const rows = [header.join(",")];
+
+    for (const raw of Array.isArray(data) ? data : []) {
+      const product = formatProduct(raw);
+      if (!product || !product.image || !(product.price > 0)) continue;
+
+      const hasSale = product.oldPrice > product.price;
+      const extraImages = product.images
+        .slice(1, 10)
+        .filter((url) => typeof url === "string" && /^https?:\/\//.test(url));
+
+      rows.push([
+        catalogCsvCell(product.id),
+        catalogCsvCell(product.name.slice(0, 150)),
+        catalogCsvCell((product.description || product.name).slice(0, 5000)),
+        catalogCsvCell(product.stock > 0 ? "in stock" : "out of stock"),
+        catalogCsvCell("new"),
+        catalogCsvCell(catalogPrice(hasSale ? product.oldPrice : product.price)),
+        catalogCsvCell(hasSale ? catalogPrice(product.price) : ""),
+        catalogCsvCell(`${CATALOG_SITE_URL}/product/${encodeURIComponent(String(product.id))}`),
+        catalogCsvCell(product.image),
+        catalogCsvCell(extraImages.join(",")),
+        catalogCsvCell("SHRIMOH"),
+        catalogCsvCell(product.category || "Bags"),
+        catalogCsvCell("Apparel & Accessories > Handbags, Wallets & Cases > Handbags")
+      ].join(","));
+    }
+
+    res.set("Content-Type", "text/csv; charset=utf-8");
+    res.set("Cache-Control", "public, max-age=900");
+    return res.send(rows.join("\n"));
+  } catch (feedError) {
+    console.error("FACEBOOK CATALOG FEED ERROR:", feedError);
+    return res.status(500).type("text/plain").send("Catalog feed unavailable.");
+  }
+});
+
+/*
  * BESTSELLERS
  * Aggregates real quantity sold per product from the order_items
  * table (genuine sales data, not a hardcoded/fake list), and
