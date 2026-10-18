@@ -491,6 +491,38 @@ const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp bu
 const COD_AVAILABLE = false;
 
 /*
+ * RAZORPAY MAGIC CHECKOUT (2026-10-18)
+ * "Checkout" and "Buy It Now" open Razorpay Magic Checkout directly:
+ * the customer verifies their phone with an OTP and their saved
+ * address fills in by itself - no long form. If Magic Checkout ever
+ * fails to start, the old SHRIMOH checkout form opens instead.
+ * Set to false to go back to the old form everywhere.
+ */
+const MAGIC_CHECKOUT_ENABLED = true;
+const RAZORPAY_SCRIPT_URL = "https://checkout.razorpay.com/v1/magic-checkout.js";
+
+function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const existing = document.querySelector(`script[src="${RAZORPAY_SCRIPT_URL}"]`);
+    if (existing) {
+      existing.addEventListener("load", () => resolve(true), { once: true });
+      existing.addEventListener("error", () => resolve(false), { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = RAZORPAY_SCRIPT_URL;
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}
+
+/*
  * The product page already shows a fixed box with Free delivery,
  * 5-day easy returns and Secure payment. Any badge typed into a product
  * in Admin that repeats delivery / returns / payment (or promises a
@@ -3006,7 +3038,7 @@ function App() {
 
   // InitiateCheckout each time the checkout opens.
   useEffect(() => {
-    if (!checkoutOpen || !checkoutItems.length) return;
+    if (!checkoutOpen || orderPlaced || !checkoutItems.length) return;
     const contents = pixelContents(checkoutItems);
     trackPixel("InitiateCheckout", {
       content_ids: contents.map((item) => item.id),
@@ -3208,12 +3240,20 @@ function App() {
 
     const quantity = Math.min(Math.max(1, Number(detailQuantity || 1)), stock);
 
-    setDirectBuyItem({
+    const buyItem = {
       ...selectedProduct,
       name: getDisplayName(selectedProduct, detailColor || ""),
       selectedColor: detailColor || "",
       quantity,
-    });
+    };
+
+    if (MAGIC_CHECKOUT_ENABLED) {
+      setCartOpen(false);
+      startMagicCheckout([buyItem], true);
+      return;
+    }
+
+    setDirectBuyItem(buyItem);
 
     setCartOpen(false);
     setCheckoutOpen(true);
@@ -3226,8 +3266,162 @@ function App() {
      CHECKOUT
   ========================================================= */
 
+  /*
+   * MAGIC CHECKOUT FLOW (see MAGIC_CHECKOUT_ENABLED above).
+   * itemsList: the cart, or the single Buy It Now item.
+   */
+  const magicStartingRef = useRef(false);
+
+  async function startMagicCheckout(itemsList, isDirectBuy) {
+    if (magicStartingRef.current) return;
+    const list = Array.isArray(itemsList) ? itemsList : [];
+    if (!list.length) return;
+    magicStartingRef.current = true;
+
+    const secureItems = list.map((item) => ({
+      id: Number(item.id),
+      quantity: Number(item.quantity || 1),
+      color: item.selectedColor || "",
+    }));
+
+    // Old SHRIMOH form, used only if Magic Checkout can't start.
+    function openFallbackForm() {
+      setDirectBuyItem(isDirectBuy ? list[0] : null);
+      setCheckoutOpen(true);
+      setOrderPlaced(false);
+      document.body.style.overflow = "hidden";
+    }
+
+    try {
+      {
+        const contents = pixelContents(list);
+        trackPixel("InitiateCheckout", {
+          content_ids: contents.map((item) => item.id),
+          contents,
+          content_type: "product",
+          num_items: contents.reduce((total, item) => total + item.quantity, 0),
+          value: contents.reduce((total, item) => total + item.item_price * item.quantity, 0),
+          currency: "INR",
+        });
+      }
+
+      const loaded = await loadRazorpayScript();
+      if (!loaded || !window.Razorpay) throw new Error("Razorpay checkout failed to load.");
+
+      const createResponse = await fetch(`${API}/api/magic/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: secureItems }),
+      });
+      const createData = await createResponse.json();
+      if (!createResponse.ok || !createData.success || !createData.order_id) {
+        throw new Error(createData.message || "Unable to start checkout.");
+      }
+
+      const saved = loadSavedCustomer();
+      const savedMobile = saved && /^[0-9]{10}$/.test(String(saved.mobile || "")) ? saved.mobile : "";
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+        one_click_checkout: true,
+        show_coupons: true,
+        name: "SHRIMOH",
+        description: "SHRIMOH Premium Collection",
+        order_id: createData.order_id,
+        prefill: savedMobile ? { contact: `+91${savedMobile}` } : {},
+        theme: { color: "#111111" },
+        handler: async function (paymentResponse) {
+          setOrderLoading(true);
+          try {
+            const orderResponse = await fetch(`${API}/api/orders`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                items: secureItems,
+                payment: {
+                  method: "Razorpay",
+                  magic: true,
+                  razorpayOrderId: paymentResponse.razorpay_order_id,
+                  razorpayPaymentId: paymentResponse.razorpay_payment_id,
+                  razorpaySignature: paymentResponse.razorpay_signature,
+                  status: "Paid",
+                },
+              }),
+            });
+            const savedOrder = await orderResponse.json();
+            if (!orderResponse.ok || !savedOrder.success) {
+              throw new Error(savedOrder.message || "Order could not be saved.");
+            }
+
+            const finalReference =
+              savedOrder.order?.orderReference ||
+              savedOrder.order?.reference ||
+              savedOrder.reference ||
+              "";
+
+            {
+              const contents = pixelContents(list);
+              trackPixel(
+                "Purchase",
+                {
+                  content_ids: contents.map((item) => item.id),
+                  contents,
+                  content_type: "product",
+                  num_items: contents.reduce((total, item) => total + item.quantity, 0),
+                  value: Number(savedOrder.order?.total || 0),
+                  currency: "INR",
+                },
+                finalReference ? { eventID: `order-${finalReference}` } : undefined
+              );
+            }
+
+            if (!isDirectBuy) setCart([]);
+            setDirectBuyItem(null);
+            resetCouponState();
+            setOrderReference(finalReference);
+            setOrderPlaced(true);
+            setCheckoutOpen(true);
+            document.body.style.overflow = "hidden";
+          } catch (error) {
+            console.error("Magic checkout order error:", error);
+            alert(
+              (error && error.message) ||
+                "Payment was received, but order processing failed. Please contact support on WhatsApp with your payment ID."
+            );
+          } finally {
+            setOrderLoading(false);
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setOrderLoading(false);
+          },
+        },
+      };
+
+      const razorpay = new window.Razorpay(options);
+      razorpay.on("payment.failed", function (response) {
+        console.error("Razorpay payment failed:", response);
+        alert(response.error?.description || "Payment failed. Please try again.");
+      });
+      razorpay.open();
+    } catch (error) {
+      console.error("Magic checkout start error:", error);
+      openFallbackForm();
+    } finally {
+      magicStartingRef.current = false;
+    }
+  }
+
   function openCheckout() {
     if (cart.length === 0) return;
+
+    if (MAGIC_CHECKOUT_ENABLED) {
+      setCartOpen(false);
+      document.body.style.overflow = "";
+      startMagicCheckout(cart, false);
+      return;
+    }
 
     /*
      * This is a normal "checkout from cart" flow, not a
@@ -3337,7 +3531,7 @@ function App() {
         }
 
         const existingScript = document.querySelector(
-          'script[src="https://checkout.razorpay.com/v1/checkout.js"]'
+          `script[src="${RAZORPAY_SCRIPT_URL}"]`
         );
 
         if (existingScript) {
@@ -3347,7 +3541,7 @@ function App() {
         }
 
         const script = document.createElement("script");
-        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.src = RAZORPAY_SCRIPT_URL;
         script.async = true;
         script.onload = () => resolve(true);
         script.onerror = () => resolve(false);
