@@ -420,6 +420,16 @@ async function sendShippingUpdateEmail({
 const ORDER_STATUSES = ["Received", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
 const PAYMENT_STATUSES = ["Pending", "Paid", "Failed", "Refunded"];
 const PAYMENT_METHODS = ["Razorpay"]; // prepaid only - COD switched off
+/*
+ * CASH ON DELIVERY via Razorpay Magic Checkout (2026-10-20)
+ * COD is offered ONLY inside the Magic Checkout popup (Razorpay does the
+ * COD OTP + RTO risk check). The customer pays the order total plus
+ * COD_FEE_RUPEES in cash at delivery. Razorpay must have COD switched on
+ * for the account, otherwise the option simply doesn't show.
+ * Set MAGIC_COD_ENABLED to false to go back to prepaid only.
+ */
+const MAGIC_COD_ENABLED = true;
+const COD_FEE_RUPEES = 150;
 const STORAGE_BUCKET = "product-images";
 
 const allowedOrigins = [
@@ -3122,7 +3132,7 @@ app.post("/api/magic/create-order", async function (req, res) {
   }
 });
 
-// Free delivery to every Indian pincode; no Cash on Delivery.
+// Free delivery to every Indian pincode; COD (with COD_FEE_RUPEES) when MAGIC_COD_ENABLED.
 app.all("/api/magic/shipping-info", function (req, res) {
   const body = magicBody(req);
   const addresses = Array.isArray(body.addresses) ? body.addresses : [];
@@ -3142,8 +3152,8 @@ app.all("/api/magic/shipping-info", function (req, res) {
             description: "Delivered in 5-9 business days",
             serviceable,
             shipping_fee: 0,
-            cod: false,
-            cod_fee: 0
+            cod: serviceable && MAGIC_COD_ENABLED,
+            cod_fee: serviceable && MAGIC_COD_ENABLED ? COD_FEE_RUPEES * 100 : 0
           }
         ]
       };
@@ -3294,8 +3304,9 @@ app.post("/api/orders", async function (req, res) {
     const body = req.body || {};
     const items = body.items;
     const payment = body.payment || {};
-    const paymentMethod = payment.method || "Razorpay";
+    let paymentMethod = payment.method || "Razorpay";
     const isMagic = payment.magic === true;
+    let isMagicCod = false;
 
     if (!PAYMENT_METHODS.includes(paymentMethod)) {
       return res.status(400).json({ success: false, message: "Invalid payment method." });
@@ -3311,15 +3322,33 @@ app.post("/api/orders", async function (req, res) {
       // Razorpay order, not in the request.
       const magicOrderId = payment.razorpayOrderId || payment.razorpay_order_id;
       const magicPaymentId = payment.razorpayPaymentId || payment.razorpay_payment_id;
-      if (!magicOrderId || !magicPaymentId) {
+      if (!magicOrderId || (!magicPaymentId && !MAGIC_COD_ENABLED)) {
         return res.status(400).json({ success: false, message: "Razorpay payment details are required." });
       }
       try {
         magicOrder = await razorpay.orders.fetch(magicOrderId);
-        magicPayment = await razorpay.payments.fetch(magicPaymentId);
+        if (magicPaymentId) {
+          magicPayment = await razorpay.payments.fetch(magicPaymentId);
+        } else {
+          // A COD order may come back without a payment ID - look it up
+          // on Razorpay's side (server-to-server, so it can't be faked).
+          const list = await razorpay.orders.fetchPayments(magicOrderId);
+          const items = list && Array.isArray(list.items) ? list.items : [];
+          magicPayment = items.find((item) => String(item.method || "").toLowerCase() === "cod") || null;
+        }
       } catch (fetchError) {
         console.error("MAGIC ORDER FETCH ERROR:", fetchError);
         return res.status(502).json({ success: false, message: "Could not confirm payment with Razorpay. Please contact support with your payment ID." });
+      }
+      if (!magicPayment || magicPayment.order_id !== magicOrderId) {
+        return res.status(400).json({ success: false, message: "Razorpay payment details are required." });
+      }
+      if (String(magicPayment.method || "").toLowerCase() === "cod") {
+        if (!MAGIC_COD_ENABLED) {
+          return res.status(400).json({ success: false, message: "Cash on Delivery is not available." });
+        }
+        isMagicCod = true;
+        paymentMethod = "COD";
       }
       customer = customerFromMagicOrder(magicOrder, magicPayment);
       const promotions = Array.isArray(magicOrder.promotions) ? magicOrder.promotions : [];
@@ -3421,6 +3450,43 @@ app.post("/api/orders", async function (req, res) {
     }
 
     if (paymentMethod === "COD") paymentStatus = "Pending";
+
+    if (isMagicCod) {
+      // COD placed inside Magic Checkout: Razorpay already ran the COD
+      // OTP / RTO check. Nothing is paid online, cash is collected at
+      // delivery = order total + COD fee.
+      razorpayOrderId = magicPayment.order_id;
+      razorpayPaymentId = magicPayment.id;
+      razorpaySignature = payment.razorpaySignature || payment.razorpay_signature || null;
+
+      const { data: duplicateCod, error: duplicateCodError } = await supabase
+        .from("payments")
+        .select("id")
+        .eq("payment_id", razorpayPaymentId)
+        .maybeSingle();
+      if (duplicateCodError) throw duplicateCodError;
+      if (duplicateCod) {
+        return res.status(409).json({ success: false, message: "This order has already been placed." });
+      }
+
+      const expectedPaise = Math.round(cart.total * 100);
+      if (
+        Number(magicPayment.amount) < expectedPaise - 100 ||
+        String(magicPayment.status || "").toLowerCase() === "failed"
+      ) {
+        console.error("MAGIC COD AMOUNT MISMATCH:", {
+          paymentId: razorpayPaymentId,
+          paise: magicPayment.amount,
+          expectedPaise,
+          status: magicPayment.status
+        });
+        return res.status(400).json({ success: false, message: "Order amount does not match. Please try again." });
+      }
+
+      cart.delivery = Math.round((safeNumber(cart.delivery) + COD_FEE_RUPEES) * 100) / 100;
+      cart.total = Math.round((safeNumber(cart.total) + COD_FEE_RUPEES) * 100) / 100;
+      paymentStatus = "Pending";
+    }
 
     const cleanCustomer = {
       name: String(customer.name).trim(),
@@ -3609,7 +3675,9 @@ app.post("/api/orders", async function (req, res) {
       delivery: cart.delivery,
       discount: cart.discount,
       total: cart.total,
-      paymentMethod
+      paymentMethod: paymentMethod === "COD"
+        ? `Cash on Delivery - please keep Rs. ${Number(cart.total).toLocaleString("en-IN")} ready (includes Rs. ${COD_FEE_RUPEES} COD charge)`
+        : paymentMethod
     }).catch((error) => {
       console.error("ORDER EMAIL ERROR:", error);
     });
