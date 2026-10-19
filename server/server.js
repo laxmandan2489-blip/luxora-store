@@ -2691,6 +2691,36 @@ app.get("/api/admin/download-images", requireAdmin, async function (req, res) {
   }
 });
 
+/*
+ * SINGLE PRODUCT PHOTO - ORIGINAL QUALITY (admin only, 2026-10-19)
+ * Backup route for the per-product "Photos" button in Admin. The admin
+ * page first downloads each photo straight from its own link (fastest);
+ * only if a photo's site blocks that, it comes through here. The bytes
+ * are passed through exactly as stored - no resize, no re-compression -
+ * so the quality is the same as the saved photo.
+ */
+app.get("/api/admin/photo-original", requireAdmin, async function (req, res) {
+  try {
+    const url = String(req.query.url || "");
+    if (!/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ success: false, message: "Invalid photo link." });
+    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const type = response.headers.get("content-type") || "";
+    if (!type.startsWith("image/")) {
+      return res.status(415).json({ success: false, message: "This link is not a photo." });
+    }
+    const data = Buffer.from(await response.arrayBuffer());
+    res.set("Content-Type", type);
+    res.set("Cache-Control", "no-store");
+    return res.send(data);
+  } catch (photoError) {
+    console.error("PHOTO ORIGINAL ERROR:", photoError?.message);
+    return res.status(502).json({ success: false, message: "Could not get this photo. Please try again." });
+  }
+});
+
 app.get("/api/admin/products", requireAdmin, async function (req, res) {
   try {
     const { data, error } = await supabase
