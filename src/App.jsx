@@ -488,7 +488,7 @@ const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp bu
  * the site never promises COD that checkout can't give. If COD is
  * switched on at checkout later, set this to true.
  */
-const COD_AVAILABLE = false;
+const COD_AVAILABLE = true; // COD on via Magic Checkout (2026-10-20), see server MAGIC_COD_ENABLED
 
 /*
  * RAZORPAY MAGIC CHECKOUT (2026-10-18)
