@@ -1167,6 +1167,179 @@ function Admin() {
     }
   }
 
+  /*
+   * PER-PRODUCT PHOTO DOWNLOAD (2026-10-19)
+   * "📷 PHOTOS" button on every product card opens that product's photos
+   * (all colors). Tap the ones you want, then download. Each photo is
+   * downloaded straight from its saved link, several at once, exactly as
+   * stored (no re-compression) - so it's fast and full quality.
+   * On iPhone the photos go to the share sheet -> "Save Images" (Photos app).
+   */
+  const [photoProduct, setPhotoProduct] = useState(null);
+  const [selectedPhotoUrls, setSelectedPhotoUrls] = useState([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState("");
+  const [readyPhotoFiles, setReadyPhotoFiles] = useState(null);
+
+  function getProductPhotoGroups(product) {
+    const groups = [];
+    const seen = new Set();
+    const addGroup = (label, urls) => {
+      const list = (Array.isArray(urls) ? urls : [urls])
+        .map((url) => getImageUrl(url))
+        .filter((url) => /^https?:\/\//i.test(url) && !seen.has(url));
+      list.forEach((url) => seen.add(url));
+      if (list.length) groups.push({ label, urls: list });
+    };
+    const colorImages = product?.colorImages || {};
+    const colorNames = product?.colorNames || {};
+    const colorKeys = Array.from(
+      new Set([...(Array.isArray(product?.colors) ? product.colors : []), ...Object.keys(colorImages)])
+    );
+    for (const color of colorKeys) {
+      if (colorImages[color]) addGroup(colorNames[color] || color, colorImages[color]);
+    }
+    addGroup(colorKeys.length ? "Other photos" : "Photos", getProductImages(product));
+    return groups;
+  }
+
+  function openProductPhotos(product) {
+    setPhotoProduct(product);
+    setSelectedPhotoUrls([]);
+    setReadyPhotoFiles(null);
+    setPhotoProgress("");
+  }
+
+  function closeProductPhotos() {
+    if (photoBusy) return;
+    setPhotoProduct(null);
+    setSelectedPhotoUrls([]);
+    setReadyPhotoFiles(null);
+    setPhotoProgress("");
+  }
+
+  function togglePhotoSelected(url) {
+    setReadyPhotoFiles(null);
+    setSelectedPhotoUrls((current) =>
+      current.includes(url) ? current.filter((item) => item !== url) : [...current, url]
+    );
+  }
+
+  async function fetchOriginalPhoto(url) {
+    // Fastest: straight from the photo's own link (no server in between).
+    try {
+      const direct = await fetch(url, { mode: "cors", cache: "no-store" });
+      if (direct.ok) {
+        const blob = await direct.blob();
+        if (blob.size && (blob.type || "").startsWith("image/")) return blob;
+      }
+    } catch {
+      // that site blocks direct download - use the backup route below
+    }
+    const viaServer = await adminFetch(
+      `${API}/api/admin/photo-original?url=${encodeURIComponent(url)}`
+    );
+    if (!viaServer.ok) throw new Error("Could not download a photo.");
+    return viaServer.blob();
+  }
+
+  function photoExtension(blob, url) {
+    const type = blob.type || "";
+    if (type.includes("png")) return "png";
+    if (type.includes("webp")) return "webp";
+    if (type.includes("jpeg") || type.includes("jpg")) return "jpg";
+    const match = String(url).split("?")[0].match(/\.(jpe?g|png|webp)$/i);
+    return match ? match[1].toLowerCase().replace("jpeg", "jpg") : "jpg";
+  }
+
+  function isTouchPhone() {
+    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "") ||
+      (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent || ""));
+  }
+
+  async function downloadSelectedPhotos() {
+    if (!photoProduct || photoBusy || !selectedPhotoUrls.length) return;
+    setPhotoBusy(true);
+    setReadyPhotoFiles(null);
+    const groups = getProductPhotoGroups(photoProduct);
+    const baseName =
+      String(photoProduct.name || "photo").replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "photo";
+    const jobs = [];
+    for (const group of groups) {
+      group.urls.forEach((url, index) => {
+        if (selectedPhotoUrls.includes(url)) {
+          const label = groups.length > 1 ? ` ${group.label}` : "";
+          jobs.push({ url, name: `${baseName}${label} ${index + 1}`.replace(/[\\/:*?"<>|]+/g, " ") });
+        }
+      });
+    }
+    const files = new Array(jobs.length);
+    let done = 0;
+    let failed = 0;
+    let cursor = 0;
+    setPhotoProgress(`Downloading 0 / ${jobs.length}...`);
+    async function worker() {
+      while (cursor < jobs.length) {
+        const position = cursor++;
+        const job = jobs[position];
+        try {
+          const blob = await fetchOriginalPhoto(job.url);
+          files[position] = new File([blob], `${job.name}.${photoExtension(blob, job.url)}`, {
+            type: blob.type || "image/jpeg",
+          });
+        } catch {
+          failed += 1;
+        }
+        done += 1;
+        setPhotoProgress(`Downloading ${done} / ${jobs.length}...`);
+      }
+    }
+    try {
+      await Promise.all(Array.from({ length: Math.min(6, jobs.length) }, worker));
+      const ready = files.filter(Boolean);
+      if (!ready.length) throw new Error("Could not download the photos. Please try again.");
+
+      if (isTouchPhone() && navigator.canShare && navigator.canShare({ files: ready })) {
+        // iPhone needs one more tap to open "Save Images" - show that button.
+        setReadyPhotoFiles(ready);
+        setPhotoProgress(
+          `${ready.length} photo${ready.length > 1 ? "s" : ""} ready${failed ? ` (${failed} failed)` : ""}. Tap the green button to save.`
+        );
+      } else {
+        for (const file of ready) {
+          const link = document.createElement("a");
+          const objectUrl = URL.createObjectURL(file);
+          link.href = objectUrl;
+          link.download = file.name;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        setPhotoProgress(
+          `✅ ${ready.length} photo${ready.length > 1 ? "s" : ""} downloaded${failed ? ` (${failed} failed)` : ""}.`
+        );
+      }
+    } catch (error) {
+      setPhotoProgress(error.message || "Could not download the photos.");
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function saveReadyPhotosToPhone() {
+    if (!readyPhotoFiles?.length) return;
+    try {
+      await navigator.share({ files: readyPhotoFiles });
+      setPhotoProgress("✅ Done. Choose \"Save Images\" to put them in the Photos app.");
+    } catch (error) {
+      if (error?.name !== "AbortError") {
+        setPhotoProgress("Could not open the save screen. Please tap the green button again.");
+      }
+    }
+  }
+
   async function adminFetch(
     url,
     options = {}
@@ -4315,6 +4488,122 @@ function Admin() {
           opacity: 0.6;
           cursor: not-allowed;
         }
+        .photos-product-button {
+          padding: 10px 12px;
+          border: 1px solid #111111;
+          border-radius: 9px;
+          background: #ffffff;
+          color: #111111;
+          cursor: pointer;
+          font-weight: 800;
+        }
+        .photo-modal {
+          width: 760px;
+          max-width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          background: #ffffff;
+          color: #111111;
+          border-radius: 18px;
+          padding: 20px;
+        }
+        .photo-modal-top {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+        .photo-modal-top h2 {
+          margin: 0;
+          font-size: 18px;
+        }
+        .photo-group-label {
+          margin: 14px 0 8px;
+          font-weight: 800;
+          font-size: 14px;
+        }
+        .photo-pick-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+          gap: 8px;
+        }
+        .photo-pick {
+          position: relative;
+          padding: 0;
+          border: 3px solid transparent;
+          border-radius: 10px;
+          overflow: hidden;
+          background: #f3f3f3;
+          cursor: pointer;
+          aspect-ratio: 1 / 1;
+        }
+        .photo-pick img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .photo-pick.selected {
+          border-color: #111111;
+        }
+        .photo-pick-tick {
+          position: absolute;
+          top: 6px;
+          right: 6px;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.9);
+          border: 2px solid #111111;
+          font-size: 14px;
+          line-height: 20px;
+          text-align: center;
+          font-weight: 800;
+        }
+        .photo-pick.selected .photo-pick-tick {
+          background: #111111;
+          color: #ffffff;
+        }
+        .photo-modal-actions {
+          position: sticky;
+          bottom: -20px;
+          background: #ffffff;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          padding: 14px 0 4px;
+          margin-top: 14px;
+          border-top: 1px solid #eeeeee;
+        }
+        .photo-modal-actions button {
+          flex: 1 1 140px;
+          padding: 12px 14px;
+          border-radius: 9px;
+          font-weight: 800;
+          cursor: pointer;
+          border: 1px solid #111111;
+          background: #ffffff;
+          color: #111111;
+        }
+        .photo-modal-actions .photo-download-main {
+          background: #111111;
+          color: #ffffff;
+        }
+        .photo-modal-actions .photo-save-phone {
+          background: #1a8f3c;
+          border-color: #1a8f3c;
+          color: #ffffff;
+        }
+        .photo-modal-actions button:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .photo-progress {
+          width: 100%;
+          font-size: 13px;
+          color: #444444;
+        }
         .modal-overlay {
           position: fixed;
           inset: 0;
@@ -6305,6 +6594,13 @@ function Admin() {
                             </button>
                             <button
                               type="button"
+                              className="photos-product-button"
+                              onClick={() => openProductPhotos(product)}
+                            >
+                              📷 PHOTOS
+                            </button>
+                            <button
+                              type="button"
                               className="delete-product-button"
                               onClick={() =>
                                 deleteProduct(
@@ -6325,6 +6621,81 @@ function Admin() {
           </>
         )}
       </main>
+      {photoProduct && (() => {
+        const photoGroups = getProductPhotoGroups(photoProduct);
+        const allPhotoUrls = photoGroups.flatMap((group) => group.urls);
+        const allSelected = allPhotoUrls.length > 0 && selectedPhotoUrls.length === allPhotoUrls.length;
+        return (
+          <div className="modal-overlay" onClick={closeProductPhotos}>
+            <div className="photo-modal" onClick={(event) => event.stopPropagation()}>
+              <div className="photo-modal-top">
+                <div>
+                  <h2>📷 {photoProduct.name}</h2>
+                  <div style={{ fontSize: 13, color: "#666", marginTop: 4 }}>
+                    Tap the photos you want, then download. Full quality, as saved.
+                  </div>
+                </div>
+                <button type="button" className="cancel-product-button" style={{ flex: "0 0 auto" }} onClick={closeProductPhotos} disabled={photoBusy}>
+                  ✕
+                </button>
+              </div>
+              {allPhotoUrls.length === 0 ? (
+                <div className="empty-state">This product has no photos.</div>
+              ) : (
+                photoGroups.map((group) => (
+                  <div key={group.label}>
+                    {photoGroups.length > 1 && <div className="photo-group-label">{group.label}</div>}
+                    <div className="photo-pick-grid">
+                      {group.urls.map((url) => {
+                        const selected = selectedPhotoUrls.includes(url);
+                        return (
+                          <button
+                            type="button"
+                            key={url}
+                            className={`photo-pick${selected ? " selected" : ""}`}
+                            onClick={() => togglePhotoSelected(url)}
+                            disabled={photoBusy}
+                          >
+                            <img src={url} alt={group.label} loading="lazy" />
+                            <span className="photo-pick-tick">{selected ? "✓" : ""}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
+              <div className="photo-modal-actions">
+                <button
+                  type="button"
+                  disabled={photoBusy || !allPhotoUrls.length}
+                  onClick={() => {
+                    setReadyPhotoFiles(null);
+                    setSelectedPhotoUrls(allSelected ? [] : allPhotoUrls);
+                  }}
+                >
+                  {allSelected ? "Clear selection" : `Select all (${allPhotoUrls.length})`}
+                </button>
+                {readyPhotoFiles?.length ? (
+                  <button type="button" className="photo-save-phone" onClick={saveReadyPhotosToPhone}>
+                    📲 Save {readyPhotoFiles.length} to iPhone
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="photo-download-main"
+                    disabled={photoBusy || !selectedPhotoUrls.length}
+                    onClick={downloadSelectedPhotos}
+                  >
+                    {photoBusy ? "Downloading..." : `⬇ Download ${selectedPhotoUrls.length || ""} photo${selectedPhotoUrls.length === 1 ? "" : "s"}`}
+                  </button>
+                )}
+                {photoProgress && <div className="photo-progress">{photoProgress}</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {selectedOrder && (
         <div
           className="modal-overlay"
