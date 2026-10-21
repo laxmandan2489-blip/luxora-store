@@ -4138,6 +4138,420 @@ app.delete("/api/orders/:id", requireAdmin, async function (req, res) {
   }
 });
 
+/*
+ * =========================================================
+ * EMAIL MARKETING CAMPAIGN (2026-10-21)
+ * =========================================================
+ * Admin > Email Campaign sends one promotional email (message +
+ * chosen bags + optional coupon) to a list of old customers, through
+ * the SAME Gmail account + App Password the order emails already use.
+ *
+ * Gmail safety:
+ *  - emails go out one by one with a pause (MARKETING_DELAY_MS), never
+ *    all at once, so Gmail doesn't treat it as spam
+ *  - at most MARKETING_DAILY_LIMIT marketing emails in any 24 hours
+ *    (Gmail's own limit is ~500/day incl. order emails)
+ *  - every email has an Unsubscribe link + one-click unsubscribe
+ *    header; unsubscribed addresses are skipped forever
+ *  - pressing Send again with the SAME subject skips everyone who
+ *    already got it (so a stopped campaign can just be resumed)
+ *
+ * Needs two Supabase tables - run once in Supabase > SQL Editor:
+ *
+ *   create table if not exists email_unsubscribes (
+ *     email text primary key,
+ *     created_at timestamptz not null default now()
+ *   );
+ *   create table if not exists email_campaign_sends (
+ *     id bigserial primary key,
+ *     campaign_id text not null,
+ *     email text not null,
+ *     status text not null,
+ *     error text,
+ *     created_at timestamptz not null default now(),
+ *     unique (campaign_id, email)
+ *   );
+ *   alter table email_unsubscribes enable row level security;
+ *   alter table email_campaign_sends enable row level security;
+ */
+const MARKETING_DAILY_LIMIT = 400;
+const MARKETING_DELAY_MS = 4000;
+const MARKETING_MAX_PRODUCTS = 6;
+const MARKETING_SITE_URL = "https://shrimoh.vercel.app";
+const MARKETING_API_URL = process.env.PUBLIC_API_URL || "https://luxora-store-mkva.onrender.com";
+const MARKETING_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+let marketingJob = null; // { running, campaignId, subject, total, sent, failed, ... }
+
+function marketingEscape(value) {
+  return String(value === null || value === undefined ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function marketingCampaignId(subject) {
+  return crypto.createHash("sha256").update(String(subject || "").trim().toLowerCase()).digest("hex").slice(0, 16);
+}
+
+function marketingUnsubscribeToken(email) {
+  return crypto
+    .createHmac("sha256", String(ADMIN_JWT_SECRET || "shrimoh-unsubscribe"))
+    .update(`unsubscribe:${String(email).trim().toLowerCase()}`)
+    .digest("base64url")
+    .slice(0, 24);
+}
+
+function marketingUnsubscribeUrl(email) {
+  const clean = String(email).trim().toLowerCase();
+  return `${MARKETING_API_URL}/api/unsubscribe?e=${encodeURIComponent(clean)}&t=${marketingUnsubscribeToken(clean)}`;
+}
+
+// Small, email-friendly copy of a product photo (JPG - every email app shows it).
+function marketingImageUrl(image) {
+  const url = String(image || "").trim();
+  if (!/^https?:\/\//i.test(url)) return "";
+  const withoutProtocol = url.replace(/^https?:\/\//, "");
+  return `https://images.weserv.nl/?url=${encodeURIComponent(withoutProtocol)}&w=560&h=560&fit=cover&q=80&output=jpg`;
+}
+
+function marketingCleanRecipients(list) {
+  const seen = new Set();
+  const result = [];
+  for (const item of Array.isArray(list) ? list : []) {
+    const email = String((item && item.email) || item || "").trim().toLowerCase();
+    if (!email || !MARKETING_EMAIL_PATTERN.test(email) || seen.has(email)) continue;
+    seen.add(email);
+    const name = item && typeof item === "object" ? String(item.name || "").trim().slice(0, 60) : "";
+    result.push({ email, name });
+  }
+  return result;
+}
+
+function marketingCleanContent(body) {
+  const subject = String(body.subject || "").trim().slice(0, 150);
+  const heading = String(body.heading || "").trim().slice(0, 120);
+  const message = String(body.message || "").trim().slice(0, 3000);
+  const couponCode = String(body.couponCode || "").trim().toUpperCase().slice(0, 30);
+  const productIds = (Array.isArray(body.productIds) ? body.productIds : [])
+    .map((id) => String(id).trim())
+    .filter(Boolean)
+    .slice(0, MARKETING_MAX_PRODUCTS);
+  if (!subject) return { error: "Please write a subject." };
+  if (!message) return { error: "Please write a message." };
+  return { subject, heading, message, couponCode, productIds };
+}
+
+const MARKETING_AUTO_PRODUCTS = 4;
+
+async function marketingLoadProducts(productIds) {
+  if (!productIds.length) {
+    // Nothing chosen: automatically show the newest bags that are in
+    // stock and have a photo.
+    const { data, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("active", true)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    return (Array.isArray(data) ? data : [])
+      .map(formatProduct)
+      .filter((product) => product && product.stock > 0 && /^https?:\/\//i.test(product.image || ""))
+      .slice(0, MARKETING_AUTO_PRODUCTS);
+  }
+  const { data, error } = await supabase.from("products").select("*").in("id", productIds).eq("active", true);
+  if (error) throw error;
+  const byId = new Map((Array.isArray(data) ? data : []).map((row) => [String(row.id), formatProduct(row)]));
+  return productIds.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, campaignId }) {
+  const utm = `utm_source=email&utm_medium=email&utm_campaign=${encodeURIComponent(campaignId)}`;
+  const shopUrl = `${MARKETING_SITE_URL}/?${utm}`;
+  const messageHtml = marketingEscape(content.message)
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:${EMAIL_BRAND.text};">${paragraph.replace(/\n/g, "<br />")}</p>`)
+    .join("");
+
+  const cards = products.map((product) => {
+    const link = `${MARKETING_SITE_URL}/product/${encodeURIComponent(product.id)}?${utm}`;
+    const image = marketingImageUrl(product.image);
+    const oldPrice = product.oldPrice > product.price
+      ? `<span style="text-decoration:line-through;color:${EMAIL_BRAND.muted};font-size:12px;margin-left:6px;">${formatMoney(product.oldPrice)}</span>`
+      : "";
+    return `
+      <td valign="top" width="50%" style="padding:8px;">
+        <a href="${link}" style="text-decoration:none;color:${EMAIL_BRAND.ink};">
+          ${image ? `<img src="${image}" alt="${marketingEscape(product.name)}" width="220" style="width:100%;max-width:220px;height:auto;border-radius:8px;display:block;border:1px solid ${EMAIL_BRAND.line};" />` : ""}
+          <div style="font-size:13px;line-height:1.4;margin-top:10px;color:${EMAIL_BRAND.ink};">${marketingEscape(product.name)}</div>
+          <div style="font-size:14px;margin-top:4px;color:${EMAIL_BRAND.ink};font-weight:bold;">${formatMoney(product.price)}${oldPrice}</div>
+        </a>
+      </td>`;
+  });
+  let rows = "";
+  for (let index = 0; index < cards.length; index += 2) {
+    rows += `<tr>${cards[index]}${cards[index + 1] || '<td width="50%" style="padding:8px;"></td>'}</tr>`;
+  }
+  const productsHtml = rows
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:8px 0 20px;">${rows}</table>`
+    : "";
+
+  const couponHtml = content.couponCode
+    ? `<div style="text-align:center;margin:6px 0 24px;padding:16px;border:1px dashed ${EMAIL_BRAND.gold};border-radius:8px;background:${EMAIL_BRAND.soft};">
+         <div style="font-size:10px;letter-spacing:2px;color:${EMAIL_BRAND.muted};">USE CODE AT CHECKOUT</div>
+         <div style="font-size:22px;letter-spacing:3px;color:${EMAIL_BRAND.ink};font-weight:bold;margin-top:6px;">${marketingEscape(content.couponCode)}</div>
+       </div>`
+    : "";
+
+  const bodyHtml = `
+    <p style="margin:0 0 14px;font-size:14px;">Hi ${marketingEscape(recipientName || "there")},</p>
+    ${messageHtml}
+    ${couponHtml}
+    ${productsHtml}
+    <div style="text-align:center;margin:10px 0 8px;">
+      <a href="${shopUrl}" style="display:inline-block;padding:14px 34px;background:${EMAIL_BRAND.ink};color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;letter-spacing:2px;">SHOP NOW</a>
+    </div>
+    <p style="margin:26px 0 0;font-size:11px;line-height:1.6;color:${EMAIL_BRAND.muted};text-align:center;">
+      Shrimoh Craft, Kudi Bhagtasni, Sector 4, Jodhpur, Rajasthan<br />
+      You are receiving this because you shopped with SHRIMOH.
+      <a href="${unsubscribeUrl}" style="color:${EMAIL_BRAND.muted};">Unsubscribe</a>
+    </p>`;
+
+  return emailShell({ eyebrow: "SHRIMOH", heading: marketingEscape(content.heading), bodyHtml });
+}
+
+async function marketingSendOne({ to, subject, html, unsubscribeUrl }) {
+  if (!mailTransporter) throw new Error("Gmail is not set up (GMAIL_USER / GMAIL_APP_PASSWORD).");
+  await mailTransporter.sendMail({
+    from: `"SHRIMOH" <${GMAIL_USER}>`,
+    to,
+    subject,
+    html,
+    headers: {
+      "List-Unsubscribe": `<${unsubscribeUrl}>, <mailto:${GMAIL_USER}?subject=unsubscribe>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
+    }
+  });
+}
+
+async function marketingSentInLast24h() {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count, error } = await supabase
+    .from("email_campaign_sends")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "sent")
+    .gte("created_at", since);
+  if (error) throw error;
+  return count || 0;
+}
+
+function marketingIsGmailLimitError(error) {
+  const text = String((error && (error.response || error.message)) || "");
+  return /quota|limit exceeded|5\.4\.5|too many|rate limit|421|454/i.test(text);
+}
+
+async function runMarketingJob({ content, products, recipients, campaignId }) {
+  for (const recipient of recipients) {
+    if (!marketingJob || marketingJob.stopRequested) break;
+    const unsubscribeUrl = marketingUnsubscribeUrl(recipient.email);
+    let status = "sent";
+    let errorText = null;
+    try {
+      const html = marketingEmailHtml({ content, products, recipientName: recipient.name, unsubscribeUrl, campaignId });
+      await marketingSendOne({ to: recipient.email, subject: content.subject, html, unsubscribeUrl });
+      marketingJob.sent += 1;
+    } catch (error) {
+      status = "failed";
+      errorText = String((error && error.message) || error).slice(0, 300);
+      marketingJob.failed += 1;
+      marketingJob.lastError = errorText;
+      console.error("MARKETING EMAIL ERROR:", recipient.email, errorText);
+      if (marketingIsGmailLimitError(error)) {
+        marketingJob.stoppedReason = "Gmail daily limit reached - press Send again tomorrow with the same subject to continue.";
+        marketingJob.stopRequested = true;
+      }
+    }
+    const { error: logError } = await supabase
+      .from("email_campaign_sends")
+      .upsert({ campaign_id: campaignId, email: recipient.email, status, error: errorText }, { onConflict: "campaign_id,email" });
+    if (logError) console.error("MARKETING LOG ERROR:", logError);
+    await new Promise((resolve) => setTimeout(resolve, MARKETING_DELAY_MS));
+  }
+  if (marketingJob) {
+    marketingJob.running = false;
+    marketingJob.finishedAt = new Date().toISOString();
+  }
+}
+
+// Preview: the exact email HTML, shown in the admin page.
+app.post("/api/admin/email-campaign/preview", requireAdmin, async function (req, res) {
+  try {
+    const content = marketingCleanContent(req.body || {});
+    if (content.error) return res.status(400).json({ success: false, message: content.error });
+    const products = await marketingLoadProducts(content.productIds);
+    const html = marketingEmailHtml({
+      content,
+      products,
+      recipientName: "Priya",
+      unsubscribeUrl: "#",
+      campaignId: marketingCampaignId(content.subject)
+    });
+    return res.json({ success: true, html });
+  } catch (error) {
+    console.error("MARKETING PREVIEW ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Could not build the preview." });
+  }
+});
+
+// Test: send the email to one address (yourself) - not logged, not counted.
+app.post("/api/admin/email-campaign/test", requireAdmin, async function (req, res) {
+  try {
+    const body = req.body || {};
+    const content = marketingCleanContent(body);
+    if (content.error) return res.status(400).json({ success: false, message: content.error });
+    const to = String(body.testEmail || GMAIL_USER || "").trim().toLowerCase();
+    if (!MARKETING_EMAIL_PATTERN.test(to)) return res.status(400).json({ success: false, message: "Please enter a valid test email." });
+    const products = await marketingLoadProducts(content.productIds);
+    const unsubscribeUrl = marketingUnsubscribeUrl(to);
+    const html = marketingEmailHtml({ content, products, recipientName: "", unsubscribeUrl, campaignId: marketingCampaignId(content.subject) });
+    await marketingSendOne({ to, subject: `[TEST] ${content.subject}`, html, unsubscribeUrl });
+    return res.json({ success: true, message: `Test email sent to ${to}.` });
+  } catch (error) {
+    console.error("MARKETING TEST ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Could not send the test email." });
+  }
+});
+
+// Start sending to the whole list (runs in the background).
+app.post("/api/admin/email-campaign/send", requireAdmin, async function (req, res) {
+  try {
+    if (marketingJob && marketingJob.running) {
+      return res.status(409).json({ success: false, message: "A campaign is already sending. Please wait for it to finish." });
+    }
+    const body = req.body || {};
+    const content = marketingCleanContent(body);
+    if (content.error) return res.status(400).json({ success: false, message: content.error });
+    if (!mailTransporter) {
+      return res.status(400).json({ success: false, message: "Gmail is not set up on the server (GMAIL_USER / GMAIL_APP_PASSWORD)." });
+    }
+
+    let recipients = marketingCleanRecipients(body.recipients).slice(0, 2000);
+    if (!recipients.length) return res.status(400).json({ success: false, message: "Please add at least one valid email." });
+    const totalGiven = recipients.length;
+    const campaignId = marketingCampaignId(content.subject);
+
+    const emails = recipients.map((item) => item.email);
+    const [{ data: unsubRows, error: unsubError }, { data: sentRows, error: sentError }] = await Promise.all([
+      supabase.from("email_unsubscribes").select("email").in("email", emails),
+      supabase.from("email_campaign_sends").select("email").eq("campaign_id", campaignId).eq("status", "sent").in("email", emails)
+    ]);
+    if (unsubError || sentError) {
+      const dbError = unsubError || sentError;
+      console.error("MARKETING DB ERROR:", dbError);
+      return res.status(500).json({
+        success: false,
+        message: "Email tables not found. Please run the Email Campaign SQL in Supabase first."
+      });
+    }
+    const unsubscribed = new Set((unsubRows || []).map((row) => String(row.email).toLowerCase()));
+    const alreadySent = new Set((sentRows || []).map((row) => String(row.email).toLowerCase()));
+    recipients = recipients.filter((item) => !unsubscribed.has(item.email) && !alreadySent.has(item.email));
+
+    const sentToday = await marketingSentInLast24h();
+    const remainingToday = Math.max(0, MARKETING_DAILY_LIMIT - sentToday);
+    const laterCount = Math.max(0, recipients.length - remainingToday);
+    recipients = recipients.slice(0, remainingToday);
+
+    if (!recipients.length) {
+      return res.status(400).json({
+        success: false,
+        message: remainingToday === 0
+          ? `Today's limit of ${MARKETING_DAILY_LIMIT} emails is used up. Please send again tomorrow with the same subject.`
+          : "Everyone on this list has already received this email (or unsubscribed)."
+      });
+    }
+
+    const products = await marketingLoadProducts(content.productIds);
+    marketingJob = {
+      running: true,
+      stopRequested: false,
+      campaignId,
+      subject: content.subject,
+      total: recipients.length,
+      sent: 0,
+      failed: 0,
+      skippedUnsubscribed: unsubscribed.size,
+      skippedAlreadySent: alreadySent.size,
+      leftForTomorrow: laterCount,
+      totalGiven,
+      lastError: "",
+      stoppedReason: "",
+      startedAt: new Date().toISOString(),
+      finishedAt: null
+    };
+    runMarketingJob({ content, products, recipients, campaignId }).catch((error) => {
+      console.error("MARKETING JOB ERROR:", error);
+      if (marketingJob) {
+        marketingJob.running = false;
+        marketingJob.lastError = String(error.message || error);
+      }
+    });
+
+    const { stopRequested, ...publicJob } = marketingJob;
+    return res.json({ success: true, job: publicJob });
+  } catch (error) {
+    console.error("MARKETING SEND ERROR:", error);
+    return res.status(500).json({ success: false, message: error.message || "Could not start the campaign." });
+  }
+});
+
+app.get("/api/admin/email-campaign/status", requireAdmin, async function (req, res) {
+  let sentToday = null;
+  try {
+    sentToday = await marketingSentInLast24h();
+  } catch (error) {
+    sentToday = null;
+  }
+  const job = marketingJob ? (({ stopRequested, ...rest }) => rest)(marketingJob) : null;
+  return res.json({ success: true, job, sentToday, dailyLimit: MARKETING_DAILY_LIMIT });
+});
+
+app.post("/api/admin/email-campaign/stop", requireAdmin, function (req, res) {
+  if (marketingJob && marketingJob.running) {
+    marketingJob.stopRequested = true;
+    marketingJob.stoppedReason = "Stopped by admin. Press Send again with the same subject to continue.";
+  }
+  return res.json({ success: true });
+});
+
+// Unsubscribe link inside every campaign email (GET = link click,
+// POST = Gmail's one-click "Unsubscribe" button).
+async function handleUnsubscribe(req, res) {
+  const email = String((req.query && req.query.e) || "").trim().toLowerCase();
+  const token = String((req.query && req.query.t) || "");
+  const valid = MARKETING_EMAIL_PATTERN.test(email) && token && token === marketingUnsubscribeToken(email);
+  let ok = false;
+  if (valid) {
+    const { error } = await supabase.from("email_unsubscribes").upsert({ email }, { onConflict: "email" });
+    if (error) console.error("UNSUBSCRIBE ERROR:", error);
+    ok = !error;
+  }
+  if (req.method === "POST") return res.status(ok ? 200 : 400).send(ok ? "Unsubscribed" : "Invalid link");
+  res.set("Content-Type", "text/html; charset=utf-8");
+  return res.status(ok ? 200 : 400).send(`<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>SHRIMOH</title></head>
+<body style="margin:0;background:#fbf7ee;font-family:Arial,Helvetica,sans-serif;color:#1c150d;">
+<div style="max-width:460px;margin:60px auto;padding:32px 24px;background:#fff;border:1px solid #e7ddc4;border-radius:10px;text-align:center;">
+<div style="font-size:20px;letter-spacing:6px;font-weight:bold;">SHRIMOH</div>
+<p style="font-size:15px;line-height:1.6;margin:24px 0 8px;">${ok ? "You have been unsubscribed. You will not receive marketing emails from SHRIMOH again." : "This unsubscribe link is not valid. Please email infoshrimoh@gmail.com and we will remove you."}</p>
+<a href="${MARKETING_SITE_URL}" style="display:inline-block;margin-top:16px;color:#7d6c4f;">Visit SHRIMOH</a>
+</div></body></html>`);
+}
+app.get("/api/unsubscribe", handleUnsubscribe);
+app.post("/api/unsubscribe", handleUnsubscribe);
+
 app.use(function (error, req, res, next) {
   console.error("SERVER ERROR:", error);
 
