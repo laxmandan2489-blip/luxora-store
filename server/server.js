@@ -4209,12 +4209,14 @@ function marketingUnsubscribeUrl(email) {
   return `${MARKETING_API_URL}/api/unsubscribe?e=${encodeURIComponent(clean)}&t=${marketingUnsubscribeToken(clean)}`;
 }
 
-// Small, email-friendly copy of a product photo (JPG - every email app shows it).
-function marketingImageUrl(image) {
-  const url = String(image || "").trim();
-  if (!/^https?:\/\//i.test(url)) return "";
-  const withoutProtocol = url.replace(/^https?:\/\//, "");
-  return `https://images.weserv.nl/?url=${encodeURIComponent(withoutProtocol)}&w=560&h=560&fit=cover&q=80&output=jpg`;
+// Small, email-friendly copy of a product photo, served from our OWN
+// server (/api/email-image/<id>.jpg). An image link that hides another
+// link inside it (like an image proxy) is a common spam signal, and
+// some email apps refuse to load it.
+function marketingImageUrl(product) {
+  if (!product || !/^https?:\/\//i.test(String(product.image || ""))) return "";
+  const version = encodeURIComponent(String(product.updatedAt || "").replace(/\D/g, "").slice(0, 14) || "1");
+  return `${MARKETING_API_URL}/api/email-image/${encodeURIComponent(product.id)}.jpg?v=${version}`;
 }
 
 function marketingCleanRecipients(list) {
@@ -4292,7 +4294,7 @@ function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, 
 
   const cards = products.map((product) => {
     const link = `${MARKETING_SITE_URL}/product/${encodeURIComponent(product.id)}?${utm}`;
-    const image = marketingImageUrl(product.image);
+    const image = marketingImageUrl(product);
     const off = marketingDiscountPercent(product);
     const oldPrice = off
       ? `<span style="text-decoration:line-through;color:${EMAIL_BRAND.muted};font-size:13px;margin-left:6px;font-weight:normal;">${formatMoney(product.oldPrice)}</span>`
@@ -4360,13 +4362,35 @@ function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, 
   return emailShell({ eyebrow: "SHRIMOH", heading: marketingEscape(content.heading), bodyHtml });
 }
 
+// Plain-text copy of the email. Emails with only HTML and no text part
+// are more likely to be put in spam.
+function marketingPlainText(html) {
+  return String(html || "")
+    .replace(/<a [^>]*href="([^"#]+)"[^>]*>([\s\S]*?)<\/a>/gi, (match, href, label) => {
+      const text = label.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      return text ? `${text} (${href})` : href;
+    })
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h1|table)>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&middot;/g, "-")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#\d+;/g, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n\s*\n+/g, "\n\n")
+    .trim();
+}
+
 async function marketingSendOne({ to, subject, html, unsubscribeUrl }) {
   if (!mailTransporter) throw new Error("Gmail is not set up (GMAIL_USER / GMAIL_APP_PASSWORD).");
   await mailTransporter.sendMail({
     from: `"SHRIMOH" <${GMAIL_USER}>`,
+    replyTo: GMAIL_USER,
     to,
     subject,
     html,
+    text: marketingPlainText(html),
     headers: {
       "List-Unsubscribe": `<${unsubscribeUrl}>, <mailto:${GMAIL_USER}?subject=unsubscribe>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
@@ -4454,7 +4478,7 @@ app.post("/api/admin/email-campaign/test", requireAdmin, async function (req, re
     const products = await marketingLoadProducts(content.productIds);
     const unsubscribeUrl = marketingUnsubscribeUrl(to);
     const html = marketingEmailHtml({ content, products, recipientName: "", unsubscribeUrl, campaignId: marketingCampaignId(content.subject) });
-    await marketingSendOne({ to, subject: `[TEST] ${content.subject}`, html, unsubscribeUrl });
+    await marketingSendOne({ to, subject: content.subject, html, unsubscribeUrl });
     return res.json({ success: true, message: `Test email sent to ${to}.` });
   } catch (error) {
     console.error("MARKETING TEST ERROR:", error);
@@ -4562,6 +4586,42 @@ app.post("/api/admin/email-campaign/stop", requireAdmin, function (req, res) {
     marketingJob.stoppedReason = "Stopped by admin. Press Send again with the same subject to continue.";
   }
   return res.json({ success: true });
+});
+
+// Product photo for emails: 560x560 JPG made from the product's main
+// photo. Kept in memory for a while so repeat opens are instant.
+const marketingImageCache = new Map();
+app.get("/api/email-image/:file", async function (req, res) {
+  try {
+    const id = String(req.params.file || "").replace(/\.jpg$/i, "");
+    const cached = marketingImageCache.get(id);
+    if (cached && Date.now() - cached.at < 6 * 60 * 60 * 1000) {
+      res.set("Content-Type", "image/jpeg");
+      res.set("Cache-Control", "public, max-age=604800");
+      return res.send(cached.buffer);
+    }
+    const { data, error } = await supabase.from("products").select("*").eq("id", id).maybeSingle();
+    if (error) throw error;
+    const product = data ? formatProduct(data) : null;
+    if (!product || !/^https?:\/\//i.test(product.image || "")) return res.status(404).send("Not found");
+    const response = await fetch(product.image);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const input = Buffer.from(await response.arrayBuffer());
+    const buffer = await sharp(input, { failOn: "none" })
+      .rotate()
+      .resize({ width: 560, height: 560, fit: "contain", background: "#ffffff" })
+      .flatten({ background: "#ffffff" })
+      .jpeg({ quality: 80, mozjpeg: true })
+      .toBuffer();
+    if (marketingImageCache.size > 60) marketingImageCache.delete(marketingImageCache.keys().next().value);
+    marketingImageCache.set(id, { buffer, at: Date.now() });
+    res.set("Content-Type", "image/jpeg");
+    res.set("Cache-Control", "public, max-age=604800");
+    return res.send(buffer);
+  } catch (imageError) {
+    console.error("EMAIL IMAGE ERROR:", imageError?.message);
+    return res.status(502).send("Image error");
+  }
 });
 
 // Unsubscribe link inside every campaign email (GET = link click,
