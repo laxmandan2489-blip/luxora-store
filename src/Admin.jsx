@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
+import EmailCampaign from "./EmailCampaign";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -4903,7 +4904,21 @@ function Admin() {
           >
             Site Content
           </button>
+          <button
+            className={
+              activeTab === "email"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("email")}
+          >
+            Email Campaign
+          </button>
         </div>
+
+        {activeTab === "email" && (
+          <EmailCampaign API={API} adminFetch={adminFetch} />
+        )}
 
         {activeTab === "dashboard" && (
           <div className="panel">
