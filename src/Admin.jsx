@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
 import EmailCampaign from "./EmailCampaign";
+import AdMaker from "./AdMaker";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -4914,10 +4915,24 @@ function Admin() {
           >
             Email Campaign
           </button>
+          <button
+            className={
+              activeTab === "ads"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("ads")}
+          >
+            Ad Maker
+          </button>
         </div>
 
         {activeTab === "email" && (
           <EmailCampaign API={API} adminFetch={adminFetch} />
+        )}
+
+        {activeTab === "ads" && (
+          <AdMaker API={API} adminFetch={adminFetch} products={products} />
         )}
 
         {activeTab === "dashboard" && (

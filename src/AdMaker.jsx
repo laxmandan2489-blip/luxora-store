@@ -1,0 +1,692 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import urbanist500 from "./assets/urbanist-latin-500-normal.woff2";
+import urbanist600 from "./assets/urbanist-latin-600-normal.woff2";
+
+/*
+ * ADMIN > AD MAKER (2026-10-21)
+ * Turns a real product photo into a ready-to-post ad image (Meta feed,
+ * portrait or story size). The photo itself is NEVER edited - it is
+ * only placed on the design, and text (logo, price, offer, slogan,
+ * delivery line) is drawn around/over it. Everything is drawn in the
+ * browser on a <canvas>, so nothing new is needed on the server: the
+ * photo comes through the existing /api/admin/photo-original route.
+ */
+
+const SIZES = {
+  square: { label: "Feed 1:1", w: 1080, h: 1080 },
+  portrait: { label: "Feed 4:5", w: 1080, h: 1350 },
+  story: { label: "Story / Reel 9:16", w: 1080, h: 1920 },
+};
+
+const TEMPLATES = {
+  classic: "Ivory",
+  noir: "Noir",
+  sale: "Festive Sale",
+  minimal: "Photo first",
+};
+
+const SLOGANS = [
+  "Carry elegance every day",
+  "Made to be noticed",
+  "Your everyday luxury",
+  "Crafted for the modern woman",
+  "Style that goes everywhere",
+  "The bag you'll reach for daily",
+  "Festive ready, always",
+  "This Diwali, gift her elegance",
+  "Elegance, now within reach",
+];
+
+const INK = "#1c150d";
+const GOLD = "#b1a181";
+const DEEP_GOLD = "#8a7650";
+const IVORY = "#fbf7ee";
+const MAROON = "#5e1a24";
+const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
+const SANS = '"AdUrbanist", "Helvetica Neue", Arial, sans-serif';
+
+let fontsPromise = null;
+function loadFonts() {
+  if (fontsPromise) return fontsPromise;
+  fontsPromise = (async () => {
+    try {
+      if (!document.getElementById("ad-maker-fonts")) {
+        const link = document.createElement("link");
+        link.id = "ad-maker-fonts";
+        link.rel = "stylesheet";
+        link.href = "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&display=swap";
+        document.head.appendChild(link);
+      }
+      const faces = [
+        new FontFace("AdUrbanist", `url(${urbanist500}) format("woff2")`, { weight: "500" }),
+        new FontFace("AdUrbanist", `url(${urbanist600}) format("woff2")`, { weight: "600" }),
+      ];
+      for (const face of faces) {
+        await face.load();
+        document.fonts.add(face);
+      }
+      await Promise.race([
+        Promise.all([
+          document.fonts.load(`600 60px "Cormorant Garamond"`),
+          document.fonts.load(`italic 500 60px "Cormorant Garamond"`),
+        ]),
+        new Promise((resolve) => setTimeout(resolve, 4000)),
+      ]);
+    } catch {
+      // Fallback fonts (Georgia / Arial) are used - the ad still works.
+    }
+  })();
+  return fontsPromise;
+}
+
+function rupees(value) {
+  const number = Number(value || 0);
+  return `₹${number.toLocaleString("en-IN")}`;
+}
+
+// Letter-spaced text (canvas letterSpacing isn't on every iPhone yet).
+function spacedText(ctx, text, x, y, spacing, align = "center") {
+  const chars = String(text).split("");
+  const widths = chars.map((char) => ctx.measureText(char).width);
+  const total = widths.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, chars.length - 1);
+  let cursor = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
+  const saved = ctx.textAlign;
+  ctx.textAlign = "left";
+  chars.forEach((char, index) => {
+    ctx.fillText(char, cursor, y);
+    cursor += widths[index] + spacing;
+  });
+  ctx.textAlign = saved;
+  return total;
+}
+
+// Sets ctx.font, shrinking the size until the text fits maxWidth.
+function fitFont(ctx, text, style, size, family, maxWidth) {
+  let current = size;
+  ctx.font = `${style} ${current}px ${family}`;
+  while (current > 12 && ctx.measureText(String(text)).width > maxWidth) {
+    current -= 1;
+    ctx.font = `${style} ${current}px ${family}`;
+  }
+  return current;
+}
+
+function wrapLines(ctx, text, maxWidth, maxLines) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width <= maxWidth || !line) {
+      line = test;
+    } else {
+      lines.push(line);
+      line = word;
+      if (lines.length === maxLines) break;
+    }
+  }
+  if (line && lines.length < maxLines) lines.push(line);
+  if (lines.length === maxLines && words.join(" ") !== lines.join(" ")) {
+    let last = lines[maxLines - 1];
+    while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) last = last.slice(0, -1);
+    lines[maxLines - 1] = `${last.trim()}…`;
+  }
+  return lines;
+}
+
+// Colour of the photo's own background (top-left corner), so a
+// "fit" photo blends into its panel instead of sitting in a box.
+function photoBackground(img) {
+  try {
+    const probe = document.createElement("canvas");
+    probe.width = 8;
+    probe.height = 8;
+    const pctx = probe.getContext("2d");
+    pctx.drawImage(img, 0, 0, 8, 8);
+    const corners = [pctx.getImageData(0, 0, 1, 1).data, pctx.getImageData(7, 0, 1, 1).data];
+    const r = Math.round((corners[0][0] + corners[1][0]) / 2);
+    const g = Math.round((corners[0][1] + corners[1][1]) / 2);
+    const b = Math.round((corners[0][2] + corners[1][2]) / 2);
+    return `rgb(${r},${g},${b})`;
+  } catch {
+    return "#ffffff";
+  }
+}
+
+function drawPhoto(ctx, img, x, y, w, h, fit) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.fillStyle = photoBackground(img);
+  ctx.fillRect(x, y, w, h);
+  const scale = fit === "fill" ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  ctx.drawImage(img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Price row: big price, struck-through MRP. Returns its width.
+function drawPrice(ctx, options) {
+  ctx.save();
+  const width = drawPriceInner(ctx, options);
+  ctx.restore();
+  return width;
+}
+
+function drawPriceInner(ctx, { price, mrp, x, y, size, color, mutedColor, align = "center" }) {
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `600 ${size}px ${SANS}`;
+  const priceText = rupees(price);
+  const priceWidth = ctx.measureText(priceText).width;
+  const showMrp = Number(mrp) > Number(price);
+  ctx.font = `500 ${Math.round(size * 0.48)}px ${SANS}`;
+  const mrpText = showMrp ? rupees(mrp) : "";
+  const mrpWidth = showMrp ? ctx.measureText(mrpText).width : 0;
+  const gap = showMrp ? size * 0.35 : 0;
+  const total = priceWidth + gap + mrpWidth;
+  let start = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
+
+  ctx.textAlign = "left";
+  ctx.fillStyle = color;
+  ctx.font = `600 ${size}px ${SANS}`;
+  ctx.fillText(priceText, start, y);
+  if (showMrp) {
+    start += priceWidth + gap;
+    ctx.fillStyle = mutedColor;
+    ctx.font = `500 ${Math.round(size * 0.48)}px ${SANS}`;
+    ctx.fillText(mrpText, start, y);
+    ctx.strokeStyle = mutedColor;
+    ctx.lineWidth = Math.max(2, size * 0.03);
+    ctx.beginPath();
+    const strikeY = y - size * 0.16;
+    ctx.moveTo(start - 2, strikeY);
+    ctx.lineTo(start + mrpWidth + 2, strikeY);
+    ctx.stroke();
+  }
+  return total;
+}
+
+function drawAd(ctx, { W, H, img, template, fit, d }) {
+  const off = Number(d.mrp) > Number(d.price) ? Math.round(((d.mrp - d.price) / d.mrp) * 100) : 0;
+  const showOff = d.showBadge && off >= 5;
+  const isStory = H / W > 1.6;
+  const m = Math.round(W * 0.06);
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "center";
+
+  if (template === "classic") {
+    ctx.fillStyle = IVORY;
+    ctx.fillRect(0, 0, W, H);
+    const top = isStory ? H * 0.1 : m * 1.25;
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${Math.round(W * 0.04)}px ${SANS}`;
+    spacedText(ctx, "SHRIMOH", W / 2, top, W * 0.022);
+
+    const textBlock = isStory ? H * 0.3 : W * 0.31;
+    const photoY = top + W * 0.035;
+    const photoH = H - photoY - textBlock;
+    drawPhoto(ctx, img, m, photoY, W - m * 2, photoH, fit);
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(m + 14, photoY + 14, W - m * 2 - 28, photoH - 28);
+
+    if (showOff) {
+      const r = W * 0.08;
+      const cx = W - m - r * 0.9;
+      const cy = photoY + r * 0.9;
+      ctx.fillStyle = INK;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = IVORY;
+      ctx.font = `600 ${Math.round(r * 0.62)}px ${SANS}`;
+      ctx.fillText(`${off}%`, cx, cy + r * 0.12);
+      ctx.font = `500 ${Math.round(r * 0.3)}px ${SANS}`;
+      spacedText(ctx, "OFF", cx, cy + r * 0.48, r * 0.06);
+    }
+
+    let y = photoY + photoH + W * 0.065;
+    ctx.fillStyle = DEEP_GOLD;
+    fitFont(ctx, d.slogan, "italic 500", Math.round(W * 0.042), SERIF, W - m * 2);
+    ctx.fillText(d.slogan, W / 2, y);
+    y += W * 0.062;
+    ctx.fillStyle = INK;
+    ctx.font = `600 ${Math.round(W * 0.046)}px ${SERIF}`;
+    ctx.fillText(wrapLines(ctx, d.name, W - m * 2, 1)[0] || "", W / 2, y);
+    y += W * 0.085;
+    drawPrice(ctx, { price: d.price, mrp: d.mrp, x: W / 2, y, size: Math.round(W * 0.066), color: INK, mutedColor: "#9a8b70" });
+    const footY = isStory ? H - H * 0.14 : H - m * 0.75;
+    ctx.fillStyle = "#6f6250";
+    fitFont(ctx, d.footer, "500", Math.round(W * 0.025), SANS, W - m * 2);
+    ctx.fillText(d.footer, W / 2, footY);
+    return;
+  }
+
+  if (template === "noir") {
+    const panelH = isStory ? H * 0.34 : W * 0.4;
+    drawPhoto(ctx, img, 0, 0, W, H - panelH, fit);
+    ctx.fillStyle = INK;
+    ctx.fillRect(0, H - panelH, W, panelH);
+    ctx.fillStyle = GOLD;
+    ctx.fillRect(0, H - panelH, W, 4);
+
+    // small logo plate on the photo
+    ctx.font = `600 ${Math.round(W * 0.03)}px ${SANS}`;
+    const plateW = W * 0.3;
+    const plateY = isStory ? H * 0.08 : m;
+    ctx.fillStyle = "rgba(28,21,13,0.85)";
+    roundRect(ctx, m, plateY, plateW, W * 0.07, W * 0.035);
+    ctx.fill();
+    ctx.fillStyle = IVORY;
+    spacedText(ctx, "SHRIMOH", m + plateW / 2, plateY + W * 0.046, W * 0.014);
+
+    const footY = isStory ? H - H * 0.12 : H - m * 0.8;
+    const priceY = footY - W * 0.085;
+    const nameY = priceY - W * 0.1;
+    ctx.textAlign = "left";
+    ctx.fillStyle = GOLD;
+    const sloganLines = (() => {
+      ctx.font = `italic 500 ${Math.round(W * 0.058)}px ${SERIF}`;
+      return wrapLines(ctx, d.slogan, W - m * 2, isStory ? 2 : 1);
+    })();
+    let sy = nameY - W * 0.075 - (sloganLines.length - 1) * W * 0.064;
+    for (const line of sloganLines) {
+      ctx.fillText(line, m, sy);
+      sy += W * 0.064;
+    }
+    ctx.fillStyle = "#d9cfb9";
+    ctx.font = `500 ${Math.round(W * 0.03)}px ${SANS}`;
+    ctx.fillText(wrapLines(ctx, d.name, W - m * 2, 1)[0] || "", m, nameY);
+    drawPrice(ctx, { price: d.price, mrp: d.mrp, x: m, y: priceY, size: Math.round(W * 0.066), color: IVORY, mutedColor: "#9a8b70", align: "left" });
+    if (showOff) {
+      ctx.font = `600 ${Math.round(W * 0.032)}px ${SANS}`;
+      const label = `${off}% OFF`;
+      const bw = ctx.measureText(label).width + W * 0.06;
+      const bh = W * 0.065;
+      ctx.fillStyle = GOLD;
+      roundRect(ctx, W - m - bw, priceY - bh * 0.78, bw, bh, bh / 2);
+      ctx.fill();
+      ctx.fillStyle = INK;
+      ctx.textAlign = "center";
+      ctx.fillText(label, W - m - bw / 2, priceY - bh * 0.78 + bh * 0.66);
+    }
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#a89a7f";
+    fitFont(ctx, d.footer, "500", Math.round(W * 0.025), SANS, W - m * 2);
+    ctx.fillText(d.footer, m, footY);
+    return;
+  }
+
+  if (template === "sale") {
+    ctx.fillStyle = MAROON;
+    ctx.fillRect(0, 0, W, H);
+    const top = isStory ? H * 0.09 : m;
+    ctx.fillStyle = "#f3e6c8";
+    ctx.font = `600 ${Math.round(W * 0.034)}px ${SANS}`;
+    spacedText(ctx, "SHRIMOH", W / 2, top + W * 0.02, W * 0.018);
+    const photoY = top + W * 0.055;
+    const bottomBlock = isStory ? H * 0.36 : W * 0.36;
+    const photoH = H - photoY - bottomBlock;
+    const inset = m * 0.8;
+    drawPhoto(ctx, img, inset, photoY, W - inset * 2, photoH, fit);
+
+    if (showOff) {
+      const r = W * 0.105;
+      const cx = W - inset - r * 1.05;
+      const cy = photoY + photoH - r * 0.75;
+      ctx.fillStyle = "#d8b56a";
+      ctx.beginPath();
+      for (let i = 0; i < 24; i += 1) {
+        const angle = (Math.PI * 2 * i) / 24;
+        const radius = i % 2 === 0 ? r : r * 0.88;
+        ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = MAROON;
+      ctx.font = `600 ${Math.round(r * 0.56)}px ${SANS}`;
+      ctx.fillText(`${off}%`, cx, cy + r * 0.1);
+      ctx.font = `600 ${Math.round(r * 0.26)}px ${SANS}`;
+      spacedText(ctx, "OFF", cx, cy + r * 0.44, r * 0.05);
+    }
+
+    let y = photoY + photoH + W * 0.095;
+    ctx.fillStyle = "#f3e6c8";
+    ctx.font = `600 ${Math.round(W * 0.066)}px ${SERIF}`;
+    const lines = wrapLines(ctx, d.slogan, W - m * 2, isStory ? 2 : 1);
+    if (lines.length === 1) fitFont(ctx, lines[0], "600", Math.round(W * 0.066), SERIF, W - m * 2);
+    for (const line of lines) {
+      ctx.fillText(line, W / 2, y);
+      y += W * 0.072;
+    }
+    y += W * 0.025;
+    drawPrice(ctx, { price: d.price, mrp: d.mrp, x: W / 2, y, size: Math.round(W * 0.07), color: "#ffffff", mutedColor: "#d3a9ae" });
+    y += W * 0.045;
+    const pillText = d.footer;
+    fitFont(ctx, pillText, "600", Math.round(W * 0.026), SANS, W - m * 3);
+    const pw = Math.min(W - m * 2, ctx.measureText(pillText).width + W * 0.08);
+    const ph = W * 0.058;
+    ctx.fillStyle = "#d8b56a";
+    roundRect(ctx, W / 2 - pw / 2, y, pw, ph, ph / 2);
+    ctx.fill();
+    ctx.fillStyle = MAROON;
+    ctx.fillText(pillText, W / 2, y + ph * 0.66);
+    return;
+  }
+
+  // minimal: the photo is the whole ad
+  drawPhoto(ctx, img, 0, 0, W, H, fit);
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 3;
+  ctx.strokeRect(m * 0.5, m * 0.5, W - m, H - m);
+  const top = isStory ? H * 0.08 : m * 1.1;
+  ctx.font = `600 ${Math.round(W * 0.03)}px ${SANS}`;
+  const plateW = W * 0.29;
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
+  ctx.fillRect(m, top, plateW, W * 0.066);
+  ctx.fillStyle = INK;
+  spacedText(ctx, "SHRIMOH", m + plateW / 2, top + W * 0.044, W * 0.013);
+
+  const cardW = W - m * 2;
+  const cardH = W * 0.22;
+  const cardY = isStory ? H - H * 0.17 - cardH : H - m - cardH;
+  ctx.fillStyle = "rgba(251,247,238,0.95)";
+  ctx.fillRect(m, cardY, cardW, cardH);
+  ctx.fillStyle = GOLD;
+  ctx.fillRect(m, cardY, 6, cardH);
+  const left = m + W * 0.05;
+  const inner = cardW - W * 0.09;
+  ctx.textAlign = "left";
+  ctx.fillStyle = INK;
+  fitFont(ctx, d.slogan, "italic 500", Math.round(W * 0.048), SERIF, inner);
+  ctx.fillText(d.slogan, left, cardY + W * 0.075);
+  const priceWidth = drawPrice(ctx, { price: d.price, mrp: d.mrp, x: left, y: cardY + W * 0.155, size: Math.round(W * 0.058), color: INK, mutedColor: "#9a8b70", align: "left" });
+  if (showOff) {
+    ctx.font = `600 ${Math.round(W * 0.028)}px ${SANS}`;
+    const label = `${off}% OFF`;
+    const bw = ctx.measureText(label).width + W * 0.05;
+    const bh = W * 0.055;
+    const bx = left + priceWidth + W * 0.03;
+    ctx.fillStyle = INK;
+    roundRect(ctx, bx, cardY + W * 0.155 - bh * 0.78, bw, bh, bh / 2);
+    ctx.fill();
+    ctx.fillStyle = IVORY;
+    ctx.textAlign = "center";
+    ctx.fillText(label, bx + bw / 2, cardY + W * 0.155 - bh * 0.78 + bh * 0.68);
+    ctx.textAlign = "left";
+  }
+  ctx.fillStyle = DEEP_GOLD;
+  fitFont(ctx, d.footer, "600", Math.round(W * 0.024), SANS, inner);
+  ctx.fillText(d.footer, left, cardY + W * 0.198);
+}
+
+export default function AdMaker({ API, adminFetch, products }) {
+  const canvasRef = useRef(null);
+  const [productId, setProductId] = useState("");
+  const [search, setSearch] = useState("");
+  const [img, setImg] = useState(null);
+  const [loadingPhoto, setLoadingPhoto] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [template, setTemplate] = useState("classic");
+  const [size, setSize] = useState("square");
+  const [fit, setFit] = useState("fit");
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [mrp, setMrp] = useState("");
+  const [slogan, setSlogan] = useState(SLOGANS[0]);
+  const [footer, setFooter] = useState("Free delivery across India  •  shrimoh.vercel.app");
+  const [showBadge, setShowBadge] = useState(true);
+  const [fontsReady, setFontsReady] = useState(false);
+
+  const list = useMemo(() => {
+    const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && product.image);
+    const query = search.trim().toLowerCase();
+    return (query ? active.filter((product) => String(product.name || "").toLowerCase().includes(query)) : active).slice(0, 40);
+  }, [products, search]);
+
+  useEffect(() => {
+    loadFonts().then(() => setFontsReady(true));
+  }, []);
+
+  // Newest bag is picked automatically.
+  useEffect(() => {
+    if (!productId && list.length) chooseProduct(list[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.length]);
+
+  async function loadImageFromBlob(blob) {
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = url;
+    });
+    return image;
+  }
+
+  async function chooseProduct(product) {
+    setProductId(product.id);
+    setName(product.name || "");
+    setPrice(String(product.price || ""));
+    setMrp(product.oldPrice ? String(product.oldPrice) : "");
+    setNotice("");
+    setLoadingPhoto(true);
+    try {
+      const source = String(product.image || "");
+      let blob;
+      if (source.startsWith("data:")) {
+        blob = await (await fetch(source)).blob();
+      } else {
+        const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
+        const response = await adminFetch(`${API}/api/admin/photo-original?url=${encodeURIComponent(absolute)}`);
+        if (!response.ok) throw new Error("Photo could not be loaded.");
+        blob = await response.blob();
+      }
+      setImg(await loadImageFromBlob(blob));
+    } catch (error) {
+      setImg(null);
+      setNotice(`❌ ${error.message || "Photo could not be loaded."} Try again or upload the photo.`);
+    } finally {
+      setLoadingPhoto(false);
+    }
+  }
+
+  async function uploadOwnPhoto(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setImg(await loadImageFromBlob(file));
+      setNotice("✅ Your photo is in. Type the name and price below.");
+    } catch {
+      setNotice("❌ This photo could not be opened.");
+    }
+  }
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !img) return;
+    const { w, h } = SIZES[size];
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, w, h);
+    drawAd(ctx, {
+      W: w,
+      H: h,
+      img,
+      template,
+      fit,
+      d: { name, price: Number(price) || 0, mrp: Number(mrp) || 0, slogan, footer, showBadge },
+    });
+  }, [img, template, size, fit, name, price, mrp, slogan, footer, showBadge, fontsReady]);
+
+  async function saveImage() {
+    const canvas = canvasRef.current;
+    if (!canvas || !img) return;
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.95));
+    if (!blob) {
+      setNotice("❌ Could not create the image.");
+      return;
+    }
+    const safeName = (name || "shrimoh-ad").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const file = new File([blob], `${safeName}-${size}.jpg`, { type: "image/jpeg" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        setNotice("✅ Choose “Save Image” to put it in Photos.");
+        return;
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setNotice("✅ Image downloaded.");
+  }
+
+  const choice = (current, value, setter, label) => (
+    <button
+      type="button"
+      key={value}
+      className={current === value ? "am-chip on" : "am-chip"}
+      onClick={() => setter(value)}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="panel">
+      <style>{`
+        .am-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+        @media (max-width: 860px) { .am-layout { grid-template-columns: 1fr; } }
+        .am-preview { position: sticky; top: 12px; }
+        .am-canvas { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid #ddd; background: #f4f4f4; }
+        .am-empty { padding: 60px 20px; text-align: center; color: #777; border: 1px dashed #ccc; border-radius: 10px; }
+        .am-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
+        .am-chip { padding: 9px 14px; border-radius: 999px; border: 1px solid #ccc; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+        .am-chip.on { background: #1c150d; color: #fff; border-color: #1c150d; }
+        .am-bags { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 8px 0 16px; }
+        .am-bag { flex: 0 0 84px; border: 2px solid transparent; border-radius: 9px; padding: 0; background: none; cursor: pointer; }
+        .am-bag.on { border-color: #1c150d; }
+        .am-bag img { width: 80px; height: 80px; object-fit: cover; border-radius: 7px; display: block; }
+        .am-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .am-notice { padding: 12px 14px; background: #f6f3ea; border-radius: 9px; font-size: 14px; margin-bottom: 14px; }
+      `}</style>
+
+      <div className="panel-header">
+        <h2 className="panel-title">Ad Maker</h2>
+      </div>
+
+      {notice ? <div className="am-notice">{notice}</div> : null}
+
+      <div className="am-layout">
+        <div className="am-preview">
+          {img ? (
+            <canvas ref={canvasRef} className="am-canvas" />
+          ) : (
+            <div className="am-empty">{loadingPhoto ? "Loading photo..." : "Pick a bag to start"}</div>
+          )}
+          <div className="am-row">
+            <button type="button" className="save-product-button" onClick={saveImage} disabled={!img}>
+              ⬇ Save image
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="form-label">Bag</label>
+          <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search bags..." />
+          <div className="am-bags">
+            {list.map((product) => (
+              <button
+                type="button"
+                key={product.id}
+                className={product.id === productId ? "am-bag on" : "am-bag"}
+                onClick={() => chooseProduct(product)}
+                title={product.name}
+              >
+                <img src={product.image} alt={product.name} loading="lazy" />
+              </button>
+            ))}
+          </div>
+          <label className="secondary-button" style={{ display: "inline-block", cursor: "pointer", marginBottom: 16 }}>
+            📷 Use my own photo
+            <input type="file" accept="image/*" onChange={uploadOwnPhoto} style={{ display: "none" }} />
+          </label>
+
+          <label className="form-label">Design</label>
+          <div className="am-row">{Object.entries(TEMPLATES).map(([value, label]) => choice(template, value, setTemplate, label))}</div>
+
+          <label className="form-label">Size</label>
+          <div className="am-row">{Object.entries(SIZES).map(([value, item]) => choice(size, value, setSize, item.label))}</div>
+
+          <label className="form-label">Photo</label>
+          <div className="am-row">
+            {choice(fit, "fit", setFit, "Show whole bag")}
+            {choice(fit, "fill", setFit, "Fill the space")}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Slogan</label>
+            <select className="form-select" value={SLOGANS.includes(slogan) ? slogan : "__custom"} onChange={(event) => setSlogan(event.target.value === "__custom" ? "" : event.target.value)}>
+              {SLOGANS.map((line) => (
+                <option key={line} value={line}>
+                  {line}
+                </option>
+              ))}
+              <option value="__custom">Write my own...</option>
+            </select>
+            {!SLOGANS.includes(slogan) ? (
+              <input className="form-input" style={{ marginTop: 8 }} value={slogan} onChange={(event) => setSlogan(event.target.value)} placeholder="Your slogan" />
+            ) : null}
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Bag name</label>
+            <input className="form-input" value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+
+          <div className="am-two">
+            <div className="form-group">
+              <label className="form-label">Price (₹)</label>
+              <input className="form-input" type="number" inputMode="numeric" value={price} onChange={(event) => setPrice(event.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">MRP (₹, crossed out)</label>
+              <input className="form-input" type="number" inputMode="numeric" value={mrp} onChange={(event) => setMrp(event.target.value)} />
+            </div>
+          </div>
+
+          <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+            <input type="checkbox" checked={showBadge} onChange={(event) => setShowBadge(event.target.checked)} />
+            Show “% OFF” badge
+          </label>
+
+          <div className="form-group">
+            <label className="form-label">Bottom line</label>
+            <input className="form-input" value={footer} onChange={(event) => setFooter(event.target.value)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

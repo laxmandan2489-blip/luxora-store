@@ -69,13 +69,38 @@ function parseRecipients(text) {
   return result;
 }
 
+const PRESETS = {
+  festive: {
+    subject: "✨ Diwali Sale is live - your favourite bags at festive prices",
+    heading: "This Diwali, carry something special",
+    message:
+      "Diwali is almost here, and we have something special for you. SHRIMOH now has its own website, and our festive collection of handbags, slings and totes is live at special Diwali prices.\n\nEvery bag you see below is photographed as it is, packed with care and dispatched within 1-3 days. Free delivery all over India, easy 5-day returns and safe online payment.\n\nFestive prices last only for the season and stock is limited - pick your favourite before it's gone.",
+  },
+  normal: {
+    subject: "New bags just arrived at SHRIMOH 👜",
+    heading: "Fresh styles, made for every day",
+    message:
+      "Thank you for shopping with SHRIMOH before. We now have our own website, and our newest handbags, slings and totes have just arrived.\n\nEvery bag you see below is photographed as it is, packed with care and dispatched within 1-3 days. Free delivery all over India, easy 5-day returns and safe online payment.\n\nTake a look - your next favourite bag might be waiting.",
+  },
+};
+
 export default function EmailCampaign({ API, adminFetch }) {
   const [recipientText, setRecipientText] = useState("");
-  const [subject, setSubject] = useState("New bags just arrived at SHRIMOH");
-  const [heading, setHeading] = useState("Our new collection is here");
-  const [message, setMessage] = useState(
-    "We have launched our own website with beautiful new handbags, slings and totes.\n\nTake a look and order directly from us - free delivery all over India."
-  );
+  const [subject, setSubject] = useState(PRESETS.festive.subject);
+  const [heading, setHeading] = useState(PRESETS.festive.heading);
+  const [message, setMessage] = useState(PRESETS.festive.message);
+  const [festive, setFestive] = useState(true);
+
+  // Switching the design also switches the ready-made text - unless
+  // you already changed that text yourself.
+  function switchDesign(nextFestive) {
+    const from = PRESETS[nextFestive ? "normal" : "festive"];
+    const to = PRESETS[nextFestive ? "festive" : "normal"];
+    setFestive(nextFestive);
+    if (subject === from.subject) setSubject(to.subject);
+    if (heading === from.heading) setHeading(to.heading);
+    if (message === from.message) setMessage(to.message);
+  }
   const [couponCode, setCouponCode] = useState("");
   const [testEmail, setTestEmail] = useState("infoshrimoh@gmail.com");
   const [previewHtml, setPreviewHtml] = useState("");
@@ -87,7 +112,7 @@ export default function EmailCampaign({ API, adminFetch }) {
   const recipients = useMemo(() => parseRecipients(recipientText), [recipientText]);
 
   function content() {
-    return { subject, heading, message, couponCode };
+    return { subject, heading, message, couponCode, festive };
   }
 
   async function postJson(path, body) {
@@ -328,6 +353,10 @@ export default function EmailCampaign({ API, adminFetch }) {
           <label className="form-label">Message</label>
           <textarea className="form-textarea" rows={6} value={message} onChange={(event) => setMessage(event.target.value)} />
         </div>
+        <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+          <input type="checkbox" checked={festive} onChange={(event) => switchDesign(event.target.checked)} />
+          Festive design (Diwali sale banner). Untick for a normal email - text changes too.
+        </label>
         <div className="form-group">
           <label className="form-label">Coupon code (optional)</label>
           <input
@@ -341,7 +370,7 @@ export default function EmailCampaign({ API, adminFetch }) {
 
       <div className="ec-section">
         <p className="ec-step">3. Test, then send</p>
-        <p className="form-hint">The 4 newest bags (with photo, price and link) are added to the email automatically.</p>
+        <p className="form-hint">The bags with the biggest saving among your newest arrivals (photo, price, % OFF and link) are added automatically.</p>
         <div className="ec-row">
           <button type="button" className="secondary-button" onClick={showPreview} disabled={!!busy}>
             {busy === "preview" ? "Loading..." : "👁 Preview"}
