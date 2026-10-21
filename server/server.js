@@ -4239,9 +4239,10 @@ function marketingCleanContent(body) {
     .map((id) => String(id).trim())
     .filter(Boolean)
     .slice(0, MARKETING_MAX_PRODUCTS);
+  const festive = body.festive !== false;
   if (!subject) return { error: "Please write a subject." };
   if (!message) return { error: "Please write a message." };
-  return { subject, heading, message, couponCode, productIds };
+  return { subject, heading, message, couponCode, productIds, festive };
 }
 
 const MARKETING_AUTO_PRODUCTS = 4;
@@ -4260,12 +4261,25 @@ async function marketingLoadProducts(productIds) {
     return (Array.isArray(data) ? data : [])
       .map(formatProduct)
       .filter((product) => product && product.stock > 0 && /^https?:\/\//i.test(product.image || ""))
-      .slice(0, MARKETING_AUTO_PRODUCTS);
+      .slice(0, 12)
+      .map((product, index) => ({ product, index, off: marketingDiscountPercent(product) }))
+      // newest bags, the ones with the biggest real saving first
+      .sort((a, b) => b.off - a.off || a.index - b.index)
+      .slice(0, MARKETING_AUTO_PRODUCTS)
+      .map((item) => item.product);
   }
   const { data, error } = await supabase.from("products").select("*").in("id", productIds).eq("active", true);
   if (error) throw error;
   const byId = new Map((Array.isArray(data) ? data : []).map((row) => [String(row.id), formatProduct(row)]));
   return productIds.map((id) => byId.get(String(id))).filter(Boolean);
+}
+
+// Real discount from the product's own MRP (old price) - never made up.
+function marketingDiscountPercent(product) {
+  const price = safeNumber(product && product.price);
+  const oldPrice = safeNumber(product && product.oldPrice);
+  if (!(oldPrice > price && price > 0)) return 0;
+  return Math.round(((oldPrice - price) / oldPrice) * 100);
 }
 
 function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, campaignId }) {
@@ -4279,15 +4293,20 @@ function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, 
   const cards = products.map((product) => {
     const link = `${MARKETING_SITE_URL}/product/${encodeURIComponent(product.id)}?${utm}`;
     const image = marketingImageUrl(product.image);
-    const oldPrice = product.oldPrice > product.price
-      ? `<span style="text-decoration:line-through;color:${EMAIL_BRAND.muted};font-size:12px;margin-left:6px;">${formatMoney(product.oldPrice)}</span>`
+    const off = marketingDiscountPercent(product);
+    const oldPrice = off
+      ? `<span style="text-decoration:line-through;color:${EMAIL_BRAND.muted};font-size:13px;margin-left:6px;font-weight:normal;">${formatMoney(product.oldPrice)}</span>`
+      : "";
+    const saving = off
+      ? `<div style="display:inline-block;margin-top:6px;padding:4px 9px;background:#5e1a24;color:#f3e6c8;border-radius:4px;font-size:11px;letter-spacing:0.5px;">${off}% OFF &middot; SAVE ${formatMoney(product.oldPrice - product.price)}</div>`
       : "";
     return `
       <td valign="top" width="50%" style="padding:8px;">
         <a href="${link}" style="text-decoration:none;color:${EMAIL_BRAND.ink};">
           ${image ? `<img src="${image}" alt="${marketingEscape(product.name)}" width="220" style="width:100%;max-width:220px;height:auto;border-radius:8px;display:block;border:1px solid ${EMAIL_BRAND.line};" />` : ""}
           <div style="font-size:13px;line-height:1.4;margin-top:10px;color:${EMAIL_BRAND.ink};">${marketingEscape(product.name)}</div>
-          <div style="font-size:14px;margin-top:4px;color:${EMAIL_BRAND.ink};font-weight:bold;">${formatMoney(product.price)}${oldPrice}</div>
+          <div style="font-size:16px;margin-top:4px;color:${EMAIL_BRAND.ink};font-weight:bold;">${formatMoney(product.price)}${oldPrice}</div>
+          ${saving}
         </a>
       </td>`;
   });
@@ -4306,13 +4325,31 @@ function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, 
        </div>`
     : "";
 
+  const bestOff = products.reduce((max, product) => Math.max(max, marketingDiscountPercent(product)), 0);
+  const festiveHtml = content.festive
+    ? `<div style="margin:0 0 26px;padding:26px 18px;background:#5e1a24;border-radius:8px;text-align:center;">
+         <div style="font-size:20px;line-height:1;color:#d8b56a;">&#10022; &#10022; &#10022;</div>
+         <div style="font-family:Georgia,serif;font-size:28px;color:#f3e6c8;margin-top:12px;">Diwali Festive Sale</div>
+         ${bestOff ? `<div style="font-size:15px;color:#d8b56a;margin-top:10px;letter-spacing:1px;">UP TO <strong style="font-size:22px;">${bestOff}% OFF</strong></div>` : ""}
+         <div style="font-size:12px;color:#e8d3d6;margin-top:10px;">Free delivery across India &middot; Limited festive stock</div>
+       </div>`
+    : "";
+
   const bodyHtml = `
+    ${festiveHtml}
     <p style="margin:0 0 14px;font-size:14px;">Hi ${marketingEscape(recipientName || "there")},</p>
     ${messageHtml}
     ${couponHtml}
     ${productsHtml}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 22px;background:${EMAIL_BRAND.soft};border-radius:8px;">
+      <tr>
+        <td align="center" width="33%" style="padding:14px 6px;font-size:12px;line-height:1.4;color:${EMAIL_BRAND.ink};">&#128666;<br />Free delivery<br />all India</td>
+        <td align="center" width="34%" style="padding:14px 6px;font-size:12px;line-height:1.4;color:${EMAIL_BRAND.ink};">&#8617;&#65039;<br />Easy 5-day<br />returns</td>
+        <td align="center" width="33%" style="padding:14px 6px;font-size:12px;line-height:1.4;color:${EMAIL_BRAND.ink};">&#128274;<br />Safe payment<br />by Razorpay</td>
+      </tr>
+    </table>
     <div style="text-align:center;margin:10px 0 8px;">
-      <a href="${shopUrl}" style="display:inline-block;padding:14px 34px;background:${EMAIL_BRAND.ink};color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;letter-spacing:2px;">SHOP NOW</a>
+      <a href="${shopUrl}" style="display:inline-block;padding:14px 34px;background:${content.festive ? "#5e1a24" : EMAIL_BRAND.ink};color:#ffffff;text-decoration:none;border-radius:6px;font-size:13px;letter-spacing:2px;">${content.festive ? "SHOP THE DIWALI SALE" : "SHOP NOW"}</a>
     </div>
     <p style="margin:26px 0 0;font-size:11px;line-height:1.6;color:${EMAIL_BRAND.muted};text-align:center;">
       Shrimoh Craft, Kudi Bhagtasni, Sector 4, Jodhpur, Rajasthan<br />
