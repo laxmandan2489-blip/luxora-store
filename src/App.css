@@ -6857,23 +6857,38 @@ section[id^="lux-"] {
   inset: 0;
   width: 100%;
   height: 100%;
-  /* (2026-10-22) The WHOLE photo is always shown (object-fit: contain),
-     so the bag can never be cropped off, whatever the photo or screen
-     shape. Any empty side space is filled by the blurred copy below
-     (.lux-cat-hero-bg) - same trick as the homepage banner. */
-  object-fit: contain;
-  object-position: center;
+  object-fit: cover;
+  object-position: center 35%;
 }
 
+/* Blurred copy is only used on laptop/desktop (see below). */
 .lux-cat-hero img.lux-cat-hero-bg {
-  object-fit: cover;
-  filter: saturate(0.7) sepia(0.06) blur(35px) brightness(0.6);
-  transform: scale(1.15);
+  display: none;
+}
+
+/* (2026-10-22) LAPTOP / DESKTOP ONLY: the banner is wide and short
+   there, so the WHOLE photo is shown (object-fit: contain) and the bag
+   is never cropped; empty side space is filled by the blurred copy -
+   same trick as the homepage banner. Phones keep the normal
+   full-bleed photo. */
+@media (min-width: 768px) {
+  .lux-cat-hero img {
+    object-fit: contain;
+    object-position: center;
+    animation: none !important;
+  }
+
+  .lux-cat-hero img.lux-cat-hero-bg {
+    display: block;
+    object-fit: cover;
+    filter: saturate(0.7) sepia(0.06) blur(35px) brightness(0.6);
+    transform: scale(1.15);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .lux-cat-hero img.lux-cat-hero-bg {
-    animation: none;
+  .lux-cat-hero img {
+    animation: luxHeroSettle 6.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
   }
 
   .lux-cat-hero-copy {
