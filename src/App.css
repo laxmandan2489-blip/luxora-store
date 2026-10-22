@@ -6857,13 +6857,23 @@ section[id^="lux-"] {
   inset: 0;
   width: 100%;
   height: 100%;
+  /* (2026-10-22) The WHOLE photo is always shown (object-fit: contain),
+     so the bag can never be cropped off, whatever the photo or screen
+     shape. Any empty side space is filled by the blurred copy below
+     (.lux-cat-hero-bg) - same trick as the homepage banner. */
+  object-fit: contain;
+  object-position: center;
+}
+
+.lux-cat-hero img.lux-cat-hero-bg {
   object-fit: cover;
-  object-position: center 35%;
+  filter: saturate(0.7) sepia(0.06) blur(35px) brightness(0.6);
+  transform: scale(1.15);
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .lux-cat-hero img {
-    animation: luxHeroSettle 6.5s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+  .lux-cat-hero img.lux-cat-hero-bg {
+    animation: none;
   }
 
   .lux-cat-hero-copy {

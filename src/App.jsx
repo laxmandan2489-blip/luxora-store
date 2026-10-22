@@ -4731,6 +4731,15 @@ function App() {
       <section className="lux-cat-hero">
         {listingBannerImage ? (
           <img
+            className="lux-cat-hero-bg"
+            src={listingBannerImage}
+            alt=""
+            aria-hidden="true"
+            decoding="async"
+          />
+        ) : null}
+        {listingBannerImage ? (
+          <img
             src={listingBannerImage}
             alt=""
             aria-hidden="true"
