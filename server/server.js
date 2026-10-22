@@ -257,6 +257,7 @@ function emailShell({ eyebrow, heading, bodyHtml }) {
   <div style="background:${EMAIL_BRAND.cream};padding:32px 12px;font-family:Georgia,'Times New Roman',serif;">
     <div style="max-width:560px;margin:0 auto;background:${EMAIL_BRAND.paper};border:1px solid ${EMAIL_BRAND.line};border-radius:10px;overflow:hidden;">
       <div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid ${EMAIL_BRAND.line};">
+        <img src="https://shrimoh.vercel.app/icon-192.png" alt="SHRIMOH" width="64" height="64" style="width:64px;height:64px;display:block;margin:0 auto 10px;border:0;" />
         <div style="font-size:22px;letter-spacing:6px;color:${EMAIL_BRAND.ink};font-weight:bold;">SHRIMOH</div>
         <div style="font-size:9px;letter-spacing:2px;color:${EMAIL_BRAND.gold};margin-top:6px;">THE LUXURY STORE</div>
       </div>
