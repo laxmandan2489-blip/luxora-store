@@ -281,6 +281,46 @@ function emailShell({ eyebrow, heading, bodyHtml }) {
   </div>`;
 }
 
+/*
+ * ORDER NUMBER (2026-10-22)
+ * New orders get simple running numbers - 1001, 1002, 1003... -
+ * instead of the old long "SHR-1729...-ABCDE" references. Old orders
+ * keep their old reference unchanged. The number is saved in the same
+ * "order_number" column, so Track Order / Admin keep working.
+ * A small in-memory lock makes sure two orders arriving at the same
+ * moment can never get the same number (the server runs as one
+ * instance on Render).
+ */
+const ORDER_NUMBER_START = 1001;
+let orderNumberLock = Promise.resolve();
+
+function withOrderNumberLock(task) {
+  const run = orderNumberLock.then(task, task);
+  orderNumberLock = run.catch(function () {});
+  return run;
+}
+
+async function getNextOrderNumber() {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("order_number")
+    .order("id", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  let highest = ORDER_NUMBER_START - 1;
+  (Array.isArray(data) ? data : []).forEach(function (row) {
+    const value = String((row && row.order_number) || "").trim();
+    if (/^\d+$/.test(value)) highest = Math.max(highest, Number(value));
+  });
+  return String(highest + 1);
+}
+
+// "1001" -> "#1001" for emails; old "SHR-..." references stay as they are.
+function displayOrderNumber(reference) {
+  const value = String(reference || "").trim();
+  return /^\d+$/.test(value) ? `#${value}` : value;
+}
+
 async function sendOrderConfirmationEmail({
   to,
   customerName,
@@ -315,10 +355,10 @@ async function sendOrderConfirmationEmail({
 
   const bodyHtml = `
     <p style="margin:0 0 4px;font-size:14px;">Hi ${customerName || "there"},</p>
-    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">Thank you for your order - we've received it and it's already being prepared with care.</p>
+    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">Thank you for your order - we've received it and it's already being prepared with care. Your order number is <strong style="color:${EMAIL_BRAND.ink};">${displayOrderNumber(orderReference)}</strong>.</p>
 
     <div style="display:inline-block;padding:10px 16px;background:${EMAIL_BRAND.soft};border-radius:6px;font-size:11px;letter-spacing:0.5px;color:${EMAIL_BRAND.muted};margin-bottom:28px;">
-      ORDER REFERENCE&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${orderReference}</strong>
+      ORDER NUMBER&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${displayOrderNumber(orderReference)}</strong>
     </div>
 
     <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
@@ -352,7 +392,7 @@ async function sendOrderConfirmationEmail({
   await sendTransactionalEmail({
     to,
     customerName,
-    subject: `Order Confirmed - ${orderReference}`,
+    subject: `Order Confirmed - Order ${displayOrderNumber(orderReference)}`,
     html: emailShell({ eyebrow: "ORDER CONFIRMED", heading: "Thank you for your order", bodyHtml })
   });
 }
@@ -379,7 +419,7 @@ async function sendShippingUpdateEmail({
     <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">Good news - your order is on its way to you.</p>
 
     <div style="display:inline-block;padding:10px 16px;background:${EMAIL_BRAND.soft};border-radius:6px;font-size:11px;letter-spacing:0.5px;color:${EMAIL_BRAND.muted};margin-bottom:12px;">
-      ORDER REFERENCE&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${orderReference}</strong>
+      ORDER NUMBER&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${displayOrderNumber(orderReference)}</strong>
     </div>
     <div style="font-size:11px;letter-spacing:1px;color:${EMAIL_BRAND.gold};margin-bottom:26px;">STATUS: <strong>${String(status || "").toUpperCase()}</strong></div>
 
@@ -406,13 +446,13 @@ async function sendShippingUpdateEmail({
         : ""
     }
 
-    <p style="font-size:12px;color:${EMAIL_BRAND.muted};line-height:1.6;">You can also check your order status anytime on the SHRIMOH website using "Track Order" with this reference number and your mobile number or email.</p>
+    <p style="font-size:12px;color:${EMAIL_BRAND.muted};line-height:1.6;">You can also check your order status anytime on the SHRIMOH website using "Track Order" with this order number and your mobile number or email.</p>
   `;
 
   await sendTransactionalEmail({
     to,
     customerName,
-    subject: `Your SHRIMOH Order Has Shipped - ${orderReference}`,
+    subject: `Your SHRIMOH Order ${displayOrderNumber(orderReference)} Has Shipped`,
     html: emailShell({ eyebrow: "ON ITS WAY", heading: "Your order has shipped", bodyHtml })
   });
 }
@@ -3542,7 +3582,7 @@ app.post("/api/orders", async function (req, res) {
       customerRecord = newCustomer;
     }
 
-    const orderReference = `SHR-${Date.now()}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`;
+    let orderReference = "";
 
     /*
      * IMPORTANT: this must match the ACTUAL columns in the
@@ -3559,7 +3599,9 @@ app.post("/api/orders", async function (req, res) {
      * Customer details are stored only in the separate "customers"
      * table, linked via customer_id.)
      */
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await withOrderNumberLock(async function () {
+      orderReference = await getNextOrderNumber();
+      return supabase
       .from("orders")
       .insert({
         customer_id: customerRecord.id,
@@ -3579,6 +3621,7 @@ app.post("/api/orders", async function (req, res) {
       })
       .select()
       .single();
+    });
     if (orderError) throw orderError;
 
     if (cart.couponCode) {
@@ -3718,7 +3761,7 @@ app.post("/api/orders", async function (req, res) {
  */
 app.get("/api/track-order", async function (req, res) {
   try {
-    const reference = String(req.query.reference || req.query.orderReference || "").trim();
+    const reference = String(req.query.reference || req.query.orderReference || "").trim().replace(/^#\s*/, "");
     const mobileInput = String(req.query.mobile || "").replace(/\D/g, "");
     const emailInput = String(req.query.email || "").trim().toLowerCase();
 
