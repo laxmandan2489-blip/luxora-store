@@ -4794,6 +4794,16 @@ app.post("/api/admin/email-campaign/send", requireAdmin, async function (req, re
      */
     await marketingSaveQueue({ campaignId, content, recipients });
 
+    // (2026-10-22) Outside 10 AM - 8 PM India time: don't send at night.
+    // Everything is saved and starts automatically at 10 AM.
+    if (!marketingIsGoodSendingHour()) {
+      return res.json({
+        success: true,
+        message: `Saved ${recipients.length} emails. It's outside 10 AM - 8 PM, so sending will start automatically at 10 AM (India time). You can close this page.`,
+        job: marketingJob ? (({ stopRequested, ...rest }) => rest)(marketingJob) : null
+      });
+    }
+
     const sentToday = await marketingSentInLast24h();
     const remainingToday = Math.max(0, MARKETING_DAILY_LIMIT - sentToday);
     const laterCount = Math.max(0, recipients.length - remainingToday);
