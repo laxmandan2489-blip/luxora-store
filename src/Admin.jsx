@@ -556,7 +556,49 @@ function getItemColor(item) {
   );
 }
 
+/*
+ * ADMIN AS A PHONE APP (2026-10-22)
+ * While the admin panel is open, point the page at its own manifest
+ * (/admin.webmanifest) so iPhone "Share -> Add to Home Screen" makes a
+ * "SHRIMOH Admin" icon that opens straight into /admin, full screen,
+ * like an app. Put back exactly as before when leaving the admin, so
+ * the customer site is never affected.
+ */
+function useAdminHomeScreenApp() {
+  useEffect(() => {
+    const head = document.head;
+    const manifest = head.querySelector('link[rel="manifest"]');
+    const oldManifest = manifest ? manifest.getAttribute("href") : null;
+    if (manifest) manifest.setAttribute("href", "/admin.webmanifest");
+
+    const titleMeta = head.querySelector('meta[name="apple-mobile-web-app-title"]');
+    const oldTitle = titleMeta ? titleMeta.getAttribute("content") : null;
+    if (titleMeta) titleMeta.setAttribute("content", "SHRIMOH Admin");
+
+    const added = [];
+    [
+      ["apple-mobile-web-app-capable", "yes"],
+      ["mobile-web-app-capable", "yes"],
+    ].forEach(([name, content]) => {
+      if (!head.querySelector(`meta[name="${name}"]`)) {
+        const meta = document.createElement("meta");
+        meta.setAttribute("name", name);
+        meta.setAttribute("content", content);
+        head.appendChild(meta);
+        added.push(meta);
+      }
+    });
+
+    return () => {
+      if (manifest && oldManifest !== null) manifest.setAttribute("href", oldManifest);
+      if (titleMeta && oldTitle !== null) titleMeta.setAttribute("content", oldTitle);
+      added.forEach((meta) => meta.remove());
+    };
+  }, []);
+}
+
 function Admin() {
+  useAdminHomeScreenApp();
   const [activeTab, setActiveTab] =
     useState("orders");
 

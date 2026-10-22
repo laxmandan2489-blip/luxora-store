@@ -243,9 +243,9 @@ export default function EmailCampaign({ API, adminFetch }) {
     setBusy("send");
     setNotice("");
     try {
-      await postJson("/api/admin/email-campaign/send", { ...content(), recipients });
+      const data = await postJson("/api/admin/email-campaign/send", { ...content(), recipients });
       await loadStatus();
-      setNotice("✅ Sending started.");
+      setNotice(data && data.message ? `✅ ${data.message}` : "✅ Sending started. Emails over today's limit will go automatically from tomorrow.");
     } catch (error) {
       setNotice(`❌ ${error.message}`);
     } finally {
@@ -287,6 +287,11 @@ export default function EmailCampaign({ API, adminFetch }) {
           <div>
             <strong>Sent in last 24 hours:</strong> {status.sentToday ?? "?"} / {status.dailyLimit}
           </div>
+          {status.queued ? (
+            <div>
+              <strong>Waiting to send automatically:</strong> {status.queued} (sent between 10 AM - 8 PM, up to {status.dailyLimit} a day)
+            </div>
+          ) : null}
           {job ? (
             <>
               <div>
@@ -297,7 +302,7 @@ export default function EmailCampaign({ API, adminFetch }) {
                 {job.failed ? ` • Failed ${job.failed}` : ""}
                 {job.skippedAlreadySent ? ` • Already had it ${job.skippedAlreadySent}` : ""}
                 {job.skippedUnsubscribed ? ` • Unsubscribed ${job.skippedUnsubscribed}` : ""}
-                {job.leftForTomorrow ? ` • Left for tomorrow ${job.leftForTomorrow}` : ""}
+                {job.leftForTomorrow ? ` • Left for tomorrow ${job.leftForTomorrow} (will send automatically)` : ""}
               </div>
               {job.stoppedReason ? <div>⚠️ {job.stoppedReason}</div> : null}
               {job.lastError ? <div style={{ color: "#a33" }}>Last error: {job.lastError}</div> : null}
