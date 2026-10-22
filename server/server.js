@@ -4217,7 +4217,9 @@ app.delete("/api/orders/:id", requireAdmin, async function (req, res) {
  *   alter table email_unsubscribes enable row level security;
  *   alter table email_campaign_sends enable row level security;
  */
-const MARKETING_DAILY_LIMIT = 400;
+// Brevo free plan = 300 emails/day (shared with order emails), so keep
+// some room for order confirmations. Gmail allows ~500/day.
+const MARKETING_DAILY_LIMIT = BREVO_API_KEY ? 250 : 400;
 const MARKETING_DELAY_MS = 4000;
 const MARKETING_MAX_PRODUCTS = 6;
 const MARKETING_SITE_URL = "https://shrimoh.vercel.app";
@@ -4426,7 +4428,40 @@ function marketingPlainText(html) {
 }
 
 async function marketingSendOne({ to, subject, html, unsubscribeUrl }) {
-  if (!mailTransporter) throw new Error("Gmail is not set up (GMAIL_USER / GMAIL_APP_PASSWORD).");
+  /*
+   * (2026-10-22) Brevo first: Render blocks / times out raw Gmail SMTP
+   * (port 465/587), so campaign emails go through Brevo's HTTPS API
+   * whenever BREVO_API_KEY is set on Render. Gmail SMTP stays as the
+   * fallback only when Brevo isn't set up.
+   */
+  if (BREVO_API_KEY) {
+    const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+        "api-key": BREVO_API_KEY
+      },
+      body: JSON.stringify({
+        sender: { name: "SHRIMOH", email: GMAIL_USER },
+        replyTo: { email: GMAIL_USER, name: "SHRIMOH" },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        textContent: marketingPlainText(html),
+        headers: {
+          "List-Unsubscribe": `<${unsubscribeUrl}>, <mailto:${GMAIL_USER}?subject=unsubscribe>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click"
+        }
+      })
+    });
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      throw new Error(`Brevo API error ${response.status}: ${errorBody}`);
+    }
+    return;
+  }
+  if (!mailTransporter) throw new Error("Email is not set up (set BREVO_API_KEY on Render).");
   await mailTransporter.sendMail({
     from: `"SHRIMOH" <${GMAIL_USER}>`,
     replyTo: GMAIL_USER,
@@ -4454,7 +4489,7 @@ async function marketingSentInLast24h() {
 
 function marketingIsGmailLimitError(error) {
   const text = String((error && (error.response || error.message)) || "");
-  return /quota|limit exceeded|5\.4\.5|too many|rate limit|421|454/i.test(text);
+  return /quota|limit exceeded|5\.4\.5|too many|rate limit|421|454|Brevo API error (402|429)/i.test(text);
 }
 
 async function runMarketingJob({ content, products, recipients, campaignId }) {
@@ -4538,8 +4573,8 @@ app.post("/api/admin/email-campaign/send", requireAdmin, async function (req, re
     const body = req.body || {};
     const content = marketingCleanContent(body);
     if (content.error) return res.status(400).json({ success: false, message: content.error });
-    if (!mailTransporter) {
-      return res.status(400).json({ success: false, message: "Gmail is not set up on the server (GMAIL_USER / GMAIL_APP_PASSWORD)." });
+    if (!BREVO_API_KEY && !mailTransporter) {
+      return res.status(400).json({ success: false, message: "Email is not set up on the server (set BREVO_API_KEY on Render)." });
     }
 
     let recipients = marketingCleanRecipients(body.recipients).slice(0, 2000);
