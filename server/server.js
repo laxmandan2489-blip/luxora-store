@@ -321,6 +321,35 @@ function displayOrderNumber(reference) {
   return /^\d+$/.test(value) ? `#${value}` : value;
 }
 
+const NTFY_TOPIC = String(process.env.NTFY_TOPIC || "").trim();
+
+async function sendNewOrderPhoneAlert({ orderReference, total, paymentMethod, items, customerName, city }) {
+  if (!NTFY_TOPIC) return;
+  const list = Array.isArray(items) ? items : [];
+  const itemLines = list
+    .slice(0, 5)
+    .map((item) => `• ${item.name || "Product"}${item.selectedColor ? ` (${item.selectedColor})` : ""} x${item.quantity || 1}`)
+    .join("\n");
+  const more = list.length > 5 ? `\n+${list.length - 5} more` : "";
+  const isCod = String(paymentMethod || "").toUpperCase() === "COD";
+  const response = await fetch("https://ntfy.sh", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      topic: NTFY_TOPIC,
+      title: `New Order ${displayOrderNumber(orderReference)} - Rs. ${Number(total || 0).toLocaleString("en-IN")} (${isCod ? "COD" : "Prepaid"})`,
+      message: `${customerName || "Customer"}${city ? `, ${city}` : ""}\n${itemLines}${more}`,
+      tags: [isCod ? "package" : "moneybag"],
+      priority: 5,
+      click: "https://shrimoh.vercel.app/admin"
+    })
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`ntfy error ${response.status}: ${text}`);
+  }
+}
+
 async function sendOrderConfirmationEmail({
   to,
   customerName,
@@ -3723,6 +3752,23 @@ app.post("/api/orders", async function (req, res) {
         : paymentMethod
     }).catch((error) => {
       console.error("ORDER EMAIL ERROR:", error);
+    });
+
+    /*
+     * NEW ORDER PHONE ALERT (2026-10-22) - free "ntfy" app push
+     * notification to the owner's phone. Only runs when NTFY_TOPIC is
+     * set on Render. Best-effort: never affects the order. Kept short
+     * on purpose (no phone number / full address in the alert).
+     */
+    sendNewOrderPhoneAlert({
+      orderReference,
+      total: cart.total,
+      paymentMethod,
+      items: cart.items,
+      customerName: cleanCustomer.name,
+      city: cleanCustomer.city
+    }).catch((error) => {
+      console.error("ORDER PHONE ALERT ERROR:", error);
     });
 
     return res.status(201).json({
