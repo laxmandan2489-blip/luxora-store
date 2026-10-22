@@ -1850,7 +1850,7 @@ function App() {
     const contact = trackContact.trim();
 
     if (!reference) {
-      setTrackError("Please enter your order reference (e.g. SHR-...).");
+      setTrackError("Please enter your order number (e.g. 1001).");
       return;
     }
     if (!contact) {
@@ -2443,7 +2443,10 @@ function App() {
    */
   const LISTING_PAGE_SIZE = 12;
   const [listingPage, setListingPage] = useState(1);
-  const listingSentinelRef = useRef(null);
+  // Callback ref (state) so the endless-scroll watcher re-attaches
+  // whenever the marker under the grid appears - e.g. when opening
+  // /shop or /new-arrivals from the homepage.
+  const [listingSentinel, setListingSentinel] = useState(null);
 
   const expandedListingProducts = useMemo(
     () => expandProductVariants(sortedProducts),
@@ -2476,7 +2479,7 @@ function App() {
   // load the next 12. Starts loading a little early (600px) so the
   // visitor never waits at the bottom.
   useEffect(() => {
-    const sentinel = listingSentinelRef.current;
+    const sentinel = listingSentinel;
     if (!sentinel || !hasMoreListingProducts) return undefined;
     if (typeof IntersectionObserver === "undefined") {
       setListingPage(listingTotalPages);
@@ -2492,7 +2495,7 @@ function App() {
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMoreListingProducts, listingTotalPages, pagedListingProducts.length]);
+  }, [listingSentinel, hasMoreListingProducts, listingTotalPages, pagedListingProducts.length]);
 
   /*
    * SEARCH SUGGESTIONS
@@ -4942,7 +4945,7 @@ function App() {
           {/* Endless scroll: invisible marker that loads the next 12 bags. */}
           {hasMoreListingProducts && (
             <div
-              ref={listingSentinelRef}
+              ref={setListingSentinel}
               className="lux-pagination"
               aria-hidden="true"
               style={{ minHeight: "40px" }}
@@ -6233,7 +6236,7 @@ function App() {
 
                 {orderReference && (
                   <div className="lux-order-reference">
-                    ORDER
+                    ORDER NUMBER
                     <strong>#{orderReference}</strong>
                   </div>
                 )}
@@ -6592,12 +6595,12 @@ function TrackOrderPage({
 
           <form onSubmit={lookupOrder}>
             <label>
-              Order Reference
+              Order Number
               <input
                 type="text"
                 value={trackReference}
                 onChange={(e) => setTrackReference(e.target.value)}
-                placeholder="e.g. SHR-172..."
+                placeholder="e.g. 1001"
               />
             </label>
 
