@@ -56,7 +56,19 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
+    <!-- Manifest: the admin panel (/admin) gets its own "SHRIMOH Admin"
+         home-screen app manifest; every other page keeps the normal one. -->
+    <script>
+      (function () {
+        var isAdmin = location.pathname.indexOf("/admin") === 0;
+        document.write('<link rel="manifest" href="' + (isAdmin ? "/admin.webmanifest" : "/site.webmanifest") + '" />');
+        if (isAdmin) {
+          document.write('<meta name="apple-mobile-web-app-capable" content="yes" /><meta name="mobile-web-app-capable" content="yes" />');
+          var title = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+          if (title) title.setAttribute("content", "SHRIMOH Admin");
+        }
+      })();
+    </script>
 
     <!--SEO_SITE_JSONLD_START-->
     <script type="application/ld+json" id="seo-site-jsonld">[{"@context":"https://schema.org","@type":"Organization","@id":"https://shrimoh-store-phi.vercel.app/#organization","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","logo":"https://shrimoh-store-phi.vercel.app/icon-192.png","email":"infoshrimoh@gmail.com"},{"@context":"https://schema.org","@type":"WebSite","@id":"https://shrimoh-store-phi.vercel.app/#website","name":"SHRIMOH","url":"https://shrimoh-store-phi.vercel.app/","inLanguage":"en-IN","publisher":{"@id":"https://shrimoh-store-phi.vercel.app/#organization"}}]</script>
