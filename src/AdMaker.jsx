@@ -449,6 +449,10 @@ export default function AdMaker({ API, adminFetch, products }) {
   const [footer, setFooter] = useState("Free delivery across India  •  shrimoh.vercel.app");
   const [showBadge, setShowBadge] = useState(true);
   const [fontsReady, setFontsReady] = useState(false);
+  // (2026-10-22) Every photo load gets a number; only the LATEST one is
+  // allowed to show. Fixes "picked another bag but the old photo stays"
+  // when an earlier, slower photo load finished after a newer one.
+  const loadSeq = useRef(0);
 
   const list = useMemo(() => {
     const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && product.image);
@@ -478,11 +482,13 @@ export default function AdMaker({ API, adminFetch, products }) {
   }
 
   async function chooseProduct(product) {
+    const seq = ++loadSeq.current;
     setProductId(product.id);
     setName(product.name || "");
     setPrice(String(product.price || ""));
     setMrp(product.oldPrice ? String(product.oldPrice) : "");
     setNotice("");
+    setImg(null); // clear the old bag right away
     setLoadingPhoto(true);
     try {
       const source = String(product.image || "");
@@ -491,16 +497,26 @@ export default function AdMaker({ API, adminFetch, products }) {
         blob = await (await fetch(source)).blob();
       } else {
         const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
-        const response = await adminFetch(`${API}/api/admin/photo-original?url=${encodeURIComponent(absolute)}`);
-        if (!response.ok) throw new Error("Photo could not be loaded.");
-        blob = await response.blob();
+        try {
+          const response = await adminFetch(`${API}/api/admin/photo-original?url=${encodeURIComponent(absolute)}`);
+          if (!response.ok) throw new Error("Photo could not be loaded.");
+          blob = await response.blob();
+        } catch (serverError) {
+          // Fallback: load the photo straight from its own link.
+          const direct = await fetch(absolute, { mode: "cors", cache: "no-store" });
+          if (!direct.ok) throw serverError;
+          blob = await direct.blob();
+        }
       }
-      setImg(await loadImageFromBlob(blob));
+      const image = await loadImageFromBlob(blob);
+      if (seq !== loadSeq.current) return; // a newer bag was picked meanwhile
+      setImg(image);
     } catch (error) {
+      if (seq !== loadSeq.current) return;
       setImg(null);
       setNotice(`❌ ${error.message || "Photo could not be loaded."} Try again or upload the photo.`);
     } finally {
-      setLoadingPhoto(false);
+      if (seq === loadSeq.current) setLoadingPhoto(false);
     }
   }
 
@@ -508,8 +524,12 @@ export default function AdMaker({ API, adminFetch, products }) {
     const file = event.target.files && event.target.files[0];
     event.target.value = "";
     if (!file) return;
+    const seq = ++loadSeq.current;
     try {
-      setImg(await loadImageFromBlob(file));
+      const image = await loadImageFromBlob(file);
+      if (seq !== loadSeq.current) return;
+      setLoadingPhoto(false);
+      setImg(image);
       setNotice("✅ Your photo is in. Type the name and price below.");
     } catch {
       setNotice("❌ This photo could not be opened.");
@@ -518,7 +538,14 @@ export default function AdMaker({ API, adminFetch, products }) {
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !img) return;
+    if (!canvas) return;
+    if (!img) {
+      // No photo (loading / failed): blank the canvas so the previous
+      // bag's ad never stays on screen.
+      const blank = canvas.getContext("2d");
+      blank.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
     const { w, h } = SIZES[size];
     canvas.width = w;
     canvas.height = h;
