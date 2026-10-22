@@ -4583,6 +4583,21 @@ async function runMarketingJob({ content, products, recipients, campaignId }) {
  *   );
  *   alter table email_campaigns enable row level security;
  */
+// (2026-10-22) Look up many emails in small groups of 100. One giant
+// "email in (...348 emails...)" request makes the web address too long
+// and Supabase rejects it - that was the "Email tables not found" error.
+async function marketingEmailsIn(table, emails, extraFilter) {
+  const found = [];
+  for (let index = 0; index < emails.length; index += 100) {
+    let query = supabase.from(table).select("email").in("email", emails.slice(index, index + 100));
+    if (extraFilter) query = extraFilter(query);
+    const { data, error } = await query;
+    if (error) return { data: null, error };
+    found.push(...(data || []));
+  }
+  return { data: found, error: null };
+}
+
 async function marketingSaveQueue({ campaignId, content, recipients }) {
   const { error: contentError } = await supabase
     .from("email_campaigns")
@@ -4646,7 +4661,7 @@ async function marketingAutoResume() {
     if (rowsError || !rows || !rows.length) return;
 
     const emails = rows.map((row) => row.email);
-    const { data: unsubRows } = await supabase.from("email_unsubscribes").select("email").in("email", emails);
+    const { data: unsubRows } = await marketingEmailsIn("email_unsubscribes", emails);
     const unsubscribed = new Set((unsubRows || []).map((row) => String(row.email).toLowerCase()));
     const recipients = rows
       .filter((row) => !unsubscribed.has(String(row.email).toLowerCase()))
@@ -4763,15 +4778,18 @@ app.post("/api/admin/email-campaign/send", requireAdmin, async function (req, re
 
     const emails = recipients.map((item) => item.email);
     const [{ data: unsubRows, error: unsubError }, { data: sentRows, error: sentError }] = await Promise.all([
-      supabase.from("email_unsubscribes").select("email").in("email", emails),
-      supabase.from("email_campaign_sends").select("email").eq("campaign_id", campaignId).eq("status", "sent").in("email", emails)
+      marketingEmailsIn("email_unsubscribes", emails),
+      marketingEmailsIn("email_campaign_sends", emails, (query) => query.eq("campaign_id", campaignId).eq("status", "sent"))
     ]);
     if (unsubError || sentError) {
       const dbError = unsubError || sentError;
       console.error("MARKETING DB ERROR:", dbError);
+      const missing = /does not exist|schema cache|relation/i.test(String((dbError && dbError.message) || ""));
       return res.status(500).json({
         success: false,
-        message: "Email tables not found. Please run the Email Campaign SQL in Supabase first."
+        message: missing
+          ? "Email tables not found. Please run the Email Campaign SQL in Supabase first."
+          : `Database error: ${String((dbError && dbError.message) || dbError).slice(0, 200)}`
       });
     }
     const unsubscribed = new Set((unsubRows || []).map((row) => String(row.email).toLowerCase()));
