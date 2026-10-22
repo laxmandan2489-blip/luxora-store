@@ -453,6 +453,8 @@ export default function AdMaker({ API, adminFetch, products }) {
   // allowed to show. Fixes "picked another bag but the old photo stays"
   // when an earlier, slower photo load finished after a newer one.
   const loadSeq = useRef(0);
+  // Photos already opened once are kept here, so going back to a bag is instant.
+  const photoCache = useRef(new Map());
 
   const list = useMemo(() => {
     const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && product.image);
@@ -488,6 +490,13 @@ export default function AdMaker({ API, adminFetch, products }) {
     setPrice(String(product.price || ""));
     setMrp(product.oldPrice ? String(product.oldPrice) : "");
     setNotice("");
+    const cacheKey = String(product.id) + "|" + String(product.image || "");
+    const cached = photoCache.current.get(cacheKey);
+    if (cached) {
+      setLoadingPhoto(false);
+      setImg(cached);
+      return;
+    }
     setImg(null); // clear the old bag right away
     setLoadingPhoto(true);
     try {
@@ -498,17 +507,20 @@ export default function AdMaker({ API, adminFetch, products }) {
       } else {
         const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
         try {
+          // FAST: straight from the photo's own storage link (CDN).
+          const direct = await fetch(absolute, { mode: "cors" });
+          if (!direct.ok) throw new Error("direct failed");
+          blob = await direct.blob();
+          if (!blob.type.startsWith("image/")) throw new Error("not an image");
+        } catch {
+          // Slower fallback: through our own server.
           const response = await adminFetch(`${API}/api/admin/photo-original?url=${encodeURIComponent(absolute)}`);
           if (!response.ok) throw new Error("Photo could not be loaded.");
           blob = await response.blob();
-        } catch (serverError) {
-          // Fallback: load the photo straight from its own link.
-          const direct = await fetch(absolute, { mode: "cors", cache: "no-store" });
-          if (!direct.ok) throw serverError;
-          blob = await direct.blob();
         }
       }
       const image = await loadImageFromBlob(blob);
+      photoCache.current.set(cacheKey, image);
       if (seq !== loadSeq.current) return; // a newer bag was picked meanwhile
       setImg(image);
     } catch (error) {
