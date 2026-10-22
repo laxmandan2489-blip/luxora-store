@@ -454,7 +454,8 @@ const ACCESSORY_ONLY_CATEGORIES = ACCESSORY_CATEGORIES;
 /* The announcement bar's real, existing claims - unchanged text, just
    now shown one at a time with rotation instead of all three at once. */
 const ANNOUNCEMENT_MESSAGES = [
-  "✦ FREE DELIVERY ON ALL ORDERS",
+  "✦ FREE DELIVERY ON ALL PREPAID ORDERS",
+  "CASH ON DELIVERY AVAILABLE · ₹150 DELIVERY CHARGE ON COD",
   "PREMIUM COLLECTION · SECURE SHOPPING",
   "HANDCRAFTED STYLE · MADE FOR YOU",
 ];
@@ -662,7 +663,9 @@ const INFO_PAGES = {
           delivery across India typically takes 5-9 business days depending on your location.
         </p>
         <p>
-          <strong>Free delivery</strong> is available on all orders, with no minimum order value.
+          <strong>Free delivery</strong> is available on all prepaid orders, with no minimum order value.
+          <strong> Cash on Delivery</strong> is also available - a delivery charge of ₹150 is added
+          to COD orders.
         </p>
         <p>
           You will receive your order confirmation and shipping updates over email. Delivery
@@ -5270,7 +5273,7 @@ function App() {
               <ul className="lux-pdp-perks">
                 <li>
                   <LuxIcon name="box" size={22} />
-                  <span>Free delivery<br />across India</span>
+                  <span>Free delivery<br />on prepaid</span>
                 </li>
                 <li>
                   <LuxIcon name="refresh" size={22} />
@@ -5407,7 +5410,8 @@ function App() {
 
                   <div className="lux-details-content">
                     <p>
-                      Free delivery on all orders. Orders are packed and dispatched within 1-3
+                      Free delivery on all prepaid orders. Cash on Delivery is also available
+                      (₹150 delivery charge on COD). Orders are packed and dispatched within 1-3
                       business days and usually arrive in 5-9 business days.
                     </p>
                     <p>
