@@ -4562,7 +4562,7 @@ async function runMarketingJob({ content, products, recipients, campaignId }) {
     }
     const { error: logError } = await supabase
       .from("email_campaign_sends")
-      .upsert({ campaign_id: campaignId, email: recipient.email, status, error: errorText }, { onConflict: "campaign_id,email" });
+      .upsert({ campaign_id: campaignId, email: recipient.email, name: recipient.name || null, status, error: errorText }, { onConflict: "campaign_id,email" });
     if (logError) console.error("MARKETING LOG ERROR:", logError);
     await new Promise((resolve) => setTimeout(resolve, MARKETING_DELAY_MS));
   }
@@ -4571,6 +4571,138 @@ async function runMarketingJob({ content, products, recipients, campaignId }) {
     marketingJob.finishedAt = new Date().toISOString();
   }
 }
+
+/*
+ * AUTO-CONTINUE NEXT DAY (2026-10-22)
+ * Needs (run once in Supabase SQL Editor):
+ *   alter table email_campaign_sends add column if not exists name text;
+ *   create table if not exists email_campaigns (
+ *     campaign_id text primary key,
+ *     content jsonb not null,
+ *     created_at timestamptz not null default now()
+ *   );
+ *   alter table email_campaigns enable row level security;
+ */
+async function marketingSaveQueue({ campaignId, content, recipients }) {
+  const { error: contentError } = await supabase
+    .from("email_campaigns")
+    .upsert({ campaign_id: campaignId, content }, { onConflict: "campaign_id" });
+  if (contentError) throw new Error("Email tables need updating. Please run the new Email Campaign SQL in Supabase.");
+  for (let index = 0; index < recipients.length; index += 500) {
+    const rows = recipients.slice(index, index + 500).map((item) => ({
+      campaign_id: campaignId,
+      email: item.email,
+      name: item.name || null,
+      status: "queued",
+      error: null
+    }));
+    const { error } = await supabase.from("email_campaign_sends").upsert(rows, { onConflict: "campaign_id,email" });
+    if (error) throw new Error("Email tables need updating. Please run the new Email Campaign SQL in Supabase.");
+  }
+}
+
+// Sends only between 10 AM and 8 PM India time, so emails arrive when
+// people are using their phones - never in the middle of the night.
+function marketingIsGoodSendingHour() {
+  const istHour = new Date(Date.now() + 5.5 * 60 * 60 * 1000).getUTCHours();
+  return istHour >= 10 && istHour < 20;
+}
+
+let marketingAutoBusy = false;
+async function marketingAutoResume() {
+  if (marketingAutoBusy || (marketingJob && marketingJob.running)) return;
+  if (!BREVO_API_KEY && !mailTransporter) return;
+  if (!marketingIsGoodSendingHour()) return;
+  marketingAutoBusy = true;
+  try {
+    const sentToday = await marketingSentInLast24h();
+    const remainingToday = Math.max(0, MARKETING_DAILY_LIMIT - sentToday);
+    if (remainingToday === 0) return;
+
+    const { data: first, error: firstError } = await supabase
+      .from("email_campaign_sends")
+      .select("campaign_id")
+      .eq("status", "queued")
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (firstError || !first || !first.length) return;
+    const campaignId = first[0].campaign_id;
+
+    const { data: campaign, error: campaignError } = await supabase
+      .from("email_campaigns")
+      .select("content")
+      .eq("campaign_id", campaignId)
+      .maybeSingle();
+    if (campaignError || !campaign || !campaign.content) return;
+    const content = campaign.content;
+
+    const { data: rows, error: rowsError } = await supabase
+      .from("email_campaign_sends")
+      .select("email, name")
+      .eq("campaign_id", campaignId)
+      .eq("status", "queued")
+      .order("created_at", { ascending: true })
+      .limit(remainingToday);
+    if (rowsError || !rows || !rows.length) return;
+
+    const emails = rows.map((row) => row.email);
+    const { data: unsubRows } = await supabase.from("email_unsubscribes").select("email").in("email", emails);
+    const unsubscribed = new Set((unsubRows || []).map((row) => String(row.email).toLowerCase()));
+    const recipients = rows
+      .filter((row) => !unsubscribed.has(String(row.email).toLowerCase()))
+      .map((row) => ({ email: row.email, name: row.name || "" }));
+    if (unsubscribed.size) {
+      await supabase
+        .from("email_campaign_sends")
+        .update({ status: "unsubscribed" })
+        .eq("campaign_id", campaignId)
+        .in("email", [...unsubscribed]);
+    }
+    if (!recipients.length) return;
+
+    const products = await marketingLoadProducts(content.productIds || []);
+    const { count: stillQueued } = await supabase
+      .from("email_campaign_sends")
+      .select("id", { count: "exact", head: true })
+      .eq("campaign_id", campaignId)
+      .eq("status", "queued");
+
+    marketingJob = {
+      running: true,
+      stopRequested: false,
+      auto: true,
+      campaignId,
+      subject: content.subject,
+      total: recipients.length,
+      sent: 0,
+      failed: 0,
+      skippedUnsubscribed: unsubscribed.size,
+      skippedAlreadySent: 0,
+      leftForTomorrow: Math.max(0, (stillQueued || 0) - recipients.length),
+      totalGiven: recipients.length,
+      lastError: "",
+      stoppedReason: "",
+      startedAt: new Date().toISOString(),
+      finishedAt: null
+    };
+    console.log(`MARKETING AUTO-RESUME: sending ${recipients.length} queued emails for "${content.subject}"`);
+    runMarketingJob({ content, products, recipients, campaignId }).catch((error) => {
+      console.error("MARKETING AUTO JOB ERROR:", error);
+      if (marketingJob) {
+        marketingJob.running = false;
+        marketingJob.lastError = String(error.message || error);
+      }
+    });
+  } catch (error) {
+    console.error("MARKETING AUTO-RESUME ERROR:", error);
+  } finally {
+    marketingAutoBusy = false;
+  }
+}
+
+// Checks every 10 minutes (and once, 1 minute after the server starts).
+setTimeout(marketingAutoResume, 60 * 1000);
+setInterval(marketingAutoResume, 10 * 60 * 1000);
 
 // Preview: the exact email HTML, shown in the admin page.
 app.post("/api/admin/email-campaign/preview", requireAdmin, async function (req, res) {
@@ -4646,17 +4778,32 @@ app.post("/api/admin/email-campaign/send", requireAdmin, async function (req, re
     const alreadySent = new Set((sentRows || []).map((row) => String(row.email).toLowerCase()));
     recipients = recipients.filter((item) => !unsubscribed.has(item.email) && !alreadySent.has(item.email));
 
+    if (!recipients.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Everyone on this list has already received this email (or unsubscribed)."
+      });
+    }
+
+    /*
+     * AUTO-CONTINUE (2026-10-22): the campaign text and EVERY remaining
+     * recipient are saved in Supabase ("queued"), so whatever doesn't
+     * fit in today's limit is sent automatically on the next day(s) by
+     * marketingAutoResume() below - no need to upload the CSV again.
+     * This also survives a server restart.
+     */
+    await marketingSaveQueue({ campaignId, content, recipients });
+
     const sentToday = await marketingSentInLast24h();
     const remainingToday = Math.max(0, MARKETING_DAILY_LIMIT - sentToday);
     const laterCount = Math.max(0, recipients.length - remainingToday);
     recipients = recipients.slice(0, remainingToday);
 
     if (!recipients.length) {
-      return res.status(400).json({
-        success: false,
-        message: remainingToday === 0
-          ? `Today's limit of ${MARKETING_DAILY_LIMIT} emails is used up. Please send again tomorrow with the same subject.`
-          : "Everyone on this list has already received this email (or unsubscribed)."
+      return res.json({
+        success: true,
+        message: `Today's limit is used up. All ${laterCount} emails are saved and will be sent automatically from tomorrow.`,
+        job: marketingJob ? (({ stopRequested, ...rest }) => rest)(marketingJob) : null
       });
     }
 
@@ -4701,14 +4848,31 @@ app.get("/api/admin/email-campaign/status", requireAdmin, async function (req, r
   } catch (error) {
     sentToday = null;
   }
+  let queued = null;
+  try {
+    const { count, error } = await supabase
+      .from("email_campaign_sends")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "queued");
+    if (!error) queued = count || 0;
+  } catch (error) {
+    queued = null;
+  }
   const job = marketingJob ? (({ stopRequested, ...rest }) => rest)(marketingJob) : null;
-  return res.json({ success: true, job, sentToday, dailyLimit: MARKETING_DAILY_LIMIT });
+  return res.json({ success: true, job, sentToday, queued, dailyLimit: MARKETING_DAILY_LIMIT });
 });
 
-app.post("/api/admin/email-campaign/stop", requireAdmin, function (req, res) {
-  if (marketingJob && marketingJob.running) {
-    marketingJob.stopRequested = true;
+app.post("/api/admin/email-campaign/stop", requireAdmin, async function (req, res) {
+  if (marketingJob) {
+    if (marketingJob.running) marketingJob.stopRequested = true;
     marketingJob.stoppedReason = "Stopped by admin. Press Send again with the same subject to continue.";
+    // Also stop the automatic next-day sending for this campaign.
+    const { error } = await supabase
+      .from("email_campaign_sends")
+      .update({ status: "cancelled" })
+      .eq("campaign_id", marketingJob.campaignId)
+      .eq("status", "queued");
+    if (error) console.error("MARKETING STOP QUEUE ERROR:", error);
   }
   return res.json({ success: true });
 });
