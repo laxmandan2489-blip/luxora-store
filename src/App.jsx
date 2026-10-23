@@ -766,8 +766,16 @@ const INFO_PAGES = {
           payment partner, Razorpay.
         </p>
         <p>
-          All content on this website - including the SHRIMOH name, logo, product photography, and
-          descriptions - is the property of SHRIMOH and may not be reproduced without permission.
+          The SHRIMOH name, logo, and website design and text are the property of SHRIMOH and may
+          not be reproduced without permission. Some product images are provided by our suppliers
+          and remain the property of their respective owners.
+        </p>
+        <p>
+          <strong>Third-party products &amp; intellectual property.</strong> SHRIMOH is a
+          marketplace/reseller that sources products from third-party suppliers. We do not
+          intend to infringe the copyright or trademark of any brand. If you have an objection
+          to any design or listing, please email us at{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> and we will remove it promptly.
         </p>
         <p>
           These terms are governed by the laws of India. For any queries regarding these terms,
