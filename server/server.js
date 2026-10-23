@@ -487,6 +487,88 @@ async function sendShippingUpdateEmail({
   });
 }
 
+/*
+ * STATUS UPDATE EMAIL (2026-10-23)
+ * Sent when the admin changes an order's Status dropdown to one of
+ * STATUS_EMAIL_STATUSES. Confirmed / Processing deliberately send
+ * nothing so the customer isn't flooded. Remove a status from this
+ * list to stop emailing for it.
+ */
+const STATUS_EMAIL_STATUSES = ["Shipped", "Delivered", "Cancelled"];
+
+async function sendStatusUpdateEmail({
+  to,
+  customerName,
+  orderReference,
+  status,
+  courierName,
+  trackingNumber,
+  trackingUrl
+}) {
+  const orderNo = displayOrderNumber(orderReference);
+
+  const content = {
+    Shipped: {
+      subject: `Your SHRIMOH Order ${orderNo} Has Shipped`,
+      eyebrow: "ON ITS WAY",
+      heading: "Your order has shipped",
+      intro: "Good news - your order has left our studio and is on its way to you."
+    },
+    Delivered: {
+      subject: `Your SHRIMOH Order ${orderNo} Has Been Delivered`,
+      eyebrow: "DELIVERED",
+      heading: "Your order has arrived",
+      intro:
+        "Your order has been delivered. We hope you love your new SHRIMOH bag! If anything isn't right, just reply to this email and we'll help."
+    },
+    Cancelled: {
+      subject: `Your SHRIMOH Order ${orderNo} Has Been Cancelled`,
+      eyebrow: "ORDER UPDATE",
+      heading: "Your order has been cancelled",
+      intro:
+        "Your order has been cancelled. If you paid online, any refund due will be processed to your original payment method. If you have any questions, just reply to this email."
+    }
+  }[status];
+
+  if (!content) return;
+
+  const showShipping = status === "Shipped" && (courierName || trackingNumber);
+
+  const bodyHtml = `
+    <p style="margin:0 0 4px;font-size:14px;">Hi ${customerName || "there"},</p>
+    <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:${EMAIL_BRAND.muted};">${content.intro}</p>
+
+    <div style="display:inline-block;padding:10px 16px;background:${EMAIL_BRAND.soft};border-radius:6px;font-size:11px;letter-spacing:0.5px;color:${EMAIL_BRAND.muted};margin-bottom:12px;">
+      ORDER NUMBER&nbsp; <strong style="color:${EMAIL_BRAND.ink};">${orderNo}</strong>
+    </div>
+    <div style="font-size:11px;letter-spacing:1px;color:${EMAIL_BRAND.gold};margin-bottom:26px;">STATUS: <strong>${String(status).toUpperCase()}</strong></div>
+
+    ${
+      showShipping
+        ? `<table style="width:100%;font-size:13px;margin-bottom:24px;border:1px solid ${EMAIL_BRAND.line};border-radius:6px;border-collapse:collapse;">
+      ${courierName ? `<tr><td style="padding:12px 16px;color:${EMAIL_BRAND.muted};border-bottom:1px solid ${EMAIL_BRAND.line};">Courier</td><td style="padding:12px 16px;text-align:right;font-weight:bold;border-bottom:1px solid ${EMAIL_BRAND.line};">${courierName}</td></tr>` : ""}
+      ${trackingNumber ? `<tr><td style="padding:12px 16px;color:${EMAIL_BRAND.muted};">Tracking Number</td><td style="padding:12px 16px;text-align:right;font-weight:bold;">${trackingNumber}</td></tr>` : ""}
+    </table>`
+        : ""
+    }
+
+    ${
+      status === "Shipped" && trackingUrl
+        ? `<p style="text-align:center;margin:0 0 26px;"><a href="${trackingUrl}" style="display:inline-block;padding:13px 30px;background:${EMAIL_BRAND.ink};color:#fff;text-decoration:none;font-size:10px;letter-spacing:1.5px;border-radius:4px;">TRACK WITH COURIER</a></p>`
+        : ""
+    }
+
+    <p style="font-size:12px;color:${EMAIL_BRAND.muted};line-height:1.6;">You can check your order anytime on the SHRIMOH website using "Track Order" with this order number and your mobile number or email.</p>
+  `;
+
+  await sendTransactionalEmail({
+    to,
+    customerName,
+    subject: content.subject,
+    html: emailShell({ eyebrow: content.eyebrow, heading: content.heading, bodyHtml })
+  });
+}
+
 const ORDER_STATUSES = ["Received", "Confirmed", "Processing", "Shipped", "Delivered", "Cancelled"];
 const PAYMENT_STATUSES = ["Pending", "Paid", "Failed", "Refunded"];
 const PAYMENT_METHODS = ["Razorpay"]; // prepaid only - COD switched off
@@ -4186,6 +4268,62 @@ async function updateOrder(req, res) {
       }).catch((error) => {
         console.error("SHIPPING EMAIL ERROR:", error);
       });
+    }
+
+    /*
+     * STATUS UPDATE EMAIL (2026-10-23, best-effort, never fails the request)
+     * Fires when the Status dropdown actually CHANGES to Shipped /
+     * Delivered / Cancelled. Skips "Shipped" if the order already had
+     * courier/tracking saved before, because "Save Shipping Info" has
+     * already sent the customer a "has shipped" email for it.
+     */
+    const statusChanged = status && String(status) !== String(existing.status || "");
+    const alreadySentShippedEmail =
+      String(status) === "Shipped" &&
+      (String(existing.courier_name || "").trim() || String(existing.tracking_number || "").trim());
+
+    if (
+      statusChanged &&
+      STATUS_EMAIL_STATUSES.includes(String(status)) &&
+      !alreadySentShippedEmail &&
+      !shippingInfoSubmitted
+    ) {
+      let statusCustomer = existing.customer;
+      if (typeof statusCustomer === "string") {
+        try {
+          statusCustomer = JSON.parse(statusCustomer);
+        } catch {
+          statusCustomer = null;
+        }
+      }
+      if (existing.customer_id) {
+        const { data: customerData, error: customerError } = await supabase
+          .from("customers")
+          .select("*")
+          .eq("id", existing.customer_id)
+          .maybeSingle();
+        if (customerError) console.error("STATUS EMAIL CUSTOMER LOOKUP ERROR:", customerError);
+        if (customerData) statusCustomer = { ...customerData, ...(statusCustomer || {}) };
+      }
+
+      const statusEmailTo = (statusCustomer && statusCustomer.email) || "";
+      if (!statusEmailTo) {
+        console.warn(`STATUS EMAIL SKIPPED: order ${updated.order_number || updated.id} has no customer email.`);
+      } else {
+        sendStatusUpdateEmail({
+          to: statusEmailTo,
+          customerName: (statusCustomer && statusCustomer.name) || "",
+          orderReference: updated.order_number || String(updated.id),
+          status: String(status),
+          courierName: updatedCourierName,
+          trackingNumber: updatedTrackingNumber,
+          trackingUrl: updatedTrackingUrl
+        })
+          .then(() => console.log(`STATUS EMAIL SENT: ${status} -> ${statusEmailTo}`))
+          .catch((error) => {
+            console.error("STATUS EMAIL ERROR:", error);
+          });
+      }
     }
 
     return res.json({ success: true, message: "Order updated successfully.", order: formatOrder(updated) });
