@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import urbanist500 from "./assets/urbanist-latin-500-normal.woff2";
 import urbanist600 from "./assets/urbanist-latin-600-normal.woff2";
+import CaptionMaker from "./CaptionMaker";
 
 /*
  * ADMIN > AD MAKER (2026-10-21)
@@ -840,6 +841,12 @@ export default function AdMaker({ API, adminFetch, products }) {
               ⬇ Save image
             </button>
           </div>
+          <CaptionMaker
+            product={(Array.isArray(products) ? products : []).find((item) => item.id === productId) || null}
+            name={name}
+            price={price}
+            mrp={mrp}
+          />
         </div>
 
         <div>
