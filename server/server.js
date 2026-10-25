@@ -3079,7 +3079,14 @@ app.get("/api/admin/dashboard", requireAdmin, async function (req, res) {
       paidOrderIds.has(String(item.order_id))
     );
 
-    const productIds = [...new Set(relevantItems.map((item) => item.product_id))];
+    // Skip items whose product_id is missing (e.g. a deleted product) -
+    // a null id inside .in() made Postgres fail with "invalid input
+    // syntax for type bigint" and the whole dashboard never loaded.
+    const productIds = [...new Set(
+      relevantItems
+        .map((item) => item.product_id)
+        .filter((id) => id !== null && id !== undefined && String(id).trim() !== "" && String(id) !== "null" && Number.isFinite(Number(id)))
+    )];
     let supplierCostByProduct = new Map();
     if (productIds.length) {
       const { data: products, error: productsError } = await supabase
@@ -3119,6 +3126,332 @@ app.get("/api/admin/dashboard", requireAdmin, async function (req, res) {
   } catch (error) {
     console.error("GET DASHBOARD ERROR:", error);
     return res.status(500).json({ success: false, message: "Unable to load dashboard." });
+  }
+});
+
+/* =========================================================
+   SITE ANALYTICS (2026-10-25)
+   The storefront sends small events (page_view, product_view,
+   wishlist_add, add_to_cart, checkout_start) to /api/track. They are
+   stored in the Supabase table "site_events" and summarised for the
+   Admin > Analytics tab by /api/admin/analytics.
+   If the table does not exist yet, tracking silently does nothing.
+========================================================= */
+const SITE_EVENT_TYPES = new Set(["page_view", "product_view", "wishlist_add", "add_to_cart", "checkout_start", "purchase"]);
+const siteTrackHits = new Map();
+
+function siteTrackAllowed(ip) {
+  const now = Date.now();
+  const entry = siteTrackHits.get(ip);
+  if (!entry || now - entry.start > 60000) {
+    siteTrackHits.set(ip, { start: now, count: 1 });
+    if (siteTrackHits.size > 5000) siteTrackHits.clear();
+    return true;
+  }
+  entry.count += 1;
+  return entry.count <= 120;
+}
+
+app.post("/api/track", async function (req, res) {
+  try {
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const event = String(body.event || "");
+    const visitorId = String(body.visitorId || "").slice(0, 64);
+    if (!SITE_EVENT_TYPES.has(event) || !/^[a-zA-Z0-9_-]{8,64}$/.test(visitorId)) {
+      return res.status(204).end();
+    }
+    const ip = String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim();
+    if (!siteTrackAllowed(ip)) return res.status(204).end();
+
+    const productNumber = Number(body.productId);
+    const productId = Number.isInteger(productNumber) && productNumber > 0 ? productNumber : null;
+    const userAgent = String(req.headers["user-agent"] || "");
+    if (/bot|crawl|spider|facebookexternalhit|preview/i.test(userAgent)) return res.status(204).end();
+    const device = /mobile|iphone|android/i.test(userAgent) ? "mobile" : "desktop";
+
+    const source = String(body.source || "").replace(/[^\w ./()&-]/g, "").trim().slice(0, 40) || null;
+    const valueNumber = Number(body.value);
+    const value = Number.isFinite(valueNumber) && valueNumber >= 0 && valueNumber <= 1000000 ? valueNumber : null;
+    const baseRow = {
+      event,
+      product_id: productId,
+      visitor_id: visitorId,
+      path: String(body.path || "").slice(0, 200),
+      device
+    };
+    let { error } = await supabase.from("site_events").insert({ ...baseRow, source, value });
+    // Older table without the source/value columns: save the basic row.
+    if (error && /source|value/i.test(error.message || "")) {
+      ({ error } = await supabase.from("site_events").insert(baseRow));
+    }
+    if (error) console.warn("SITE TRACK ERROR:", error.message);
+    return res.status(204).end();
+  } catch (error) {
+    console.warn("SITE TRACK ERROR:", error?.message || error);
+    return res.status(204).end();
+  }
+});
+
+// Midnight (India time) N-1 days ago, as an ISO string.
+function analyticsSinceIso(days) {
+  const istOffsetMs = 5.5 * 60 * 60 * 1000;
+  const nowIst = new Date(Date.now() + istOffsetMs);
+  const midnightIstAsUtc = Date.UTC(nowIst.getUTCFullYear(), nowIst.getUTCMonth(), nowIst.getUTCDate()) - istOffsetMs;
+  return new Date(midnightIstAsUtc - (days - 1) * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function istDateKey(isoString) {
+  const date = new Date(new Date(isoString).getTime() + 5.5 * 60 * 60 * 1000);
+  return date.toISOString().slice(0, 10);
+}
+
+app.get("/api/admin/analytics", requireAdmin, async function (req, res) {
+  try {
+    const allowedDays = [1, 7, 30];
+    const requestedDays = Number(req.query.days);
+    const days = allowedDays.includes(requestedDays) ? requestedDays : 7;
+    const since = analyticsSinceIso(days);
+
+    // Supabase returns max 1000 rows per request, so read in pages.
+    const events = [];
+    const pageSize = 1000;
+    let eventColumns = "event, product_id, visitor_id, device, created_at, source, value";
+    for (let from = 0; from < 100000; from += pageSize) {
+      let { data, error } = await supabase
+        .from("site_events")
+        .select(eventColumns)
+        .gte("created_at", since)
+        .order("id", { ascending: true })
+        .range(from, from + pageSize - 1);
+      if (error && /source|value/i.test(error.message || "") && eventColumns.includes("source")) {
+        // Table created before the source/value columns were added.
+        eventColumns = "event, product_id, visitor_id, device, created_at";
+        ({ data, error } = await supabase
+          .from("site_events")
+          .select(eventColumns)
+          .gte("created_at", since)
+          .order("id", { ascending: true })
+          .range(from, from + pageSize - 1));
+      }
+      if (error) {
+        if (error.code === "42P01" || /site_events/.test(error.message || "")) {
+          return res.json({ success: false, setupNeeded: true, message: "Analytics table (site_events) is not created in Supabase yet." });
+        }
+        throw error;
+      }
+      const rows = Array.isArray(data) ? data : [];
+      events.push(...rows);
+      if (rows.length < pageSize) break;
+    }
+
+    const visitors = new Set();
+    const mobileVisitors = new Set();
+    const funnelSets = { product_view: new Set(), wishlist_add: new Set(), add_to_cart: new Set(), checkout_start: new Set() };
+    const byDay = new Map();
+    const byProduct = new Map();
+    const bySource = new Map();
+    const pageViewsByHour = new Array(24).fill(0);
+    let pageViews = 0;
+
+    for (const row of events) {
+      const visitor = row.visitor_id;
+      const sourceName = row.source || "Unknown";
+      if (!bySource.has(sourceName)) {
+        bySource.set(sourceName, { visitors: new Set(), viewers: new Set(), cart: new Set(), checkout: new Set(), purchases: 0, purchaseValue: 0 });
+      }
+      const sourceStats = bySource.get(sourceName);
+      sourceStats.visitors.add(visitor);
+      if (row.event === "product_view") sourceStats.viewers.add(visitor);
+      if (row.event === "add_to_cart") sourceStats.cart.add(visitor);
+      if (row.event === "checkout_start") sourceStats.checkout.add(visitor);
+      if (row.event === "purchase") {
+        sourceStats.purchases += 1;
+        sourceStats.purchaseValue += safeNumber(row.value);
+      }
+      if (row.event === "page_view") {
+        const istHour = new Date(new Date(row.created_at).getTime() + 5.5 * 60 * 60 * 1000).getUTCHours();
+        pageViewsByHour[istHour] += 1;
+      }
+      visitors.add(visitor);
+      if (row.device === "mobile") mobileVisitors.add(visitor);
+      if (row.event === "page_view") pageViews += 1;
+      if (funnelSets[row.event]) funnelSets[row.event].add(visitor);
+
+      const day = istDateKey(row.created_at);
+      if (!byDay.has(day)) byDay.set(day, new Set());
+      byDay.get(day).add(visitor);
+
+      if (row.product_id && (row.event === "product_view" || row.event === "wishlist_add" || row.event === "add_to_cart")) {
+        const key = String(row.product_id);
+        if (!byProduct.has(key)) {
+          byProduct.set(key, { productId: row.product_id, views: 0, viewers: new Set(), wishlist: 0, cart: 0 });
+        }
+        const stats = byProduct.get(key);
+        if (row.event === "product_view") {
+          stats.views += 1;
+          stats.viewers.add(visitor);
+        } else if (row.event === "wishlist_add") {
+          stats.wishlist += 1;
+        } else if (row.event === "add_to_cart") {
+          stats.cart += 1;
+        }
+      }
+    }
+
+    // Orders placed in the same period (from the real orders table).
+    const { data: orders, error: ordersError } = await supabase
+      .from("orders")
+      .select("id, status, total_amount, created_at, payment_method, payment_status, coupon_code, customer_id")
+      .gte("created_at", since);
+    if (ordersError) throw ordersError;
+    const allPeriodOrders = Array.isArray(orders) ? orders : [];
+    const validOrders = allPeriodOrders.filter((order) => order.status !== "Cancelled");
+    const cancelledCount = allPeriodOrders.length - validOrders.length;
+    const orderValue = validOrders.reduce((sum, order) => sum + safeNumber(order.total_amount), 0);
+
+    // COD vs prepaid, coupons, and where (state / city) orders come from.
+    const payment = { cod: 0, codValue: 0, prepaid: 0, prepaidValue: 0 };
+    const coupons = new Map();
+    for (const order of validOrders) {
+      const isCod = /cod|cash/i.test(String(order.payment_method || ""));
+      if (isCod) {
+        payment.cod += 1;
+        payment.codValue += safeNumber(order.total_amount);
+      } else {
+        payment.prepaid += 1;
+        payment.prepaidValue += safeNumber(order.total_amount);
+      }
+      if (order.coupon_code) {
+        const code = String(order.coupon_code).toUpperCase();
+        coupons.set(code, (coupons.get(code) || 0) + 1);
+      }
+    }
+    const byState = new Map();
+    const byCity = new Map();
+    const customerIds = [...new Set(validOrders.map((order) => order.customer_id).filter((id) => id !== null && id !== undefined && String(id) !== "null"))];
+    if (customerIds.length) {
+      const orderCountByCustomer = new Map();
+      for (const order of validOrders) {
+        const key = String(order.customer_id);
+        orderCountByCustomer.set(key, (orderCountByCustomer.get(key) || 0) + 1);
+      }
+      for (let index = 0; index < customerIds.length; index += 200) {
+        const { data: customers, error: customersError } = await supabase
+          .from("customers")
+          .select("id, city, state")
+          .in("id", customerIds.slice(index, index + 200));
+        if (customersError) {
+          console.warn("ANALYTICS CUSTOMERS ERROR:", customersError.message);
+          break;
+        }
+        for (const customer of Array.isArray(customers) ? customers : []) {
+          const count = orderCountByCustomer.get(String(customer.id)) || 0;
+          const state = String(customer.state || "").trim() || "Unknown";
+          const city = String(customer.city || "").trim();
+          const cityLabel = city ? `${city.charAt(0).toUpperCase()}${city.slice(1).toLowerCase()}, ${state}` : "Unknown";
+          byState.set(state, (byState.get(state) || 0) + count);
+          byCity.set(cityLabel, (byCity.get(cityLabel) || 0) + count);
+        }
+      }
+    }
+    const topList = (map, limit) =>
+      [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([name, count]) => ({ name, count }));
+
+    // Orders per product in the period.
+    const orderedByProduct = new Map();
+    if (validOrders.length) {
+      const { data: items, error: itemsError } = await supabase
+        .from("order_items")
+        .select("order_id, product_id, quantity")
+        .in("order_id", validOrders.map((order) => order.id));
+      if (itemsError) throw itemsError;
+      for (const item of Array.isArray(items) ? items : []) {
+        const id = Number(item.product_id);
+        if (!Number.isInteger(id) || id <= 0) continue;
+        const key = String(id);
+        orderedByProduct.set(key, (orderedByProduct.get(key) || 0) + Math.max(1, Math.floor(safeNumber(item.quantity, 1))));
+        if (!byProduct.has(key)) {
+          byProduct.set(key, { productId: id, views: 0, viewers: new Set(), wishlist: 0, cart: 0 });
+        }
+      }
+    }
+
+    const productIds = [...byProduct.keys()].map(Number).filter((id) => Number.isInteger(id) && id > 0);
+    const productInfo = new Map();
+    for (let index = 0; index < productIds.length; index += 200) {
+      const { data: products, error: productsError } = await supabase
+        .from("products")
+        .select("id, name, images, price")
+        .in("id", productIds.slice(index, index + 200));
+      if (productsError) throw productsError;
+      for (const product of Array.isArray(products) ? products : []) {
+        const images = normalizeImages(product.images);
+        productInfo.set(String(product.id), { name: product.name || "", image: images[0] || "", price: safeNumber(product.price) });
+      }
+    }
+
+    const products = [...byProduct.entries()]
+      .map(([key, stats]) => ({
+        productId: stats.productId,
+        name: productInfo.get(key)?.name || `Product #${key} (deleted)`,
+        image: productInfo.get(key)?.image || "",
+        price: productInfo.get(key)?.price || 0,
+        views: stats.views,
+        uniqueViewers: stats.viewers.size,
+        wishlist: stats.wishlist,
+        cart: stats.cart,
+        ordered: orderedByProduct.get(key) || 0
+      }))
+      .sort((a, b) => b.views - a.views || b.cart - a.cart || b.ordered - a.ordered)
+      .slice(0, 50);
+
+    const dailyVisitors = [...byDay.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([date, set]) => ({ date, visitors: set.size }));
+
+    return res.json({
+      success: true,
+      analytics: {
+        days,
+        since,
+        visitors: visitors.size,
+        mobileVisitors: mobileVisitors.size,
+        pageViews,
+        productViewers: funnelSets.product_view.size,
+        wishlistVisitors: funnelSets.wishlist_add.size,
+        cartVisitors: funnelSets.add_to_cart.size,
+        checkoutVisitors: funnelSets.checkout_start.size,
+        orders: validOrders.length,
+        cancelledOrders: cancelledCount,
+        orderValue: Math.round(orderValue),
+        payment: {
+          cod: payment.cod,
+          codValue: Math.round(payment.codValue),
+          prepaid: payment.prepaid,
+          prepaidValue: Math.round(payment.prepaidValue)
+        },
+        sources: [...bySource.entries()]
+          .map(([name, stats]) => ({
+            name,
+            visitors: stats.visitors.size,
+            productViewers: stats.viewers.size,
+            cartVisitors: stats.cart.size,
+            checkoutVisitors: stats.checkout.size,
+            purchases: stats.purchases,
+            purchaseValue: Math.round(stats.purchaseValue)
+          }))
+          .sort((a, b) => b.visitors - a.visitors),
+        pageViewsByHour,
+        topStates: topList(byState, 10),
+        topCities: topList(byCity, 10),
+        coupons: topList(coupons, 10),
+        dailyVisitors,
+        products
+      }
+    });
+  } catch (error) {
+    console.error("GET ANALYTICS ERROR:", error);
+    return res.status(500).json({ success: false, message: "Unable to load analytics." });
   }
 });
 
