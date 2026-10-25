@@ -41,16 +41,16 @@ const SLOGANS = [
   "Elegance, now within reach",
 ];
 
-const INK = "#1c150d";
-const GOLD = "#b1a181";
-const DEEP_GOLD = "#8a7650";
-const IVORY = "#fbf7ee";
+export const INK = "#1c150d";
+export const GOLD = "#b1a181";
+export const DEEP_GOLD = "#8a7650";
+export const IVORY = "#fbf7ee";
 const MAROON = "#5e1a24";
-const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
-const SANS = '"AdUrbanist", "Helvetica Neue", Arial, sans-serif';
+export const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
+export const SANS = '"AdUrbanist", "Helvetica Neue", Arial, sans-serif';
 
 let fontsPromise = null;
-function loadFonts() {
+export function loadFonts() {
   if (fontsPromise) return fontsPromise;
   fontsPromise = (async () => {
     try {
@@ -83,13 +83,13 @@ function loadFonts() {
   return fontsPromise;
 }
 
-function rupees(value) {
+export function rupees(value) {
   const number = Number(value || 0);
   return `₹${number.toLocaleString("en-IN")}`;
 }
 
 // Letter-spaced text (canvas letterSpacing isn't on every iPhone yet).
-function spacedText(ctx, text, x, y, spacing, align = "center") {
+export function spacedText(ctx, text, x, y, spacing, align = "center") {
   const chars = String(text).split("");
   const widths = chars.map((char) => ctx.measureText(char).width);
   const total = widths.reduce((sum, width) => sum + width, 0) + spacing * Math.max(0, chars.length - 1);
@@ -105,7 +105,7 @@ function spacedText(ctx, text, x, y, spacing, align = "center") {
 }
 
 // Sets ctx.font, shrinking the size until the text fits maxWidth.
-function fitFont(ctx, text, style, size, family, maxWidth) {
+export function fitFont(ctx, text, style, size, family, maxWidth) {
   let current = size;
   ctx.font = `${style} ${current}px ${family}`;
   while (current > 12 && ctx.measureText(String(text)).width > maxWidth) {
@@ -115,7 +115,7 @@ function fitFont(ctx, text, style, size, family, maxWidth) {
   return current;
 }
 
-function wrapLines(ctx, text, maxWidth, maxLines) {
+export function wrapLines(ctx, text, maxWidth, maxLines) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
   let line = "";
@@ -140,7 +140,7 @@ function wrapLines(ctx, text, maxWidth, maxLines) {
 
 // Colour of the photo's own background (top-left corner), so a
 // "fit" photo blends into its panel instead of sitting in a box.
-function photoBackground(img) {
+export function photoBackground(img) {
   try {
     const probe = document.createElement("canvas");
     probe.width = 8;
@@ -182,7 +182,7 @@ function roundRect(ctx, x, y, w, h, r) {
 }
 
 // Price row: big price, struck-through MRP. Returns its width.
-function drawPrice(ctx, options) {
+export function drawPrice(ctx, options) {
   ctx.save();
   const width = drawPriceInner(ctx, options);
   ctx.restore();
@@ -239,12 +239,12 @@ const CLEAN_BACKGROUNDS = {
   black: { label: "Black", color: "rgb(28,21,13)" },
 };
 
-function parseRgb(color) {
+export function parseRgb(color) {
   const match = String(color).match(/(\d+)\D+(\d+)\D+(\d+)/);
   return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [255, 255, 255];
 }
 
-function isLight(color) {
+export function isLight(color) {
   const [r, g, b] = parseRgb(color);
   return 0.299 * r + 0.587 * g + 0.114 * b > 150;
 }
@@ -252,7 +252,7 @@ function isLight(color) {
 // Draws the photo and softly fades its edges into the background colour,
 // so a photo with a slightly different / uneven background never looks
 // like a box pasted on the design.
-function drawPhotoSoft(ctx, img, x, y, w, h, fit, bg) {
+export function drawPhotoSoft(ctx, img, x, y, w, h, fit, bg) {
   const scale = fit === "fill" ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
   const dw = img.width * scale;
   const dh = img.height * scale;

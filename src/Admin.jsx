@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
 import EmailCampaign from "./EmailCampaign";
 import AdMaker from "./AdMaker";
+import StoryMaker from "./StoryMaker";
 import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 
@@ -5012,7 +5013,21 @@ function Admin() {
           >
             Ad Maker
           </button>
+          <button
+            className={
+              activeTab === "stories"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("stories")}
+          >
+            Story Maker
+          </button>
         </div>
+
+        {activeTab === "stories" && (
+          <StoryMaker API={API} adminFetch={adminFetch} products={products} />
+        )}
 
         {activeTab === "analytics" && (
           <Analytics API={API} adminFetch={adminFetch} />
