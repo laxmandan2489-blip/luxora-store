@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
 import EmailCampaign from "./EmailCampaign";
 import AdMaker from "./AdMaker";
+import Analytics from "./Analytics";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -841,6 +842,8 @@ function Admin() {
     useState(null);
   const [loadingDashboard, setLoadingDashboard] =
     useState(false);
+  const [dashboardError, setDashboardError] =
+    useState("");
 
   /* =====================================================
      SITE CONTENT (homepage hero + brand-story images)
@@ -1553,15 +1556,19 @@ function Admin() {
   async function loadDashboard() {
     try {
       setLoadingDashboard(true);
+      setDashboardError("");
       const response = await adminFetch(
         `${API}/api/admin/dashboard`
       );
       const data = await response.json();
       if (data?.success) {
         setDashboard(data.dashboard);
+      } else {
+        setDashboardError(data?.message || "Unable to load dashboard.");
       }
     } catch (error) {
       console.error("DASHBOARD LOAD ERROR:", error);
+      setDashboardError("Unable to load dashboard. Please check your internet and try again.");
     } finally {
       setLoadingDashboard(false);
     }
@@ -4895,6 +4902,16 @@ function Admin() {
           </button>
           <button
             className={
+              activeTab === "analytics"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("analytics")}
+          >
+            Analytics
+          </button>
+          <button
+            className={
               activeTab === "orders"
                 ? "tab-button active"
                 : "tab-button"
@@ -4969,6 +4986,10 @@ function Admin() {
           </button>
         </div>
 
+        {activeTab === "analytics" && (
+          <Analytics API={API} adminFetch={adminFetch} />
+        )}
+
         {activeTab === "email" && (
           <EmailCampaign API={API} adminFetch={adminFetch} />
         )}
@@ -4982,7 +5003,19 @@ function Admin() {
             <div className="panel-header">
               <h2 className="panel-title">Business Overview</h2>
             </div>
-            {loadingDashboard || !dashboard ? (
+            {!loadingDashboard && !dashboard && dashboardError ? (
+              <div className="empty-state">
+                <div>{dashboardError}</div>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  style={{ marginTop: 12 }}
+                  onClick={loadDashboard}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : loadingDashboard || !dashboard ? (
               <div className="empty-state">Loading dashboard...</div>
             ) : (
               <div className="stats-grid">

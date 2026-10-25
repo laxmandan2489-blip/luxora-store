@@ -2,6 +2,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { useLocation, useNavigate } from "react-router-dom";
 import "./App.css";
 import { pixelContents, pixelItemId, trackPixel } from "./metaPixel";
+import { trackSite } from "./siteTracking";
 import shrimohIcon from "./assets/shrimoh-icon-square.png";
 import {
   BAG_CATEGORIES,
@@ -1479,6 +1480,8 @@ function App() {
     if (!product) return;
 
     const id = Number(product.id);
+
+    if (!wishlist.includes(id)) trackSite("wishlist_add", id);
 
     setWishlist((previous) =>
       previous.includes(id)
@@ -3058,12 +3061,14 @@ function App() {
   // browser never reloads between pages).
   useEffect(() => {
     trackPixel("PageView");
+    trackSite("page_view");
   }, [location.pathname, location.search]);
 
   // ViewContent when a product page (or another color of it) opens.
   const viewedProductId = selectedProduct ? selectedProduct.id : null;
   useEffect(() => {
     if (!selectedProduct) return;
+    trackSite("product_view", selectedProduct.id);
     trackPixel("ViewContent", {
       content_ids: [pixelItemId(selectedProduct, detailColor)],
       content_type: "product",
@@ -3078,6 +3083,7 @@ function App() {
   // InitiateCheckout each time the checkout opens.
   useEffect(() => {
     if (!checkoutOpen || orderPlaced || !checkoutItems.length) return;
+    trackSite("checkout_start");
     const contents = pixelContents(checkoutItems);
     trackPixel("InitiateCheckout", {
       content_ids: contents.map((item) => item.id),
@@ -3185,6 +3191,7 @@ function App() {
       return;
     }
 
+    trackSite("add_to_cart", product.id);
     trackPixel("AddToCart", {
       content_ids: [pixelItemId(product, safeColor)],
       content_type: "product",
@@ -3332,6 +3339,7 @@ function App() {
     }
 
     try {
+      trackSite("checkout_start");
       {
         const contents = pixelContents(list);
         trackPixel("InitiateCheckout", {
@@ -3413,6 +3421,8 @@ function App() {
                 finalReference ? { eventID: `order-${finalReference}` } : undefined
               );
             }
+
+            trackSite("purchase", null, { value: Number(savedOrder.order?.total || 0) });
 
             if (!isDirectBuy) setCart([]);
             setDirectBuyItem(null);
@@ -3762,6 +3772,7 @@ function App() {
                 finalReference ? { eventID: `order-${finalReference}` } : undefined
               );
             }
+            trackSite("purchase", null, { value: checkoutGrandTotal });
 
             // Remember these details on THIS device only, so checkout
             // is pre-filled (still fully editable) next time - see the
