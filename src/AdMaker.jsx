@@ -19,6 +19,9 @@ const SIZES = {
 };
 
 const TEMPLATES = {
+  below: "Clean · text below",
+  above: "Clean · text above",
+  editorial: "On photo",
   classic: "Ivory",
   noir: "Noir",
   sale: "Festive Sale",
@@ -218,7 +221,169 @@ function drawPriceInner(ctx, { price, mrp, x, y, size, color, mutedColor, align 
   return total;
 }
 
+/* ---------------------------------------------------------------------
+   CLEAN TEMPLATES (2026-10-25)
+   "Big brand" look: no badges, boxes or labels - just the bag, a small
+   SHRIMOH wordmark, the bag name, price (MRP lightly crossed out) and one
+   tiny line. Background = the photo's own background colour, so the
+   photo blends in instead of sitting in a box.
+--------------------------------------------------------------------- */
+const CLEAN_LINE = "FREE DELIVERY  ·  COD AVAILABLE";
+
+function parseRgb(color) {
+  const match = String(color).match(/(\d+)\D+(\d+)\D+(\d+)/);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : [255, 255, 255];
+}
+
+function isLight(color) {
+  const [r, g, b] = parseRgb(color);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 150;
+}
+
+// Draws the photo and softly fades its edges into the background colour,
+// so a photo with a slightly different / uneven background never looks
+// like a box pasted on the design.
+function drawPhotoSoft(ctx, img, x, y, w, h, fit, bg) {
+  const scale = fit === "fill" ? Math.max(w / img.width, h / img.height) : Math.min(w / img.width, h / img.height);
+  const dw = img.width * scale;
+  const dh = img.height * scale;
+  const dx = x + (w - dw) / 2;
+  const dy = y + (h - dh) / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
+  ctx.drawImage(img, dx, dy, dw, dh);
+  const [r, g, b] = parseRgb(bg);
+  const solid = `rgba(${r},${g},${b},1)`;
+  const clear = `rgba(${r},${g},${b},0)`;
+  const left = Math.max(x, dx);
+  const top = Math.max(y, dy);
+  const right = Math.min(x + w, dx + dw);
+  const bottom = Math.min(y + h, dy + dh);
+  const fade = Math.min(right - left, bottom - top) * 0.09;
+  const edges = [
+    [left, top, left + fade, top, left, top, fade, bottom - top],
+    [right, top, right - fade, top, right - fade, top, fade, bottom - top],
+    [left, top, left, top + fade, left, top, right - left, fade],
+    [left, bottom, left, bottom - fade, left, bottom - fade, right - left, fade],
+  ];
+  for (const [x0, y0, x1, y1, rx, ry, rw, rh] of edges) {
+    const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+    gradient.addColorStop(0, solid);
+    gradient.addColorStop(1, clear);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(rx, ry, rw, rh);
+  }
+  ctx.restore();
+}
+
+function cleanTextBlock(ctx, { W, d, x, y, align, ink, muted, nameSize, maxWidth }) {
+  // Bag name (serif, up to 2 lines)
+  ctx.textAlign = align;
+  ctx.fillStyle = ink;
+  ctx.font = `500 ${nameSize}px ${SERIF}`;
+  const lines = wrapLines(ctx, d.name, maxWidth, 2);
+  let cursor = y;
+  for (const line of lines) {
+    ctx.fillText(line, x, cursor);
+    cursor += nameSize * 1.12;
+  }
+  // Price + light MRP
+  const priceSize = Math.round(W * 0.036);
+  cursor += priceSize * 0.25;
+  if (Number(d.price) > 0) {
+    drawPrice(ctx, { price: d.price, mrp: d.mrp, x, y: cursor, size: priceSize, color: ink, mutedColor: muted, align });
+  }
+  return cursor;
+}
+
+function drawWordmark(ctx, W, x, y, color, align = "center") {
+  ctx.fillStyle = color;
+  ctx.font = `600 ${Math.round(W * 0.03)}px ${SERIF}`;
+  spacedText(ctx, "SHRIMOH", x, y, W * 0.016, align);
+}
+
+function drawTinyLine(ctx, W, x, y, color, align = "center") {
+  ctx.fillStyle = color;
+  ctx.font = `600 ${Math.round(W * 0.017)}px ${SANS}`;
+  spacedText(ctx, CLEAN_LINE, x, y, W * 0.005, align);
+}
+
+function drawClean(ctx, { W, H, img, template, fit }, d) {
+  const isStory = H / W > 1.6;
+  const isSquare = H / W < 1.1;
+  const m = Math.round(W * 0.07);
+  ctx.textBaseline = "alphabetic";
+
+  if (template === "editorial") {
+    // Photo fills everything; soft shade at the bottom for white text.
+    drawPhoto(ctx, img, 0, 0, W, H, "fill");
+    const topShade = ctx.createLinearGradient(0, 0, 0, H * 0.16);
+    topShade.addColorStop(0, "rgba(0,0,0,0.28)");
+    topShade.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = topShade;
+    ctx.fillRect(0, 0, W, H * 0.16);
+    const shadeTop = H * (isStory ? 0.62 : 0.55);
+    const shade = ctx.createLinearGradient(0, shadeTop, 0, H);
+    shade.addColorStop(0, "rgba(0,0,0,0)");
+    shade.addColorStop(1, "rgba(0,0,0,0.62)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, shadeTop, W, H - shadeTop);
+
+    drawWordmark(ctx, W, W / 2, (isStory ? H * 0.07 : m) + W * 0.03, "#ffffff");
+    const bottom = H - (isStory ? H * 0.1 : m);
+    const nameSize = Math.round(W * (isSquare ? 0.05 : 0.058));
+    ctx.font = `500 ${nameSize}px ${SERIF}`;
+    const lineCount = wrapLines(ctx, d.name, W - m * 2, 2).length;
+    const blockTop = bottom - W * 0.075 - W * 0.055 - (lineCount - 1) * nameSize * 1.12;
+    cleanTextBlock(ctx, { W, d, x: m, y: blockTop, align: "left", ink: "#ffffff", muted: "rgba(255,255,255,0.72)", nameSize, maxWidth: W - m * 2 });
+    drawTinyLine(ctx, W, m, bottom, "rgba(255,255,255,0.85)", "left");
+    return;
+  }
+
+  // text below / text above: background = photo's own colour
+  const bg = photoBackground(img);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  const light = isLight(bg);
+  const ink = light ? INK : "#ffffff";
+  const muted = light ? "rgba(28,21,13,0.45)" : "rgba(255,255,255,0.6)";
+  const soft = light ? DEEP_GOLD : "rgba(255,255,255,0.8)";
+
+  const top = isStory ? H * 0.07 : m;
+  const bottom = H - (isStory ? H * 0.07 : m * 0.85);
+  const nameSize = Math.round(W * (isSquare ? 0.045 : 0.05));
+  ctx.font = `500 ${nameSize}px ${SERIF}`;
+  const lineCount = wrapLines(ctx, d.name, W - m * 2, 2).length;
+  const textHeight = nameSize * 1.12 * lineCount + W * 0.06;
+
+  drawWordmark(ctx, W, W / 2, top + W * 0.025, ink);
+
+  if (template === "above") {
+    const textTop = top + W * 0.025 + W * (isStory ? 0.13 : 0.1);
+    cleanTextBlock(ctx, { W, d, x: W / 2, y: textTop, align: "center", ink, muted, nameSize, maxWidth: W - m * 2 });
+    const photoTop = textTop + textHeight;
+    const photoBottom = bottom - W * 0.05;
+    drawPhotoSoft(ctx, img, m * 0.5, photoTop, W - m, photoBottom - photoTop, fit, bg);
+    drawTinyLine(ctx, W, W / 2, bottom, soft);
+    return;
+  }
+
+  // "below"
+  const photoTop = top + W * 0.06;
+  const textTop = bottom - W * 0.06 - textHeight + nameSize * 0.6;
+  const photoBottom = textTop - nameSize * 1.1;
+  drawPhotoSoft(ctx, img, m * 0.5, photoTop, W - m, photoBottom - photoTop, fit, bg);
+  cleanTextBlock(ctx, { W, d, x: W / 2, y: textTop, align: "center", ink, muted, nameSize, maxWidth: W - m * 2 });
+  drawTinyLine(ctx, W, W / 2, bottom, soft);
+}
+
 function drawAd(ctx, { W, H, img, template, fit, d }) {
+  if (template === "below" || template === "above" || template === "editorial") {
+    drawClean(ctx, { W, H, img, template, fit }, d);
+    return;
+  }
   const off = Number(d.mrp) > Number(d.price) ? Math.round(((d.mrp - d.price) / d.mrp) * 100) : 0;
   const showOff = d.showBadge && off >= 5;
   const isStory = H / W > 1.6;
@@ -439,8 +604,8 @@ export default function AdMaker({ API, adminFetch, products }) {
   const [img, setImg] = useState(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
   const [notice, setNotice] = useState("");
-  const [template, setTemplate] = useState("classic");
-  const [size, setSize] = useState("square");
+  const [template, setTemplate] = useState("below");
+  const [size, setSize] = useState("portrait");
   const [fit, setFit] = useState("fit");
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
@@ -601,6 +766,8 @@ export default function AdMaker({ API, adminFetch, products }) {
     setNotice("✅ Image downloaded.");
   }
 
+  const isCleanTemplate = template === "below" || template === "above" || template === "editorial";
+
   const choice = (current, value, setter, label) => (
     <button
       type="button"
@@ -684,6 +851,7 @@ export default function AdMaker({ API, adminFetch, products }) {
             {choice(fit, "fill", setFit, "Fill the space")}
           </div>
 
+          {!isCleanTemplate ? (
           <div className="form-group">
             <label className="form-label">Slogan</label>
             <select className="form-select" value={SLOGANS.includes(slogan) ? slogan : "__custom"} onChange={(event) => setSlogan(event.target.value === "__custom" ? "" : event.target.value)}>
@@ -698,6 +866,7 @@ export default function AdMaker({ API, adminFetch, products }) {
               <input className="form-input" style={{ marginTop: 8 }} value={slogan} onChange={(event) => setSlogan(event.target.value)} placeholder="Your slogan" />
             ) : null}
           </div>
+          ) : null}
 
           <div className="form-group">
             <label className="form-label">Bag name</label>
@@ -715,6 +884,8 @@ export default function AdMaker({ API, adminFetch, products }) {
             </div>
           </div>
 
+          {!isCleanTemplate ? (
+          <>
           <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
             <input type="checkbox" checked={showBadge} onChange={(event) => setShowBadge(event.target.checked)} />
             Show “% OFF” badge
@@ -724,6 +895,8 @@ export default function AdMaker({ API, adminFetch, products }) {
             <label className="form-label">Bottom line</label>
             <input className="form-input" value={footer} onChange={(event) => setFooter(event.target.value)} />
           </div>
+          </>
+          ) : null}
         </div>
       </div>
     </div>
