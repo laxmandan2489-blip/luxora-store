@@ -31,7 +31,7 @@ export const ALL_BAGS_LABEL = "All Bags";
 export const HOME_SEO = {
   title: "SHRIMOH – Premium Women's Handbags & Bags | Official Store",
   description:
-    "Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders.",
+    "Official SHRIMOH online store for premium women's handbags – tote, shoulder and crossbody bags, clutches and wallets. Free delivery on prepaid orders.",
 };
 
 /* Same slug rule the app uses for /category/:slug URLs. */
@@ -50,43 +50,43 @@ export const CATEGORY_SEO = {
     title: "Women's Handbags – Structured Everyday Styles | SHRIMOH",
     heading: "Women's Handbags",
     description:
-      "Shop SHRIMOH women's handbags – polished, structured styles made for the commute, the office and dinner plans. Free delivery on all orders.",
+      "Shop SHRIMOH women's handbags – polished, structured styles made for the commute, the office and dinner plans. Free delivery on prepaid orders.",
   },
   "Shoulder Bags": {
     title: "Shoulder Bags for Women | SHRIMOH",
     heading: "Shoulder Bags",
     description:
-      "Discover SHRIMOH shoulder bags for women – soft curves, clean lines and everyday sizes that pair with everything. Free delivery on all orders.",
+      "Discover SHRIMOH shoulder bags for women – soft curves, clean lines and everyday sizes that pair with everything. Free delivery on prepaid orders.",
   },
   "Crossbody Bags": {
     title: "Crossbody & Sling Bags for Women | SHRIMOH",
     heading: "Crossbody Bags",
     description:
-      "Shop SHRIMOH crossbody and sling bags – hands-free, versatile styles for city days, errands and weekend plans. Free delivery on all orders.",
+      "Shop SHRIMOH crossbody and sling bags – hands-free, versatile styles for city days, errands and weekend plans. Free delivery on prepaid orders.",
   },
   "Tote Bags": {
     title: "Tote Bags for Women – Work & Travel | SHRIMOH",
     heading: "Tote Bags",
     description:
-      "Roomy, refined SHRIMOH tote bags for work days, travel and weekends – spacious inside, elegant outside. Free delivery on all orders.",
+      "Roomy, refined SHRIMOH tote bags for work days, travel and weekends – spacious inside, elegant outside. Free delivery on prepaid orders.",
   },
   Backpacks: {
     title: "Women's Backpacks & Laptop Bags | SHRIMOH",
     heading: "Backpacks",
     description:
-      "Shop SHRIMOH backpacks for women – smart compartments, comfortable straps and a polished finish for busy days. Free delivery on all orders.",
+      "Shop SHRIMOH backpacks for women – smart compartments, comfortable straps and a polished finish for busy days. Free delivery on prepaid orders.",
   },
   Clutches: {
     title: "Clutches & Evening Bags for Women | SHRIMOH",
     heading: "Clutches",
     description:
-      "SHRIMOH clutches and evening bags – small, striking styles for weddings, festive evenings and special dinners. Free delivery on all orders.",
+      "SHRIMOH clutches and evening bags – small, striking styles for weddings, festive evenings and special dinners. Free delivery on prepaid orders.",
   },
   Wallets: {
     title: "Women's Wallets & Card Holders | SHRIMOH",
     heading: "Wallets",
     description:
-      "Slim SHRIMOH wallets and card holders for women, thoughtfully organised to match the bag you carry every day. Free delivery on all orders.",
+      "Slim SHRIMOH wallets and card holders for women, thoughtfully organised to match the bag you carry every day. Free delivery on prepaid orders.",
   },
   Accessories: {
     title: "Bag Accessories | SHRIMOH",
@@ -98,7 +98,7 @@ export const CATEGORY_SEO = {
     title: "All Women's Bags – Handbags, Totes & More | SHRIMOH",
     heading: "All Bags",
     description:
-      "Every SHRIMOH bag in one place – handbags, shoulder bags, crossbody bags, totes, backpacks and clutches for women. Free delivery on all orders.",
+      "Every SHRIMOH bag in one place – handbags, shoulder bags, crossbody bags, totes, backpacks and clutches for women. Free delivery on prepaid orders.",
   },
 };
 
@@ -110,21 +110,21 @@ export const COLLECTION_SEO = {
     title: "Shop All Women's Bags & Accessories | SHRIMOH",
     heading: "Shop All",
     description:
-      "Browse the full SHRIMOH collection of premium women's handbags, totes, shoulder and crossbody bags, clutches and wallets. Free delivery on all orders.",
+      "Browse the full SHRIMOH collection of premium women's handbags, totes, shoulder and crossbody bags, clutches and wallets. Free delivery on prepaid orders.",
     canonicalPath: "/shop",
   },
   "/new-arrivals": {
     title: "New Arrivals – Women's Bags | SHRIMOH",
     heading: "New Arrivals",
     description:
-      "The newest SHRIMOH handbags and bags for women, freshest designs first. Free delivery on all orders.",
+      "The newest SHRIMOH handbags and bags for women, freshest designs first. Free delivery on prepaid orders.",
     canonicalPath: "/shop",
   },
   "/bestsellers": {
     title: "Bestselling Women's Bags | SHRIMOH",
     heading: "Bestsellers",
     description:
-      "SHRIMOH's most-loved women's bags – the styles customers reorder and carry every day. Free delivery on all orders.",
+      "SHRIMOH's most-loved women's bags – the styles customers reorder and carry every day. Free delivery on prepaid orders.",
     canonicalPath: "/shop",
   },
 };
@@ -196,7 +196,7 @@ export function productMetaDescription(product) {
     Accessories: "bag accessory",
   }[product?.category] || "bag";
   return truncate(
-    `Shop the ${cleanText(product?.name)} from SHRIMOH – a women's ${singular}. Free delivery on all orders.`,
+    `Shop the ${cleanText(product?.name)} from SHRIMOH – a women's ${singular}. Free delivery on prepaid orders.`,
     158
   );
 }

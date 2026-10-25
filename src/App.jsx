@@ -406,16 +406,16 @@ const CATEGORY_PAGE_COPY = {
       "Every SHRIMOH bag in one place - handbags, shoulder bags, crossbody bags, totes and more, each designed for everyday elegance.",
   },
   "New Arrivals": {
-    edit: "Fresh from the Studio",
+    edit: "Just Landed",
     line: "Our newest pieces, just arrived.",
     description:
-      "The latest SHRIMOH designs, newest first - be the first to carry them.",
+      "The latest SHRIMOH picks, newest first - be the first to carry them.",
   },
   Bestsellers: {
     edit: "Best Sellers for a Reason",
-    line: "Effortless designs, premium craftsmanship, everyday versatility.",
+    line: "Effortless styles, easy to love, made for everyday versatility.",
     description:
-      "The pieces our customers keep coming back for - loved, reordered and carried every day.",
+      "Our standout styles - effortless, versatile and easy to carry every day.",
   },
   All: {
     edit: "The SHRIMOH Collection",
@@ -429,7 +429,7 @@ const CATEGORY_PAGE_COPY = {
    style: "Best-selling crossbody styles for modern women."). */
 const CATEGORY_TAGLINES = {
   Handbags: "Structured everyday handbags, made to be carried with confidence.",
-  "Shoulder Bags": "Timeless shoulder bag designs crafted for elegance.",
+  "Shoulder Bags": "Timeless shoulder bag styles chosen for elegance.",
   "Crossbody Bags": "Hands-free crossbody styles for the modern woman.",
   "Tote Bags": "Roomy totes for work, weekends and everything in between.",
   Backpacks: "Polished backpacks that carry your day in style.",
@@ -458,7 +458,7 @@ const ANNOUNCEMENT_MESSAGES = [
   "✦ FREE DELIVERY ON ALL PREPAID ORDERS",
   "CASH ON DELIVERY AVAILABLE · ₹150 DELIVERY CHARGE ON COD",
   "PREMIUM COLLECTION · SECURE SHOPPING",
-  "HANDCRAFTED STYLE · MADE FOR YOU",
+  "HANDPICKED STYLES · CURATED FOR YOU",
 ];
 
 const API = "https://luxora-store-mkva.onrender.com";
@@ -562,9 +562,9 @@ const INFO_PAGES = {
     body: (
       <>
         <p>
-          SHRIMOH was created with a simple idea: luxury doesn't need to shout. We design and
-          curate pieces that quietly become part of your everyday life - thoughtful in
-          construction, refined in detail, and made to last well beyond the first impression.
+          SHRIMOH was created with a simple idea: luxury doesn't need to shout. We handpick
+          stylish bags from trusted partner sellers - pieces that quietly become part of your
+          everyday life, refined in detail and easy to carry anywhere.
         </p>
 
         <h2 className="lux-info-subheading">Our Values</h2>
@@ -572,8 +572,8 @@ const INFO_PAGES = {
         <div className="lux-values-strip lux-info-values">
           <div>
             <span>✎</span>
-            <strong>HANDCRAFTED</strong>
-            <p>Every piece checked before it ships.</p>
+            <strong>HANDPICKED STYLES</strong>
+            <p>Every style chosen with care for everyday elegance.</p>
           </div>
 
           <div>
@@ -598,15 +598,15 @@ const INFO_PAGES = {
         <h2 className="lux-info-subheading">Our Mission</h2>
 
         <p>
-          Our mission is simple: create stylish, thoughtfully-made pieces that make you feel good
-          about what you carry. We believe good design should be accessible, not exclusive - and
-          every product is checked before it ships, not mass-produced without care.
+          Our mission is simple: bring you stylish bags that make you feel good about what you
+          carry, at prices that make sense. We believe good style should be accessible, not
+          exclusive - and that buying online should feel easy, safe and honest.
         </p>
 
         <p>
-          We're a small, growing team and every order matters to us. If you ever have a question
-          about a product, your order, or just want to say hello, our support team is genuinely
-          happy to help - reach out any time through our Contact page.
+          We're a small, growing business and every order matters to us. If you ever have a
+          question about a product, your order, or just want to say hello, we're genuinely happy
+          to help - reach out any time through our Contact page.
         </p>
       </>
     ),
@@ -667,6 +667,10 @@ const INFO_PAGES = {
           <strong>Free delivery</strong> is available on all prepaid orders, with no minimum order value.
           <strong> Cash on Delivery</strong> is also available - a delivery charge of ₹150 is added
           to COD orders.
+        </p>
+        <p>
+          We work with trusted partner sellers and delivery partners, so your order may arrive
+          in partner packaging. Your order, support and returns are fully handled by SHRIMOH.
         </p>
         <p>
           You will receive your order confirmation and shipping updates over email. Delivery
@@ -4713,14 +4717,14 @@ function App() {
           <h2>The SHRIMOH Journey</h2>
 
           <p>
-            SHRIMOH was created with a simple idea: luxury doesn&apos;t need to shout. We design
-            and curate pieces that quietly become part of your everyday life - thoughtful in
-            construction, refined in detail, and made to last well beyond the first impression.
+            SHRIMOH was created with a simple idea: luxury doesn&apos;t need to shout. We handpick
+            stylish bags from trusted partner sellers - pieces that quietly become part of your
+            everyday life, refined in detail and easy to carry anywhere.
           </p>
 
           <p>
-            We&apos;re a small, growing team, and every order matters to us - each piece is
-            checked before it ships, never mass-produced without care.
+            We&apos;re a small, growing business, and every order matters to us - from the
+            moment you order to the day it reaches you, and after.
           </p>
 
           <button type="button" onClick={() => openInfoPage("about")}>
@@ -5059,8 +5063,8 @@ function App() {
           <span className="lux-guarantee-icon">
             <LuxIcon name="badge-check" size={26} />
           </span>
-          <strong>Authentic &amp; Handcrafted</strong>
-          <p>Every piece checked before it ships.</p>
+          <strong>Handpicked Styles</strong>
+          <p>Every style chosen with care for you.</p>
         </div>
 
         <div>
