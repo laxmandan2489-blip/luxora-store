@@ -193,7 +193,7 @@ write(
     body: fallback({
       h1: "SHRIMOH – Premium Women's Handbags & Bags",
       intro:
-        "SHRIMOH is the official online store for premium women's handbags and bags – structured handbags, shoulder bags, crossbody bags, tote bags, backpacks, clutches and wallets designed for everyday elegance. Free delivery on all orders.",
+        "SHRIMOH is the official online store for premium women's handbags and bags – structured handbags, shoulder bags, crossbody bags, tote bags, backpacks, clutches and wallets designed for everyday elegance. Free delivery on prepaid orders.",
       extra: haveProducts ? productList(products, "New at SHRIMOH") : "",
     }),
   })
