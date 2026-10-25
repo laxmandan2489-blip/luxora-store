@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "./categories";
 import EmailCampaign from "./EmailCampaign";
 import AdMaker from "./AdMaker";
+import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 
 const API = "https://luxora-store-mkva.onrender.com";
@@ -866,6 +867,11 @@ function Admin() {
   const [siteHeroFiles, setSiteHeroFiles] = useState([]);
   const [siteBrandStoryFile, setSiteBrandStoryFile] = useState(null);
   const [siteBrandStoryPreview, setSiteBrandStoryPreview] = useState("");
+  // (2026-10-25) Photos picked from already-uploaded product photos.
+  const [siteHeroPicked, setSiteHeroPicked] = useState([]);
+  const [siteHeroPickerOpen, setSiteHeroPickerOpen] = useState(false);
+  const [siteBrandStoryPicked, setSiteBrandStoryPicked] = useState("");
+  const [siteBrandPickerOpen, setSiteBrandPickerOpen] = useState(false);
   const [savingSiteContent, setSavingSiteContent] = useState(false);
   const [siteContentMessage, setSiteContentMessage] = useState("");
 
@@ -910,23 +916,6 @@ function Admin() {
 
   // Every photo of every product in a category (main + color photos),
   // so the owner can just tap the lifestyle one.
-  function photosForCategory(categoryKey) {
-    const list = [];
-    for (const product of products || []) {
-      const productCategory = canonicalizeCategory(product?.category, product?.name);
-      if (categoryKey !== "All" && productCategory !== categoryKey) continue;
-      const images = Array.isArray(product?.images) ? product.images : [];
-      list.push(...images);
-      const colorImages = product?.colorImages || {};
-      for (const key of Object.keys(colorImages)) {
-        const value = colorImages[key];
-        if (Array.isArray(value)) list.push(...value);
-        else if (value) list.push(value);
-      }
-    }
-    return Array.from(new Set(list.filter((url) => typeof url === "string" && /^https?:\/\//i.test(url))));
-  }
-
   async function saveCategoryImages() {
     setSavingCategoryImages(true);
     setCategoryImagesMessage("");
@@ -989,7 +978,7 @@ function Admin() {
       file,
       previewUrl: URL.createObjectURL(file),
     }));
-    setSiteHeroFiles((current) => [...current, ...newEntries].slice(0, MAX_HERO_IMAGES));
+    setSiteHeroFiles((current) => [...current, ...newEntries].slice(0, Math.max(0, MAX_HERO_IMAGES - siteHeroPicked.length)));
     // Let the same file input be used again (e.g. after removing a photo).
     e.target.value = "";
   }
@@ -998,14 +987,43 @@ function Admin() {
     setSiteHeroFiles((current) => current.filter((_, i) => i !== index));
   }
 
+  function toggleSiteHeroPicked(url) {
+    setSiteHeroPicked((current) => {
+      if (current.includes(url)) return current.filter((item) => item !== url);
+      if (current.length + siteHeroFiles.length >= MAX_HERO_IMAGES) {
+        alert(`Maximum ${MAX_HERO_IMAGES} photos. Pehle koi photo hatao.`);
+        return current;
+      }
+      return [...current, url];
+    });
+    setSiteContentMessage("");
+  }
+
+  function openSiteHeroPicker() {
+    // First time: start from the photos that are live right now, so the
+    // owner can add / remove instead of rebuilding the whole set.
+    if (!siteHeroPickerOpen && siteHeroPicked.length === 0 && siteHeroFiles.length === 0) {
+      setSiteHeroPicked(siteSettings.heroImageUrls.filter((url) => /^https?:\/\//i.test(url)).slice(0, MAX_HERO_IMAGES));
+    }
+    setSiteHeroPickerOpen((open) => !open);
+  }
+
+  function pickSiteBrandStory(url) {
+    setSiteBrandStoryPicked(url);
+    setSiteBrandStoryFile(null);
+    setSiteBrandStoryPreview(getImageUrl(url));
+    setSiteContentMessage("");
+  }
+
   function handleSiteBrandStoryChange(e) {
     const file = e.target.files?.[0] || null;
+    setSiteBrandStoryPicked("");
     setSiteBrandStoryFile(file);
     setSiteBrandStoryPreview(file ? URL.createObjectURL(file) : "");
   }
 
   async function saveSiteContent() {
-    if (siteHeroFiles.length === 0 && !siteBrandStoryFile) {
+    if (siteHeroFiles.length === 0 && siteHeroPicked.length === 0 && !siteBrandStoryFile && !siteBrandStoryPicked) {
       setSiteContentMessage("Choose at least one image first.");
       return;
     }
@@ -1019,6 +1037,12 @@ function Admin() {
       smallHeroFiles.forEach((file) => formData.append("heroImage", file));
       if (siteBrandStoryFile) {
         formData.append("brandStoryImage", await compressImageFile(siteBrandStoryFile));
+      }
+      if (siteHeroPicked.length > 0) {
+        formData.append("heroImageUrls", JSON.stringify(siteHeroPicked));
+      }
+      if (siteBrandStoryPicked && !siteBrandStoryFile) {
+        formData.append("brandStoryImageUrl", siteBrandStoryPicked);
       }
 
       const response = await adminFetch(`${API}/api/admin/site-settings`, {
@@ -1036,7 +1060,11 @@ function Admin() {
         brandStoryImageUrl: data.settings.brandStoryImageUrl || "",
       });
       setSiteHeroFiles([]);
+      setSiteHeroPicked([]);
+      setSiteHeroPickerOpen(false);
       setSiteBrandStoryFile(null);
+      setSiteBrandStoryPicked("");
+      setSiteBrandPickerOpen(false);
       setSiteBrandStoryPreview("");
       setSiteContentMessage("Saved. Your live site now shows these images.");
     } catch (error) {
@@ -5515,7 +5543,19 @@ function Admin() {
                   </p>
 
                   <div className="site-content-hero-grid">
-                    {siteHeroFiles.length > 0 ? (
+                    {siteHeroPicked.map((url, index) => (
+                      <div className="site-content-hero-thumb" key={`picked-${url}`}>
+                        <img src={getImageUrl(url)} alt={`Hero photo ${index + 1}`} />
+                        <button
+                          type="button"
+                          onClick={() => toggleSiteHeroPicked(url)}
+                          aria-label="Remove this photo"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    {siteHeroFiles.length > 0 || siteHeroPicked.length > 0 ? (
                       siteHeroFiles.map((entry, index) => (
                         <div className="site-content-hero-thumb" key={entry.previewUrl}>
                           <img src={entry.previewUrl} alt={`Hero photo ${index + 1}`} />
@@ -5539,16 +5579,34 @@ function Admin() {
                     )}
                   </div>
 
+                  <button
+                    type="button"
+                    className="image-reorder-button"
+                    style={{ marginBottom: 10 }}
+                    onClick={openSiteHeroPicker}
+                  >
+                    {siteHeroPickerOpen ? "Close" : "Choose from product photos"}
+                  </button>
+                  {siteHeroPickerOpen && (
+                    <PhotoPicker
+                      products={products}
+                      selectedUrls={siteHeroPicked}
+                      onPick={toggleSiteHeroPicked}
+                      getImageUrl={getImageUrl}
+                    />
+                  )}
+
+                  <p className="customer-info" style={{ margin: "12px 0 6px" }}>Ya phone se upload karo:</p>
                   <input
                     type="file"
                     accept="image/*"
                     multiple
                     onChange={handleSiteHeroChange}
-                    disabled={siteHeroFiles.length >= MAX_HERO_IMAGES}
+                    disabled={siteHeroFiles.length + siteHeroPicked.length >= MAX_HERO_IMAGES}
                   />
                   <p className="customer-info" style={{ marginTop: 6 }}>
-                    {siteHeroFiles.length > 0
-                      ? `${siteHeroFiles.length}/${MAX_HERO_IMAGES} new photo(s) chosen - not saved yet.`
+                    {siteHeroFiles.length + siteHeroPicked.length > 0
+                      ? `${siteHeroFiles.length + siteHeroPicked.length}/${MAX_HERO_IMAGES} photo(s) chosen - not saved yet. Tap a photo again to remove it.`
                       : `Choose up to ${MAX_HERO_IMAGES} photos (can select several at once).`}
                   </p>
                 </div>
@@ -5572,6 +5630,23 @@ function Admin() {
                     )}
                   </div>
 
+                  <button
+                    type="button"
+                    className="image-reorder-button"
+                    style={{ marginBottom: 10 }}
+                    onClick={() => setSiteBrandPickerOpen((open) => !open)}
+                  >
+                    {siteBrandPickerOpen ? "Close" : "Choose from product photos"}
+                  </button>
+                  {siteBrandPickerOpen && (
+                    <PhotoPicker
+                      products={products}
+                      selectedUrls={[siteBrandStoryPicked]}
+                      onPick={pickSiteBrandStory}
+                      getImageUrl={getImageUrl}
+                    />
+                  )}
+                  <p className="customer-info" style={{ margin: "12px 0 6px" }}>Ya phone se upload karo:</p>
                   <input
                     type="file"
                     accept="image/*"
@@ -5591,7 +5666,7 @@ function Admin() {
               type="button"
               className="save-product-button"
               style={{ marginTop: 20 }}
-              disabled={savingSiteContent || (siteHeroFiles.length === 0 && !siteBrandStoryFile)}
+              disabled={savingSiteContent || (siteHeroFiles.length === 0 && siteHeroPicked.length === 0 && !siteBrandStoryFile && !siteBrandStoryPicked)}
               onClick={saveSiteContent}
             >
               {savingSiteContent ? "SAVING..." : "SAVE CHANGES"}
@@ -5618,7 +5693,6 @@ function Admin() {
                 const label = key === "All" ? "Shop All" : key;
                 const pending = categoryImageFiles[key];
                 const current = pending ? pending.previewUrl : categoryImageDraft[key] ? getImageUrl(categoryImageDraft[key]) : "";
-                const choices = openCategoryPicker === key ? photosForCategory(key) : [];
                 return (
                   <div className="category-photo-row" key={key}>
                     <div className="category-photo-current">
@@ -5682,24 +5756,13 @@ function Admin() {
                         </button>
                       </div>
                       {openCategoryPicker === key && (
-                        <div className="category-photo-choices">
-                          {choices.length === 0 ? (
-                            <span className="customer-info">Is category mein abhi koi product photo nahi hai.</span>
-                          ) : (
-                            choices.map((url) => (
-                              <button
-                                type="button"
-                                key={url}
-                                className={`category-photo-choice${
-                                  !pending && categoryImageDraft[key] === url ? " selected" : ""
-                                }`}
-                                onClick={() => setCategoryPhotoUrl(key, url)}
-                              >
-                                <img src={getImageUrl(url)} alt="" loading="lazy" />
-                              </button>
-                            ))
-                          )}
-                        </div>
+                        <PhotoPicker
+                          products={products}
+                          category={key}
+                          selectedUrls={pending ? [] : [categoryImageDraft[key]]}
+                          onPick={(url) => setCategoryPhotoUrl(key, url)}
+                          getImageUrl={getImageUrl}
+                        />
                       )}
                     </div>
                   </div>

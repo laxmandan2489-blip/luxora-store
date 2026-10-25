@@ -229,6 +229,14 @@ function drawPriceInner(ctx, { price, mrp, x, y, size, color, mutedColor, align 
    photo blends in instead of sitting in a box.
 --------------------------------------------------------------------- */
 const CLEAN_LINE = "FREE DELIVERY  ·  COD AVAILABLE";
+// Background choices for the clean "text below / above" designs.
+const CLEAN_BACKGROUNDS = {
+  auto: { label: "Photo colour", color: "" },
+  white: { label: "White", color: "rgb(255,255,255)" },
+  cream: { label: "Cream", color: "rgb(246,243,238)" },
+  beige: { label: "Beige", color: "rgb(233,223,208)" },
+  black: { label: "Black", color: "rgb(28,21,13)" },
+};
 
 function parseRgb(color) {
   const match = String(color).match(/(\d+)\D+(\d+)\D+(\d+)/);
@@ -276,6 +284,20 @@ function drawPhotoSoft(ctx, img, x, y, w, h, fit, bg) {
     ctx.fillRect(rx, ry, rw, rh);
   }
   ctx.restore();
+}
+
+// Auto background: photo melts into the design. Chosen colour
+// (white / cream / beige / black): the photo sits as a neat, sharp
+// framed picture on that colour - looks intentional, never blurry.
+function placeCleanPhoto(ctx, img, x, y, w, h, fit, bg, framed) {
+  if (!framed) {
+    drawPhotoSoft(ctx, img, x - w * 0.04, y, w * 1.08, h, fit, bg);
+    return;
+  }
+  const scale = Math.min(w / img.width, h / img.height);
+  const dw = fit === "fill" ? w : img.width * scale;
+  const dh = fit === "fill" ? h : img.height * scale;
+  drawPhoto(ctx, img, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, fit);
 }
 
 function cleanTextBlock(ctx, { W, d, x, y, align, ink, muted, nameSize, maxWidth }) {
@@ -343,7 +365,8 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
   }
 
   // text below / text above: background = photo's own colour
-  const bg = photoBackground(img);
+  const preset = CLEAN_BACKGROUNDS[d.bg] && CLEAN_BACKGROUNDS[d.bg].color;
+  const bg = preset || photoBackground(img);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
   const light = isLight(bg);
@@ -365,7 +388,7 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
     cleanTextBlock(ctx, { W, d, x: W / 2, y: textTop, align: "center", ink, muted, nameSize, maxWidth: W - m * 2 });
     const photoTop = textTop + textHeight;
     const photoBottom = bottom - W * 0.05;
-    drawPhotoSoft(ctx, img, m * 0.5, photoTop, W - m, photoBottom - photoTop, fit, bg);
+    placeCleanPhoto(ctx, img, m, photoTop, W - m * 2, photoBottom - photoTop, fit, bg, Boolean(preset));
     drawTinyLine(ctx, W, W / 2, bottom, soft);
     return;
   }
@@ -373,8 +396,8 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
   // "below"
   const photoTop = top + W * 0.06;
   const textTop = bottom - W * 0.06 - textHeight + nameSize * 0.6;
-  const photoBottom = textTop - nameSize * 1.1;
-  drawPhotoSoft(ctx, img, m * 0.5, photoTop, W - m, photoBottom - photoTop, fit, bg);
+  const photoBottom = textTop - nameSize * 1.5;
+  placeCleanPhoto(ctx, img, m, photoTop, W - m * 2, photoBottom - photoTop, fit, bg, Boolean(preset));
   cleanTextBlock(ctx, { W, d, x: W / 2, y: textTop, align: "center", ink, muted, nameSize, maxWidth: W - m * 2 });
   drawTinyLine(ctx, W, W / 2, bottom, soft);
 }
@@ -613,6 +636,7 @@ export default function AdMaker({ API, adminFetch, products }) {
   const [slogan, setSlogan] = useState(SLOGANS[0]);
   const [footer, setFooter] = useState("Free delivery across India  •  shrimoh.vercel.app");
   const [showBadge, setShowBadge] = useState(true);
+  const [cleanBg, setCleanBg] = useState("auto");
   const [fontsReady, setFontsReady] = useState(false);
   // (2026-10-22) Every photo load gets a number; only the LATEST one is
   // allowed to show. Fixes "picked another bag but the old photo stays"
@@ -734,9 +758,9 @@ export default function AdMaker({ API, adminFetch, products }) {
       img,
       template,
       fit,
-      d: { name, price: Number(price) || 0, mrp: Number(mrp) || 0, slogan, footer, showBadge },
+      d: { name, price: Number(price) || 0, mrp: Number(mrp) || 0, slogan, footer, showBadge, bg: cleanBg },
     });
-  }, [img, template, size, fit, name, price, mrp, slogan, footer, showBadge, fontsReady]);
+  }, [img, template, size, fit, name, price, mrp, slogan, footer, showBadge, cleanBg, fontsReady]);
 
   async function saveImage() {
     const canvas = canvasRef.current;
@@ -844,6 +868,15 @@ export default function AdMaker({ API, adminFetch, products }) {
 
           <label className="form-label">Size</label>
           <div className="am-row">{Object.entries(SIZES).map(([value, item]) => choice(size, value, setSize, item.label))}</div>
+
+          {template === "below" || template === "above" ? (
+            <>
+              <label className="form-label">Background</label>
+              <div className="am-row">
+                {Object.entries(CLEAN_BACKGROUNDS).map(([value, item]) => choice(cleanBg, value, setCleanBg, item.label))}
+              </div>
+            </>
+          ) : null}
 
           <label className="form-label">Photo</label>
           <div className="am-row">
