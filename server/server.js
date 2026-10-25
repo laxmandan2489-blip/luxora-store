@@ -881,8 +881,32 @@ async function mapWithConcurrencyLimit(items, limit, fn) {
 const IMAGE_UPLOAD_CONCURRENCY = 2;
 
 async function deleteStorageImages(images) {
-  const paths = uniqueImages(images).map(getStoragePathFromUrl).filter(Boolean);
+  let paths = uniqueImages(images).map(getStoragePathFromUrl).filter(Boolean);
   if (!paths.length) return;
+  // (2026-10-25) Never delete a photo that the homepage still uses
+  // (hero banner / brand story / category tiles can now reuse product
+  // photos), even if its product is deleted or the photo is removed.
+  try {
+    const { data: siteRow } = await supabase.from("site_settings").select("*").eq("id", 1).maybeSingle();
+    if (siteRow) {
+      const used = [
+        ...(Array.isArray(siteRow.hero_image_urls) ? siteRow.hero_image_urls : []),
+        siteRow.hero_image_url,
+        siteRow.brand_story_image_url,
+        ...Object.values(siteRow.category_images && typeof siteRow.category_images === "object" ? siteRow.category_images : {})
+      ]
+        .filter((url) => typeof url === "string" && url)
+        .map(getStoragePathFromUrl)
+        .filter(Boolean);
+      if (used.length) {
+        const protectedPaths = new Set(used);
+        paths = paths.filter((path) => !protectedPaths.has(path));
+        if (!paths.length) return;
+      }
+    }
+  } catch (protectError) {
+    console.warn("SITE IMAGE PROTECT CHECK FAILED:", protectError?.message || protectError);
+  }
   const { error } = await supabase.storage.from(STORAGE_BUCKET).remove(paths);
   if (error) console.error("STORAGE DELETE ERROR:", error);
 }
@@ -1423,9 +1447,23 @@ app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (
 
     const updateData = { updated_at: new Date().toISOString() };
 
-    if (heroFiles.length > 0) {
-      const heroUrls = [];
-      for (const file of heroFiles) {
+    // (2026-10-25) Photos picked from already-uploaded product photos
+    // (full https links). They come first, newly uploaded files after.
+    let pickedHeroUrls = [];
+    try {
+      const parsed = JSON.parse(String(req.body?.heroImageUrls || "[]"));
+      if (Array.isArray(parsed)) {
+        pickedHeroUrls = [...new Set(parsed.map((url) => String(url || "").trim()).filter((url) => /^https:\/\/\S+$/i.test(url) && url.length < 2000))].slice(0, 5);
+      }
+    } catch {
+      pickedHeroUrls = [];
+    }
+    const pickedBrandStoryUrl = String(req.body?.brandStoryImageUrl || "").trim();
+    const validPickedBrandStory = /^https:\/\/\S+$/i.test(pickedBrandStoryUrl) && pickedBrandStoryUrl.length < 2000 ? pickedBrandStoryUrl : "";
+
+    if (heroFiles.length > 0 || pickedHeroUrls.length > 0) {
+      const heroUrls = [...pickedHeroUrls];
+      for (const file of heroFiles.slice(0, Math.max(0, 5 - pickedHeroUrls.length))) {
         const url = await uploadImage(file);
         uploadedUrls.push(url);
         heroUrls.push(url);
@@ -1437,9 +1475,11 @@ app.put("/api/admin/site-settings", requireAdmin, upload.any(), async function (
       const url = await uploadImage(brandStoryFile);
       uploadedUrls.push(url);
       updateData.brand_story_image_url = url;
+    } else if (validPickedBrandStory) {
+      updateData.brand_story_image_url = validPickedBrandStory;
     }
 
-    if (heroFiles.length === 0 && !brandStoryFile) {
+    if (heroFiles.length === 0 && pickedHeroUrls.length === 0 && !brandStoryFile && !validPickedBrandStory) {
       return res.status(400).json({
         success: false,
         message: "Please choose at least one image to upload."
