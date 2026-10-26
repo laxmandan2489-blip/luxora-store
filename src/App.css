@@ -617,6 +617,10 @@ a {
  */
 @media (min-width: 1024px) {
   .lux-hero {
+    /* (2026-10-26) width: 100% stops min-height + aspect-ratio from making
+       the banner wider than the screen on 1024-1344px laptops (page used
+       to scroll sideways and the hero text sat off-centre). */
+    width: 100%;
     aspect-ratio: 2.1 / 1;
     min-height: 640px;
     max-height: 780px;

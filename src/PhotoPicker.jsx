@@ -124,10 +124,17 @@ export default function PhotoPicker({ products, category, selectedUrls = [], onP
         .pp-top input { flex: 1 1 160px; min-width: 0; }
         .pp-chip { padding: 8px 12px; border-radius: 999px; border: 1px solid #ccc; background: #fff; font-size: 13px; cursor: pointer; color: #111; }
         .pp-chip.on { background: #1c150d; border-color: #1c150d; color: #fff; }
-        .pp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; max-height: 420px; overflow-y: auto; }
-        .pp-item { position: relative; padding: 0; border: 3px solid transparent; border-radius: 10px; overflow: hidden; background: #f1ede5; cursor: pointer; aspect-ratio: 1 / 1; }
+        /* (2026-10-26) iPhone fix: Safari mis-sized the square tiles (aspect-ratio
+           inside a scrolling grid), so photos piled on top of each other. Now
+           each tile is a fixed square box (padding trick) and only the outer
+           box scrolls - works the same on every phone. */
+        .pp-scroll { max-height: 420px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .pp-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start; }
+        @media (min-width: 600px) { .pp-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); } }
+        .pp-item { -webkit-appearance: none; appearance: none; display: block; width: 100%; min-width: 0; margin: 0; padding: 0; border: 3px solid transparent; border-radius: 10px; overflow: hidden; background: #f1ede5; cursor: pointer; }
         .pp-item.on { border-color: #1c150d; }
-        .pp-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .pp-box { display: block; position: relative; width: 100%; height: 0; padding-top: 100%; }
+        .pp-box img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
         .pp-item .pp-tick { position: absolute; top: 4px; right: 4px; background: #1c150d; color: #fff; border-radius: 999px; width: 22px; height: 22px; font-size: 13px; line-height: 22px; text-align: center; }
         .pp-note { font-size: 12px; color: #888; margin-top: 8px; }
       `}</style>
@@ -145,19 +152,23 @@ export default function PhotoPicker({ products, category, selectedUrls = [], onP
           {checking ? "Photos check ho rahi hain..." : "Koi photo nahi mili. “All photos” dabakar dekho."}
         </div>
       ) : (
-        <div className="pp-grid">
-          {shown.map((photo) => (
-            <button
-              type="button"
-              key={photo.url}
-              className={selected.has(photo.url) ? "pp-item on" : "pp-item"}
-              title={photo.name}
-              onClick={() => onPick(photo.url)}
-            >
-              <img src={getImageUrl(photo.url)} alt={photo.name} loading="lazy" />
-              {selected.has(photo.url) ? <span className="pp-tick">✓</span> : null}
-            </button>
-          ))}
+        <div className="pp-scroll">
+          <div className="pp-grid">
+            {shown.map((photo) => (
+              <button
+                type="button"
+                key={photo.url}
+                className={selected.has(photo.url) ? "pp-item on" : "pp-item"}
+                title={photo.name}
+                onClick={() => onPick(photo.url)}
+              >
+                <span className="pp-box">
+                  <img src={getImageUrl(photo.url)} alt={photo.name} loading="lazy" />
+                  {selected.has(photo.url) ? <span className="pp-tick">✓</span> : null}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
       <div className="pp-note">

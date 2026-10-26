@@ -808,12 +808,17 @@ export default function AdMaker({ API, adminFetch, products }) {
     <div className="panel">
       <style>{`
         .am-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
-        @media (max-width: 860px) { .am-layout { grid-template-columns: 1fr; } }
-        .am-preview { position: sticky; top: 12px; }
+        .am-layout > * { min-width: 0; }
+        /* (2026-10-26) Phone fix: one column that never gets wider than the
+           screen (the canvas is 1080px inside, so plain "1fr" pushed the page
+           sideways), and the preview is NOT sticky on phones - when it was,
+           the tall preview stayed on top and hid the bags, designs and form. */
+        @media (max-width: 860px) { .am-layout { grid-template-columns: minmax(0, 1fr); } }
+        @media (min-width: 861px) { .am-preview { position: sticky; top: 12px; } }
         .am-canvas { width: 100%; height: auto; display: block; border-radius: 10px; border: 1px solid #ddd; background: #f4f4f4; }
         .am-empty { padding: 60px 20px; text-align: center; color: #777; border: 1px dashed #ccc; border-radius: 10px; }
         .am-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }
-        .am-chip { padding: 9px 14px; border-radius: 999px; border: 1px solid #ccc; background: #fff; font: inherit; font-size: 13px; cursor: pointer; }
+        .am-chip { padding: 9px 14px; border-radius: 999px; border: 1px solid #ccc; background: #fff; font: inherit; font-size: 13px; cursor: pointer; color: #111; }
         .am-chip.on { background: #1c150d; color: #fff; border-color: #1c150d; }
         .am-bags { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; margin: 8px 0 16px; }
         .am-bag { flex: 0 0 84px; border: 2px solid transparent; border-radius: 9px; padding: 0; background: none; cursor: pointer; }
@@ -865,10 +870,12 @@ export default function AdMaker({ API, adminFetch, products }) {
               </button>
             ))}
           </div>
-          <label className="secondary-button" style={{ display: "inline-block", cursor: "pointer", marginBottom: 16 }}>
-            📷 Use my own photo
-            <input type="file" accept="image/*" onChange={uploadOwnPhoto} style={{ display: "none" }} />
-          </label>
+          <div style={{ marginBottom: 16 }}>
+            <label className="secondary-button" style={{ display: "inline-block", cursor: "pointer" }}>
+              📷 Use my own photo
+              <input type="file" accept="image/*" onChange={uploadOwnPhoto} style={{ display: "none" }} />
+            </label>
+          </div>
 
           <label className="form-label">Design</label>
           <div className="am-row">{Object.entries(TEMPLATES).map(([value, label]) => choice(template, value, setTemplate, label))}</div>

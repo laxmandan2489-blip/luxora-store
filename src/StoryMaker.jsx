@@ -159,7 +159,11 @@ export default function StoryMaker({ API, adminFetch, products }) {
     const source = String(product.image || "");
     const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
     let blob;
-    try {
+    // (2026-10-26) Photos saved inside the product itself (data: links)
+    // are read directly - same as Ad Maker already does.
+    if (source.startsWith("data:")) {
+      blob = await (await fetch(source)).blob();
+    } else try {
       const direct = await fetch(absolute, { mode: "cors" });
       if (!direct.ok) throw new Error("direct failed");
       blob = await direct.blob();
@@ -245,7 +249,9 @@ export default function StoryMaker({ API, adminFetch, products }) {
     <div className="panel">
       <style>{`
         .sm-layout { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 24px; align-items: start; }
-        @media (max-width: 860px) { .sm-layout { grid-template-columns: 1fr; } }
+        .sm-layout > * { min-width: 0; }
+        /* (2026-10-26) Phone fix: never wider than the screen. */
+        @media (max-width: 860px) { .sm-layout { grid-template-columns: minmax(0, 1fr); } }
         .sm-canvas { width: 100%; max-width: 360px; height: auto; display: block; border-radius: 14px; border: 1px solid #ddd; background: #f4f4f4; margin: 0 auto; }
         .sm-empty { padding: 80px 20px; text-align: center; color: #777; border: 1px dashed #ccc; border-radius: 14px; }
         .sm-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 16px; }

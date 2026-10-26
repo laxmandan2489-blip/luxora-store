@@ -4607,18 +4607,30 @@ function Admin() {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
           gap: 8px;
+          align-items: start;
         }
+        /* (2026-10-26) iPhone fix: square tiles without aspect-ratio
+           (Safari piled the photos on top of each other). */
         .photo-pick {
           position: relative;
-          padding: 0;
+          -webkit-appearance: none;
+          appearance: none;
+          display: block;
+          width: 100%;
+          min-width: 0;
+          margin: 0;
+          height: 0;
+          padding: 0 0 100% 0;
           border: 3px solid transparent;
           border-radius: 10px;
           overflow: hidden;
           background: #f3f3f3;
           cursor: pointer;
-          aspect-ratio: 1 / 1;
         }
         .photo-pick img {
+          position: absolute;
+          top: 0;
+          left: 0;
           width: 100%;
           height: 100%;
           object-fit: cover;
