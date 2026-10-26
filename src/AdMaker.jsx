@@ -621,9 +621,39 @@ function drawAd(ctx, { W, H, img, template, fit, d }) {
   ctx.fillText(d.footer, left, cardY + W * 0.198);
 }
 
+// (2026-10-26) Every colour variant of a bag, each with its own photos and
+// name (from Products > colours / colour names / colour photos), so a
+// variant like "Ira Noir" can get its own ad. Bags without colours get
+// one group with all their photos.
+export function absoluteUrl(API, value) {
+  const source = String(value || "").trim();
+  if (!source) return "";
+  if (/^(https?:|data:)/i.test(source)) return source;
+  return `${API}${source.startsWith("/") ? "" : "/"}${source}`;
+}
+
+export function productVariants(API, product) {
+  if (!product) return [];
+  const toList = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+  const colorImages = product.colorImages && typeof product.colorImages === "object" ? product.colorImages : {};
+  const colorNames = product.colorNames && typeof product.colorNames === "object" ? product.colorNames : {};
+  const colors = Array.from(new Set([...(Array.isArray(product.colors) ? product.colors : []), ...Object.keys(colorImages)])).filter(Boolean);
+  const general = [product.image, ...toList(product.images)].map((url) => absoluteUrl(API, url)).filter(Boolean);
+  const variants = [];
+  for (const color of colors) {
+    const urls = Array.from(new Set(toList(colorImages[color]).map((url) => absoluteUrl(API, url)).filter(Boolean)));
+    const custom = String(colorNames[color] || "").trim();
+    variants.push({ key: color, label: custom || color, name: custom || product.name || "", urls: urls.length ? urls : Array.from(new Set(general)) });
+  }
+  if (!variants.length) variants.push({ key: "__main", label: "Main", name: product.name || "", urls: Array.from(new Set(general)) });
+  return variants;
+}
+
 export default function AdMaker({ API, adminFetch, products }) {
   const canvasRef = useRef(null);
   const [productId, setProductId] = useState("");
+  const [variantKey, setVariantKey] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [search, setSearch] = useState("");
   const [img, setImg] = useState(null);
   const [loadingPhoto, setLoadingPhoto] = useState(false);
@@ -673,14 +703,30 @@ export default function AdMaker({ API, adminFetch, products }) {
     return image;
   }
 
-  async function chooseProduct(product) {
-    const seq = ++loadSeq.current;
+  const currentProduct = (Array.isArray(products) ? products : []).find((item) => item.id === productId) || null;
+  const variants = useMemo(() => productVariants(API, currentProduct), [API, currentProduct]);
+  const currentVariant = variants.find((item) => item.key === variantKey) || variants[0] || null;
+
+  function chooseProduct(product) {
     setProductId(product.id);
-    setName(product.name || "");
     setPrice(String(product.price || ""));
     setMrp(product.oldPrice ? String(product.oldPrice) : "");
+    const first = productVariants(API, product)[0];
+    chooseVariant(product, first);
+  }
+
+  function chooseVariant(product, variant) {
+    setVariantKey(variant ? variant.key : "");
+    setName((variant && variant.name) || product.name || "");
+    const url = (variant && variant.urls[0]) || absoluteUrl(API, product.image);
+    loadPhoto(product, url);
+  }
+
+  async function loadPhoto(product, sourceUrl) {
+    const seq = ++loadSeq.current;
+    setPhotoUrl(sourceUrl);
     setNotice("");
-    const cacheKey = String(product.id) + "|" + String(product.image || "");
+    const cacheKey = String(product.id) + "|" + String(sourceUrl || "");
     const cached = photoCache.current.get(cacheKey);
     if (cached) {
       setLoadingPhoto(false);
@@ -690,12 +736,12 @@ export default function AdMaker({ API, adminFetch, products }) {
     setImg(null); // clear the old bag right away
     setLoadingPhoto(true);
     try {
-      const source = String(product.image || "");
+      const source = String(sourceUrl || "");
       let blob;
       if (source.startsWith("data:")) {
         blob = await (await fetch(source)).blob();
       } else {
-        const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
+        const absolute = absoluteUrl(API, source);
         try {
           // FAST: straight from the photo's own storage link (CDN).
           const direct = await fetch(absolute, { mode: "cors" });
@@ -730,6 +776,7 @@ export default function AdMaker({ API, adminFetch, products }) {
     try {
       const image = await loadImageFromBlob(file);
       if (seq !== loadSeq.current) return;
+      setPhotoUrl("");
       setLoadingPhoto(false);
       setImg(image);
       setNotice("✅ Your photo is in. Type the name and price below.");
@@ -847,7 +894,7 @@ export default function AdMaker({ API, adminFetch, products }) {
             </button>
           </div>
           <CaptionMaker
-            product={(Array.isArray(products) ? products : []).find((item) => item.id === productId) || null}
+            product={currentProduct}
             name={name}
             price={price}
             mrp={mrp}
@@ -870,6 +917,42 @@ export default function AdMaker({ API, adminFetch, products }) {
               </button>
             ))}
           </div>
+          {currentProduct && variants.length > 1 ? (
+            <>
+              <label className="form-label">Colour / variant ({variants.length})</label>
+              <div className="am-row">
+                {variants.map((variant) => (
+                  <button
+                    type="button"
+                    key={variant.key}
+                    className={currentVariant && currentVariant.key === variant.key ? "am-chip on" : "am-chip"}
+                    onClick={() => chooseVariant(currentProduct, variant)}
+                  >
+                    {variant.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+
+          {currentProduct && currentVariant && currentVariant.urls.length > 1 ? (
+            <>
+              <label className="form-label">Which photo ({currentVariant.urls.length})</label>
+              <div className="am-bags">
+                {currentVariant.urls.map((url) => (
+                  <button
+                    type="button"
+                    key={url}
+                    className={url === photoUrl ? "am-bag on" : "am-bag"}
+                    onClick={() => loadPhoto(currentProduct, url)}
+                  >
+                    <img src={url} alt="" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+
           <div style={{ marginBottom: 16 }}>
             <label className="secondary-button" style={{ display: "inline-block", cursor: "pointer" }}>
               📷 Use my own photo

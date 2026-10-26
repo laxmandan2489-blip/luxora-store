@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadFonts, rupees, spacedText, fitFont, wrapLines, photoBackground, drawPrice,
-  isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS,
+  isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS, productVariants,
 } from "./AdMaker";
 
 /*
@@ -153,10 +153,10 @@ export default function StoryMaker({ API, adminFetch, products }) {
     setPicked((current) => current.slice(0, needed));
   }, [needed]);
 
-  async function loadPhoto(product) {
-    const key = `${product.id}|${product.image}`;
+  async function loadPhoto(product, sourceUrl) {
+    const source = String(sourceUrl || product.image || "");
+    const key = `${product.id}|${source}`;
     if (cache.current.has(key)) return cache.current.get(key);
-    const source = String(product.image || "");
     const absolute = /^https?:\/\//i.test(source) ? source : `${API}${source.startsWith("/") ? "" : "/"}${source}`;
     let blob;
     // (2026-10-26) Photos saved inside the product itself (data: links)
@@ -192,9 +192,42 @@ export default function StoryMaker({ API, adminFetch, products }) {
     }
     try {
       setLoadingId(product.id);
-      const img = await loadPhoto(product);
-      const entry = { id: product.id, name: product.name || "", price: Number(product.price) || 0, mrp: Number(product.oldPrice) || 0, img };
+      // (2026-10-26) Starts with the bag's first colour variant; the
+      // "Colour" row below can switch it.
+      const variant = productVariants(API, product)[0];
+      const photoUrl = (variant && variant.urls[0]) || product.image;
+      const img = await loadPhoto(product, photoUrl);
+      const entry = {
+        id: product.id,
+        name: (variant && variant.name) || product.name || "",
+        price: Number(product.price) || 0,
+        mrp: Number(product.oldPrice) || 0,
+        img,
+        variantKey: variant ? variant.key : "",
+        photoUrl,
+      };
       setPicked((current) => (needed === 1 ? [entry] : [...current, entry].slice(-needed)));
+    } catch (error) {
+      setNotice(`❌ ${error.message || "Photo could not be loaded."}`);
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  // (2026-10-26) Switch a picked bag to another colour / photo.
+  async function changePhoto(bagId, variant, url) {
+    const product = (Array.isArray(products) ? products : []).find((item) => item.id === bagId);
+    if (!product || !variant) return;
+    const photoUrl = url || variant.urls[0] || product.image;
+    setNotice("");
+    try {
+      setLoadingId(bagId);
+      const img = await loadPhoto(product, photoUrl);
+      setPicked((current) =>
+        current.map((bag) =>
+          bag.id === bagId ? { ...bag, img, photoUrl, variantKey: variant.key, name: variant.name || product.name || "" } : bag
+        )
+      );
     } catch (error) {
       setNotice(`❌ ${error.message || "Photo could not be loaded."}`);
     } finally {
@@ -315,6 +348,52 @@ export default function StoryMaker({ API, adminFetch, products }) {
               );
             })}
           </div>
+
+          {picked.map((bag, bagIndex) => {
+            const product = (Array.isArray(products) ? products : []).find((item) => item.id === bag.id);
+            const variants = productVariants(API, product);
+            const variant = variants.find((item) => item.key === bag.variantKey) || variants[0];
+            if (!product || (variants.length < 2 && (!variant || variant.urls.length < 2))) return null;
+            const prefix = needed === 2 ? `Bag ${bagIndex + 1} - ` : "";
+            return (
+              <div key={bag.id}>
+                {variants.length > 1 ? (
+                  <>
+                    <label className="form-label">{prefix}Colour / variant ({variants.length})</label>
+                    <div className="sm-row">
+                      {variants.map((item) => (
+                        <button
+                          type="button"
+                          key={item.key}
+                          className={variant && variant.key === item.key ? "sm-chip on" : "sm-chip"}
+                          onClick={() => changePhoto(bag.id, item)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                {variant && variant.urls.length > 1 ? (
+                  <>
+                    <label className="form-label">{prefix}Which photo ({variant.urls.length})</label>
+                    <div className="sm-bags">
+                      {variant.urls.map((url) => (
+                        <button
+                          type="button"
+                          key={url}
+                          className={url === bag.photoUrl ? "sm-bag on" : "sm-bag"}
+                          onClick={() => changePhoto(bag.id, variant, url)}
+                        >
+                          <img src={url} alt="" loading="lazy" />
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
