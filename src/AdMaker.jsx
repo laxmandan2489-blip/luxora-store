@@ -22,6 +22,7 @@ const SIZES = {
 const TEMPLATES = {
   below: "Clean · text below",
   above: "Clean · text above",
+  only: "No text · only bag",
   editorial: "On photo",
   classic: "Ivory",
   noir: "Noir",
@@ -370,6 +371,14 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
   const bg = preset || photoBackground(img);
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
+
+  // (2026-10-26) "No text · only bag": same background, just the bag - for
+  // slides 2, 3, 4 of a carousel (price stays on slide 1 only).
+  if (template === "only") {
+    const pad = isStory ? H * 0.1 : m;
+    placeCleanPhoto(ctx, img, m, pad, W - m * 2, H - pad * 2, fit, bg, Boolean(preset));
+    return;
+  }
   const light = isLight(bg);
   const ink = light ? INK : "#ffffff";
   const muted = light ? "rgba(28,21,13,0.45)" : "rgba(255,255,255,0.6)";
@@ -404,7 +413,7 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
 }
 
 function drawAd(ctx, { W, H, img, template, fit, d }) {
-  if (template === "below" || template === "above" || template === "editorial") {
+  if (template === "below" || template === "above" || template === "editorial" || template === "only") {
     drawClean(ctx, { W, H, img, template, fit }, d);
     return;
   }
@@ -838,7 +847,7 @@ export default function AdMaker({ API, adminFetch, products }) {
     setNotice("✅ Image downloaded.");
   }
 
-  const isCleanTemplate = template === "below" || template === "above" || template === "editorial";
+  const isCleanTemplate = template === "below" || template === "above" || template === "editorial" || template === "only";
 
   const choice = (current, value, setter, label) => (
     <button
@@ -966,7 +975,7 @@ export default function AdMaker({ API, adminFetch, products }) {
           <label className="form-label">Size</label>
           <div className="am-row">{Object.entries(SIZES).map(([value, item]) => choice(size, value, setSize, item.label))}</div>
 
-          {template === "below" || template === "above" ? (
+          {template === "below" || template === "above" || template === "only" ? (
             <>
               <label className="form-label">Background</label>
               <div className="am-row">
