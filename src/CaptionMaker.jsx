@@ -88,6 +88,30 @@ function featureLines(product) {
   return lines.slice(0, 3);
 }
 
+// (2026-10-26) All colours of the bag (Products > colours / colour photos),
+// so the caption says e.g. "🎨 3 colours: Black, Tan & Cream".
+function colourList(product) {
+  const images = product?.colorImages && typeof product.colorImages === "object" ? Object.keys(product.colorImages) : [];
+  const colours = [...(Array.isArray(product?.colors) ? product.colors : []), ...images]
+    .map((colour) => String(colour || "").trim())
+    .filter(Boolean);
+  const seen = new Set();
+  return colours.filter((colour) => {
+    const key = colour.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function colourLine(colours) {
+  if (colours.length < 2) return "";
+  const joined = colours.length === 2
+    ? `${colours[0]} & ${colours[1]}`
+    : `${colours.slice(0, -1).join(", ")} & ${colours[colours.length - 1]}`;
+  return `🎨 ${colours.length} colours: ${joined}`;
+}
+
 function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
   const hook = HOOKS[hookIndex % HOOKS.length];
   const priceNumber = Number(price) || 0;
@@ -98,6 +122,8 @@ function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
     : "";
   const features = featureLines(product);
   const productLink = product?.id ? `${SITE}/product/${product.id}` : SITE;
+  const colours = colourList(product);
+  const coloursText = colourLine(colours);
 
   if (platform === "whatsapp") {
     return [
@@ -105,10 +131,13 @@ function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
       "",
       `*${name}*`,
       priceLine,
-      "🚚 Free Delivery | 💵 COD Available",
+      coloursText,
+      "🚚 Free Delivery (prepaid) | 💵 COD Available",
       "",
       `Order here 👉 ${productLink}?utm_source=whatsapp`,
-    ].filter((line, index, all) => line !== "" || all[index - 1] !== "").join("\n");
+    ]
+      .filter((line, index) => line !== "" || index === 1 || index === 6)
+      .join("\n");
   }
 
   const lines = [`${name} 👜`, "", hook];
@@ -118,7 +147,8 @@ function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
   }
   lines.push("");
   if (priceLine) lines.push(priceLine);
-  lines.push("🚚 Free Delivery | 💵 COD Available", "🇮🇳 Shipping all over India", "");
+  if (coloursText) lines.push(`${coloursText}${platform === "instagram" ? " - swipe karo ➡️" : ""}`);
+  lines.push("🚚 Free Delivery (prepaid) | 💵 COD Available", "🇮🇳 Shipping all over India", "");
   if (platform === "facebook") {
     lines.push(`Order now 👉 ${productLink}?utm_source=facebook`);
   } else {
