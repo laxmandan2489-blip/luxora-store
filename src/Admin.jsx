@@ -5,6 +5,8 @@ import AdMaker from "./AdMaker";
 import StoryMaker from "./StoryMaker";
 import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
+import { removeGeminiMarkFromImage } from "./geminiMark";
+import GeminiCleanup from "./GeminiCleanup";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -217,11 +219,15 @@ async function compressImageFile(file) {
     if (file.type === "image/gif" || file.type === "image/svg+xml") return file;
 
     const bitmap = await createImageBitmap(file);
+    // (2026-10-27) Gemini ✦ remover - see geminiMark.js. Returns a clean
+    // full-size canvas only if the photo really has the ✦, else null.
+    const cleaned = removeGeminiMarkFromImage(bitmap, bitmap.width, bitmap.height);
+    const source = cleaned || bitmap;
     const scale = Math.min(1, UPLOAD_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
     const width = Math.round(bitmap.width * scale);
     const height = Math.round(bitmap.height * scale);
 
-    const keepPng = file.type === "image/png" && (await hasTransparency(bitmap));
+    const keepPng = file.type === "image/png" && (await hasTransparency(source));
     const outType = keepPng ? "image/png" : "image/jpeg";
 
     const canvas = document.createElement("canvas");
@@ -234,19 +240,23 @@ async function compressImageFile(file) {
       context.fillRect(0, 0, width, height);
     }
     context.imageSmoothingQuality = "high";
-    context.drawImage(bitmap, 0, 0, width, height);
+    context.drawImage(source, 0, 0, width, height);
     bitmap.close?.();
 
     const blob = await new Promise((resolve) =>
       canvas.toBlob(resolve, outType, keepPng ? undefined : UPLOAD_JPEG_QUALITY)
     );
-    if (!blob || blob.size >= file.size) return file;
+    if (!blob) return file;
+    // A ✦-cleaned photo is always used, even if it came out bigger.
+    if (blob.size >= file.size && !cleaned) return file;
 
     const baseName = (file.name || "photo").replace(/\.[^.]+$/, "");
-    return new File([blob], `${baseName}.${keepPng ? "png" : "jpg"}`, {
+    const outFile = new File([blob], `${baseName}.${keepPng ? "png" : "jpg"}`, {
       type: outType,
       lastModified: Date.now(),
     });
+    if (cleaned) outFile.geminiMarkRemoved = true;
+    return outFile;
   } catch (error) {
     console.warn("Photo compression skipped, uploading original:", error);
     return file;
@@ -261,7 +271,7 @@ async function compressDataUrl(dataUrl) {
   try {
     const blob = await (await fetch(dataUrl)).blob();
     const file = await compressImageFile(new File([blob], "photo", { type: blob.type }));
-    if (file.size >= blob.size) return dataUrl;
+    if (file.size >= blob.size && !file.geminiMarkRemoved) return dataUrl;
     return await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -5834,6 +5844,9 @@ function Admin() {
                 {photoZipLoading ? "Preparing photos..." : "⬇ Download all product photos (ZIP)"}
               </button>
             </div>
+
+            {/* (2026-10-27) Purani photos se Gemini ✦ hatana - GeminiCleanup.jsx */}
+            <GeminiCleanup API={API} adminFetch={adminFetch} products={products} onDone={loadProducts} />
 
             <div className="panel">
               <div className="panel-header">
