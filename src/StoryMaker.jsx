@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   loadFonts, rupees, spacedText, fitFont, wrapLines, photoBackground, drawPrice,
-  isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS, productVariants,
+  isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS, productVariants, absoluteUrl,
 } from "./AdMaker";
 
 /*
@@ -140,9 +140,9 @@ export default function StoryMaker({ API, adminFetch, products }) {
   const needed = STORY_TYPES[type].bags;
 
   const list = useMemo(() => {
-    const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && product.image);
+    const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && (product.image || (Array.isArray(product.images) && product.images.length)));
     const query = search.trim().toLowerCase();
-    return (query ? active.filter((product) => String(product.name || "").toLowerCase().includes(query)) : active).slice(0, 40);
+    return (query ? active.filter((product) => String(product.name || "").toLowerCase().includes(query)) : active).slice(0, 200);
   }, [products, search]);
 
   useEffect(() => {
@@ -342,7 +342,7 @@ export default function StoryMaker({ API, adminFetch, products }) {
                   onClick={() => chooseBag(product)}
                   title={product.name}
                 >
-                  <img src={product.image} alt={product.name} loading="lazy" />
+                  <img src={absoluteUrl(API, product.image || (Array.isArray(product.images) ? product.images[0] : ""))} alt={product.name} loading="lazy" />
                   {index >= 0 && needed === 2 ? <span className="sm-num">{index + 1}</span> : null}
                 </button>
               );

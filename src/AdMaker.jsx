@@ -635,7 +635,8 @@ function drawAd(ctx, { W, H, img, template, fit, d }) {
 // variant like "Ira Noir" can get its own ad. Bags without colours get
 // one group with all their photos.
 export function absoluteUrl(API, value) {
-  const source = String(value || "").trim();
+  const raw = value && typeof value === "object" ? value.url || value.src || "" : value;
+  const source = String(raw || "").trim();
   if (!source) return "";
   if (/^(https?:|data:)/i.test(source)) return source;
   return `${API}${source.startsWith("/") ? "" : "/"}${source}`;
@@ -649,10 +650,17 @@ export function productVariants(API, product) {
   const colors = Array.from(new Set([...(Array.isArray(product.colors) ? product.colors : []), ...Object.keys(colorImages)])).filter(Boolean);
   const general = [product.image, ...toList(product.images)].map((url) => absoluteUrl(API, url)).filter(Boolean);
   const variants = [];
+  // (2026-10-26) Photos saved on the bag but not under any colour (e.g. the
+  // AI lifestyle / model shots) are shown under EVERY colour, after that
+  // colour's own photos - before, they were hidden for bags with colours.
+  const colourUrls = new Set();
+  for (const color of colors) toList(colorImages[color]).forEach((url) => colourUrls.add(absoluteUrl(API, url)));
+  const shared = Array.from(new Set(general)).filter((url) => !colourUrls.has(url));
   for (const color of colors) {
-    const urls = Array.from(new Set(toList(colorImages[color]).map((url) => absoluteUrl(API, url)).filter(Boolean)));
+    const own = toList(colorImages[color]).map((url) => absoluteUrl(API, url)).filter(Boolean);
+    const urls = Array.from(new Set([...own, ...(own.length ? shared : general)]));
     const custom = String(colorNames[color] || "").trim();
-    variants.push({ key: color, label: custom || color, name: custom || product.name || "", urls: urls.length ? urls : Array.from(new Set(general)) });
+    variants.push({ key: color, label: custom || color, name: custom || product.name || "", urls });
   }
   if (!variants.length) variants.push({ key: "__main", label: "Main", name: product.name || "", urls: Array.from(new Set(general)) });
   return variants;
@@ -686,9 +694,9 @@ export default function AdMaker({ API, adminFetch, products }) {
   const photoCache = useRef(new Map());
 
   const list = useMemo(() => {
-    const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && product.image);
+    const active = (Array.isArray(products) ? products : []).filter((product) => product && product.active !== false && (product.image || (Array.isArray(product.images) && product.images.length)));
     const query = search.trim().toLowerCase();
-    return (query ? active.filter((product) => String(product.name || "").toLowerCase().includes(query)) : active).slice(0, 40);
+    return (query ? active.filter((product) => String(product.name || "").toLowerCase().includes(query)) : active).slice(0, 200);
   }, [products, search]);
 
   useEffect(() => {
@@ -922,7 +930,7 @@ export default function AdMaker({ API, adminFetch, products }) {
                 onClick={() => chooseProduct(product)}
                 title={product.name}
               >
-                <img src={product.image} alt={product.name} loading="lazy" />
+                <img src={absoluteUrl(API, product.image || (Array.isArray(product.images) ? product.images[0] : ""))} alt={product.name} loading="lazy" />
               </button>
             ))}
           </div>
