@@ -38,17 +38,28 @@ function productPhotos(product) {
   return [...new Set(list.filter(Boolean))];
 }
 
+// Without a time limit, one stuck request (slow network / busy free
+// server) could hold up the queue for a minute or more. After this many
+// seconds it is cancelled and tried again instead.
+function timeLimit(seconds) {
+  if (typeof AbortSignal !== "undefined" && AbortSignal.timeout) return AbortSignal.timeout(seconds * 1000);
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), seconds * 1000);
+  return controller.signal;
+}
+
 async function loadBitmap(API, adminFetch, image) {
   const url = fullUrl(API, image);
   let blob = null;
   try {
-    const response = await fetch(url, { mode: "cors" });
+    const response = await fetch(url, { mode: "cors", signal: timeLimit(15) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     blob = await response.blob();
   } catch {
     // Photo's site doesn't allow direct reading - go through our server.
     const response = await adminFetch(
-      `${API}/api/admin/photo-original?url=${encodeURIComponent(url)}`
+      `${API}/api/admin/photo-original?url=${encodeURIComponent(url)}`,
+      { signal: timeLimit(25) }
     );
     if (!response.ok) throw new Error("Photo load nahi hui");
     blob = await response.blob();
@@ -68,7 +79,7 @@ function cornerThumb(source, W, H) {
 
 function canvasToBlob(canvas) {
   return new Promise((resolve, reject) =>
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Photo ban nahi payi"))), "image/jpeg", 0.9)
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Photo ban nahi payi"))), "image/jpeg", 0.88)
   );
 }
 
@@ -98,6 +109,7 @@ async function withRetry(task, tries = 3) {
 
 function friendlyError(error) {
   const message = String(error?.message || error || "");
+  if (/abort|timed? ?out/i.test(message)) return "server ne der laga di (time out)";
   if (/load failed|failed to fetch|networkerror|network/i.test(message)) {
     return "internet ya server ne jawab nahi diya";
   }
@@ -215,6 +227,7 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ dataUrl }),
+              signal: timeLimit(45),
             });
             const json = await response.json().catch(() => ({}));
             if (!response.ok || !json?.url) throw new Error(json?.message || `Server error ${response.status}`);
@@ -254,6 +267,7 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
             const response = await adminFetch(`${API}/api/products/${productId}`, {
               method: "PUT",
               body: formData,
+              signal: timeLimit(45),
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || data?.success === false) {
