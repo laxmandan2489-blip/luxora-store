@@ -15,7 +15,12 @@ import { removeGeminiMarkFromImage } from "./geminiMark";
  * Uses geminiMark.js - photos without a ✦ are never touched.
  */
 
-const CHECK_AT_ONCE = 3;
+const CHECK_AT_ONCE = 4;
+const SAVE_AT_ONCE = 2; // free Render server - 2 at a time is safe
+// Clean copies kept in memory from the check step, so saving doesn't
+// download + clean every photo again. Above this many, the rest are
+// redone at save time (keeps the iPhone from running out of memory).
+const KEEP_CLEAN_COPIES = 120;
 
 function fullUrl(API, image) {
   const value = String(image || "").trim();
@@ -61,8 +66,42 @@ function cornerThumb(source, W, H) {
   return canvas.toDataURL("image/jpeg", 0.8);
 }
 
-function canvasToDataUrl(canvas) {
-  return canvas.toDataURL("image/jpeg", 0.9);
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("Photo ban nahi payi"))), "image/jpeg", 0.9)
+  );
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Photo padh nahi paye"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Phone internet / free Render server sometimes drops a request
+// ("Load failed" on iPhone). Try again a couple of times before giving up.
+async function withRetry(task, tries = 3) {
+  let lastError;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    try {
+      return await task();
+    } catch (error) {
+      lastError = error;
+      if (attempt < tries - 1) await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+function friendlyError(error) {
+  const message = String(error?.message || error || "");
+  if (/load failed|failed to fetch|networkerror|network/i.test(message)) {
+    return "internet ya server ne jawab nahi diya";
+  }
+  return message || "pata nahi kyun fail hua";
 }
 
 async function runWithLimit(items, limit, worker, stopRef) {
@@ -83,6 +122,7 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
   const [failed, setFailed] = useState(0);
   const [saveReport, setSaveReport] = useState(null);
   const stopRef = useRef(false);
+  const cleanCopies = useRef(new Map()); // key -> clean JPEG blob
 
   async function startCheck() {
     stopRef.current = false;
@@ -92,6 +132,8 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
         jobs.push({ product, image });
       }
     }
+    cleanCopies.current = new Map();
+    let kept = 0;
     setFound([]);
     setFailed(0);
     setSaveReport(null);
@@ -104,12 +146,17 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
       CHECK_AT_ONCE,
       async ({ product, image }) => {
         try {
-          const bitmap = await loadBitmap(API, adminFetch, image);
+          const bitmap = await withRetry(() => loadBitmap(API, adminFetch, image), 2);
           const W = bitmap.width, H = bitmap.height;
           const cleaned = removeGeminiMarkFromImage(bitmap, W, H);
           if (cleaned) {
+            const key = `${product.id}::${image}`;
+            if (kept < KEEP_CLEAN_COPIES) {
+              kept += 1;
+              cleanCopies.current.set(key, await canvasToBlob(cleaned));
+            }
             const item = {
-              key: `${product.id}::${image}`,
+              key,
               productId: product.id,
               productName: product.name || `Product ${product.id}`,
               image,
@@ -143,71 +190,96 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
 
     stopRef.current = false;
     setPhase("saving");
-    const byProduct = new Map();
-    for (const item of selected) {
-      if (!byProduct.has(item.productId)) byProduct.set(item.productId, []);
-      byProduct.get(item.productId).push(item);
-    }
-    const report = { photosSaved: 0, productsSaved: 0, errors: [] };
+    const report = { photosSaved: 0, productsSaved: 0, errors: [], failedKeys: new Set() };
     let done = 0;
     setProgress({ done: 0, total: selected.length });
 
-    for (const [productId, items] of byProduct) {
-      if (stopRef.current) break;
-      const product = (products || []).find((entry) => entry.id === productId);
-      if (!product) continue;
-      const swap = {};
-      for (const item of items) {
+    // 1) Save the clean photos, a few at a time.
+    const swapByProduct = new Map();
+    await runWithLimit(
+      selected,
+      SAVE_AT_ONCE,
+      async (item) => {
         try {
-          const bitmap = await loadBitmap(API, adminFetch, item.image);
-          const cleaned = removeGeminiMarkFromImage(bitmap, bitmap.width, bitmap.height);
-          bitmap.close?.();
-          if (cleaned) {
+          let blob = cleanCopies.current.get(item.key);
+          if (!blob) {
+            const bitmap = await withRetry(() => loadBitmap(API, adminFetch, item.image));
+            const cleaned = removeGeminiMarkFromImage(bitmap, bitmap.width, bitmap.height);
+            bitmap.close?.();
+            if (!cleaned) throw new Error("✦ dobara nahi mila, photo nahi badli");
+            blob = await canvasToBlob(cleaned);
+          }
+          const dataUrl = await blobToDataUrl(blob);
+          const data = await withRetry(async () => {
             const response = await adminFetch(`${API}/api/admin/products/save-generated-image`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ dataUrl: canvasToDataUrl(cleaned) }),
+              body: JSON.stringify({ dataUrl }),
             });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok || !data?.url) throw new Error(data?.message || "Save nahi hui");
-            swap[item.image] = data.url;
-          }
+            const json = await response.json().catch(() => ({}));
+            if (!response.ok || !json?.url) throw new Error(json?.message || `Server error ${response.status}`);
+            return json;
+          });
+          if (!swapByProduct.has(item.productId)) swapByProduct.set(item.productId, {});
+          swapByProduct.get(item.productId)[item.image] = data.url;
         } catch (error) {
-          report.errors.push(`${item.productName}: ${error.message}`);
+          report.errors.push(`${item.productName}: ${friendlyError(error)}`);
+          report.failedKeys.add(item.key);
         }
         done += 1;
         setProgress({ done, total: selected.length });
-      }
-      if (!Object.keys(swap).length) continue;
+      },
+      stopRef
+    );
 
-      try {
-        // Same order as before, only the cleaned links are swapped.
-        const images = (product.images || []).map((url) => swap[url] || url);
-        const colorImages = {};
-        for (const [color, urls] of Object.entries(product.colorImages || {})) {
-          colorImages[color] = (urls || []).map((url) => swap[url] || url);
+    // 2) Swap the links in each product (same order as before).
+    const productIds = [...swapByProduct.keys()];
+    await runWithLimit(
+      productIds,
+      2,
+      async (productId) => {
+        const product = (products || []).find((entry) => entry.id === productId);
+        const swap = swapByProduct.get(productId);
+        if (!product || !swap) return;
+        try {
+          const images = (product.images || []).map((url) => swap[url] || url);
+          const colorImages = {};
+          for (const [color, urls] of Object.entries(product.colorImages || {})) {
+            colorImages[color] = (urls || []).map((url) => swap[url] || url);
+          }
+          const formData = new FormData();
+          if (images.length) formData.append("keepImages", JSON.stringify(images));
+          formData.append("colorImages", JSON.stringify(colorImages));
+          await withRetry(async () => {
+            const response = await adminFetch(`${API}/api/products/${productId}`, {
+              method: "PUT",
+              body: formData,
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || data?.success === false) {
+              throw new Error(data?.message || `Server error ${response.status}`);
+            }
+          });
+          report.photosSaved += Object.keys(swap).length;
+          report.productsSaved += 1;
+        } catch (error) {
+          report.errors.push(`${product.name || productId}: ${friendlyError(error)}`);
+          for (const item of selected) {
+            if (item.productId === productId) report.failedKeys.add(item.key);
+          }
         }
-        const formData = new FormData();
-        if (images.length) formData.append("keepImages", JSON.stringify(images));
-        formData.append("colorImages", JSON.stringify(colorImages));
-        const response = await adminFetch(`${API}/api/products/${productId}`, {
-          method: "PUT",
-          body: formData,
-        });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || data?.success === false) {
-          throw new Error(data?.message || `Server error ${response.status}`);
-        }
-        report.photosSaved += Object.keys(swap).length;
-        report.productsSaved += 1;
-      } catch (error) {
-        report.errors.push(`${product.name || productId}: ${error.message}`);
-      }
+      },
+      { current: false } // always finish swapping photos already saved
+    );
+
+    for (const item of selected) {
+      if (!report.failedKeys.has(item.key)) cleanCopies.current.delete(item.key);
     }
-
     setSaveReport(report);
-    setFound([]);
-    setPhase("done");
+    // Photos that failed stay in the list - just press save again.
+    const failedItems = selected.filter((item) => report.failedKeys.has(item.key));
+    setFound(failedItems);
+    setPhase(failedItems.length ? "checked" : "done");
     onDone?.();
   }
 
@@ -243,7 +315,7 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
         </div>
       )}
 
-      {phase === "checked" && (
+      {phase === "checked" && !saveReport && (
         <p style={{ fontSize: 14, margin: "12px 0" }}>
           {progress.done} photos check hui. {found.length ? `${found.length} mein ✦ mila.` : "Kisi mein ✦ nahi mila. 👍"}
           {failed ? ` (${failed} photos load nahi hui, unhe chhod diya.)` : ""}
@@ -255,6 +327,11 @@ export default function GeminiCleanup({ API, adminFetch, products, onDone }) {
           <p style={{ margin: "0 0 6px" }}>
             ✅ {saveReport.photosSaved} photos saaf ho gayi ({saveReport.productsSaved} products).
           </p>
+          {saveReport.errors.length > 0 && (
+            <p style={{ margin: "0 0 6px" }}>
+              Ye photos abhi save nahi hui (neeche list mein hain). Thodi der baad save button phir dabao:
+            </p>
+          )}
           {saveReport.errors.length > 0 && (
             <ul style={{ margin: 0, paddingLeft: 18, color: "#b42318" }}>
               {saveReport.errors.map((message, index) => <li key={index}>{message}</li>)}

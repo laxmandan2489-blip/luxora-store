@@ -326,19 +326,187 @@ function tryRemove(data, W, hit) {
   const peak = gain * map.peak;
   if (peak < 0.18 || peak > 0.7) return { removed: false, score: hit.score, gain };
 
-  const n = map.size;
+  // Fine fit (2026-10-27 v3): photos already on the website were shrunk
+  // and re-saved, so the ✦ sits a fraction of a pixel off / slightly
+  // smaller. A rough fit leaves a faint "glass" outline. Here position,
+  // size and strength are fine-tuned until the ✦ edges disappear.
+  const H = Math.floor(data.length / 4 / W);
+  const fit = fineFit(data, W, H, hit, gain);
+  const finalPeak = fit.gain * fit.peak;
+  if (finalPeak < 0.18 || finalPeak > 0.7) return { removed: false, score: hit.score, gain: fit.gain };
+  applyFit(data, W, fit);
+  cleanEdges(data, W, fit);
+  return {
+    removed: true,
+    score: hit.score,
+    gain: fit.gain,
+    box: { x: fit.bx, y: fit.by, size: fit.n },
+  };
+}
+
+// alpha of the ✦ for every pixel of the n x n box. The map's top-left
+// sits at (ox, oy) inside the box and each map pixel is `scale` px.
+function sampleAlpha(raw, rawSize, scale, ox, oy, n, out) {
+  for (let y = 0; y < n; y++) {
+    const sy = (y + 0.5 - oy) / scale - 0.5;
+    for (let x = 0; x < n; x++) {
+      const sx = (x + 0.5 - ox) / scale - 0.5;
+      let v = 0;
+      if (sx > -1 && sy > -1 && sx < rawSize && sy < rawSize) {
+        const x0 = Math.floor(sx), y0 = Math.floor(sy);
+        const fx = sx - x0, fy = sy - y0;
+        const at = (xx, yy) =>
+          xx < 0 || yy < 0 || xx >= rawSize || yy >= rawSize ? 0 : raw[yy * rawSize + xx];
+        v = (at(x0, y0) * (1 - fx) + at(x0 + 1, y0) * fx) * (1 - fy) +
+            (at(x0, y0 + 1) * (1 - fx) + at(x0 + 1, y0 + 1) * fx) * fy;
+      }
+      out[y * n + x] = v;
+    }
+  }
+}
+
+function fineFit(data, W, H, hit, gain0) {
+  const { alpha: raw, size: rawSize } = getMaps()[hit.key];
+  const pad = Math.max(3, Math.round(hit.size * 0.06));
+  const bx = Math.max(0, hit.px - pad), by = Math.max(0, hit.py - pad);
+  const n = Math.min(hit.size + 2 * pad, W - bx, H - by);
+  const gray = new Float32Array(n * n);
   for (let y = 0; y < n; y++) {
     for (let x = 0; x < n; x++) {
-      const a = Math.min(0.99, map.alpha[y * n + x] * gain);
+      const p = ((by + y) * W + bx + x) * 4;
+      gray[y * n + x] = (data[p] + data[p + 1] + data[p + 2]) / 3;
+    }
+  }
+  const alpha = new Float32Array(n * n);
+  const result = new Float32Array(n * n);
+
+  // Where to look: around the ✦ edges (from the first rough fit, widened).
+  const start = { scale: hit.size / rawSize, ox: hit.px - bx, oy: hit.py - by, gain: gain0 };
+  sampleAlpha(raw, rawSize, start.scale, start.ox, start.oy, n, alpha);
+  const edge = new Float32Array(n * n);
+  for (let y = 1; y < n - 1; y++) {
+    for (let x = 1; x < n - 1; x++) {
+      const i = y * n + x;
+      edge[i] = Math.abs(alpha[i + 1] - alpha[i - 1]) + Math.abs(alpha[i + n] - alpha[i - n]);
+    }
+  }
+  const weight = new Float32Array(n * n);
+  const r = 2;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      let m = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= n) continue;
+        for (let dx = -r; dx <= r; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= n) continue;
+          if (edge[yy * n + xx] > m) m = edge[yy * n + xx];
+        }
+      }
+      weight[y * n + x] = m;
+    }
+  }
+
+  function energy(p) {
+    sampleAlpha(raw, rawSize, p.scale, p.ox, p.oy, n, alpha);
+    for (let i = 0; i < n * n; i++) {
+      const a = Math.min(0.99, alpha[i] * p.gain);
+      result[i] = a < 0.002 ? gray[i] : (gray[i] - a * 255) / (1 - a);
+    }
+    let e = 0;
+    for (let y = 1; y < n - 1; y++) {
+      for (let x = 1; x < n - 1; x++) {
+        const i = y * n + x;
+        const w = weight[i];
+        if (w < 0.01) continue;
+        e += w * (Math.abs(result[i + 1] - result[i - 1]) + Math.abs(result[i + n] - result[i - n]));
+      }
+    }
+    return e;
+  }
+
+  let best = { ...start };
+  let bestE = energy(best);
+  const steps = { scale: start.scale * 0.03, ox: 1, oy: 1, gain: 0.15 };
+  for (let round = 0; round < 7; round++) {
+    for (const key of ["gain", "ox", "oy", "scale", "gain"]) {
+      for (const dir of [1, -1]) {
+        let moved = true;
+        while (moved) {
+          moved = false;
+          const trial = { ...best, [key]: best[key] + dir * steps[key] };
+          if (trial.gain <= 0) break;
+          // never wander far from where the ✦ was found
+          if (Math.abs(trial.ox - start.ox) > pad || Math.abs(trial.oy - start.oy) > pad) break;
+          if (Math.abs(trial.scale / start.scale - 1) > 0.12) break;
+          const e = energy(trial);
+          if (e < bestE) { best = trial; bestE = e; moved = true; }
+        }
+      }
+    }
+    for (const key of Object.keys(steps)) steps[key] /= 2;
+  }
+  let peak = 0;
+  for (let i = 0; i < raw.length; i++) if (raw[i] > peak) peak = raw[i];
+  return { ...best, raw, rawSize, bx, by, n, peak };
+}
+
+function applyFit(data, W, fit) {
+  const { n } = fit;
+  const alpha = new Float32Array(n * n);
+  sampleAlpha(fit.raw, fit.rawSize, fit.scale, fit.ox, fit.oy, n, alpha);
+  fit.alpha = alpha;
+  for (let y = 0; y < n; y++) {
+    for (let x = 0; x < n; x++) {
+      const a = Math.min(0.99, alpha[y * n + x] * fit.gain);
       if (a < 0.002) continue;
-      const p = ((hit.py + y) * W + hit.px + x) * 4;
+      const p = ((fit.by + y) * W + fit.bx + x) * 4;
       for (let c = 0; c < 3; c++) {
         const v = (data[p + c] - a * 255) / (1 - a);
         data[p + c] = v < 0 ? 0 : v > 255 ? 255 : Math.round(v);
       }
     }
   }
-  return { removed: true, score: hit.score, gain, box: { x: hit.px, y: hit.py, size: n } };
+}
+
+// Last touch: on the thin line along the ✦ edge only, each pixel takes the
+// middle value of its neighbours - wipes any leftover hair-line outline
+// without blurring the rest of the photo.
+function cleanEdges(data, W, fit) {
+  const { n, alpha } = fit;
+  let maxEdge = 0;
+  const edge = new Float32Array(n * n);
+  for (let y = 1; y < n - 1; y++) {
+    for (let x = 1; x < n - 1; x++) {
+      const i = y * n + x;
+      edge[i] = Math.abs(alpha[i + 1] - alpha[i - 1]) + Math.abs(alpha[i + n] - alpha[i - n]);
+      if (edge[i] > maxEdge) maxEdge = edge[i];
+    }
+  }
+  if (maxEdge <= 0) return;
+  const copy = new Uint8ClampedArray(data);
+  const r = 2;
+  const values = [[], [], []];
+  for (let y = r; y < n - r; y++) {
+    for (let x = r; x < n - r; x++) {
+      if (edge[y * n + x] < maxEdge * 0.12) continue;
+      values[0].length = values[1].length = values[2].length = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const q = ((fit.by + y + dy) * W + fit.bx + x + dx) * 4;
+          values[0].push(copy[q]);
+          values[1].push(copy[q + 1]);
+          values[2].push(copy[q + 2]);
+        }
+      }
+      const p = ((fit.by + y) * W + fit.bx + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        values[c].sort((a, b) => a - b);
+        data[p + c] = values[c][values[c].length >> 1];
+      }
+    }
+  }
 }
 
 /**
