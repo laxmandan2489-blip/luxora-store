@@ -807,12 +807,14 @@ async function compressImageForWeb(buffer, mimetype) {
   }
 }
 
-async function uploadImage(file) {
+async function uploadImage(file, options = {}) {
   let buffer = file.buffer;
   let mimetype = file.mimetype;
   let extension = path.extname(file.originalname || "") || ".jpg";
 
-  const compressed = await compressImageForWeb(file.buffer, file.mimetype);
+  // (2026-10-29) options.direct: an already-ready JPEG (Ad/Story Maker
+  // social photo) is stored as it is - skips the slow re-compression.
+  const compressed = options.direct ? null : await compressImageForWeb(file.buffer, file.mimetype);
   if (compressed) {
     buffer = compressed.buffer;
     mimetype = compressed.mimetype;
@@ -2421,7 +2423,9 @@ app.post("/api/admin/products/save-generated-image", requireAdmin, async functio
     const mimeType = match[1];
     const buffer = Buffer.from(match[2], "base64");
     const extension = (mimeType.split("/")[1] || "png").split(";")[0];
-    const url = await uploadImage({ originalname: `ai-image.${extension}`, buffer, mimetype: mimeType });
+    // (2026-10-29) "direct" = ready social JPEG under 6 MB -> no re-compress (faster)
+    const direct = Boolean((req.body || {}).direct) && mimeType === "image/jpeg" && buffer.length < 6 * 1024 * 1024;
+    const url = await uploadImage({ originalname: `ai-image.${extension}`, buffer, mimetype: mimeType }, { direct });
     return res.json({ success: true, url });
   } catch (error) {
     console.error("SAVE GENERATED IMAGE ERROR:", error.message);
@@ -2512,14 +2516,16 @@ async function getMetaIds(force = false) {
 }
 
 // Instagram makes a "container" first; it must be FINISHED before publishing.
+// (2026-10-29) Checks quickly first (photos are usually ready in 1-3 s).
 async function waitForIgContainer(id) {
-  for (let attempt = 0; attempt < 30; attempt++) {
+  const waits = [700, 800, 1000, 1200, 1500];
+  for (let attempt = 0; attempt < 45; attempt++) {
     const info = await metaCall(id, { params: { fields: "status_code,status" } });
     if (info.status_code === "FINISHED") return;
     if (info.status_code === "ERROR" || info.status_code === "EXPIRED") {
       throw new Error(`Instagram ne photo nahi li (${info.status || info.status_code}).`);
     }
-    await sleep(2000);
+    await sleep(waits[attempt] || 2000);
   }
   throw new Error("Instagram photo process karne mein bahut der laga raha hai.");
 }
@@ -2557,15 +2563,17 @@ async function publishInstagram(ids, kind, urls, caption) {
     });
     return igPublishContainer(igId, container.id);
   }
-  const children = [];
-  for (const url of urls) {
-    const child = await metaCall(`${igId}/media`, {
-      method: "POST",
-      params: { image_url: url, is_carousel_item: "true" },
-    });
-    children.push(child.id);
-  }
-  for (const child of children) await waitForIgContainer(child);
+  // (2026-10-29) all slides together (order kept by index) - much faster
+  const children = await Promise.all(
+    urls.map(async (url) => {
+      const child = await metaCall(`${igId}/media`, {
+        method: "POST",
+        params: { image_url: url, is_carousel_item: "true" },
+      });
+      return child.id;
+    })
+  );
+  await Promise.all(children.map((child) => waitForIgContainer(child)));
   const container = await metaCall(`${igId}/media`, {
     method: "POST",
     params: { media_type: "CAROUSEL", children: children.join(","), caption: caption || "" },
@@ -2595,10 +2603,12 @@ async function publishFacebook(ids, kind, urls, caption) {
     return { id: postId, link: `https://www.facebook.com/${postId}` };
   }
   const params = { message: caption || "" };
-  for (let index = 0; index < urls.length; index++) {
-    const photo = await metaCall(`${pageId}/photos`, { method: "POST", token, params: { url: urls[index], published: "false" } });
+  const photos = await Promise.all(
+    urls.map((url) => metaCall(`${pageId}/photos`, { method: "POST", token, params: { url, published: "false" } }))
+  );
+  photos.forEach((photo, index) => {
     params[`attached_media[${index}]`] = { media_fbid: photo.id };
-  }
+  });
   const result = await metaCall(`${pageId}/feed`, { method: "POST", token, params });
   return { id: result.id, link: `https://www.facebook.com/${result.id}` };
 }
@@ -2634,18 +2644,21 @@ app.post("/api/admin/social/publish", requireAdmin, async function (req, res) {
 
     const ids = await getMetaIds();
     const results = {};
-    for (const target of targets) {
-      try {
-        const result =
-          target === "instagram"
-            ? await publishInstagram(ids, kind, urls, String(captions.instagram || "").slice(0, 2200))
-            : await publishFacebook(ids, kind, urls, String(captions.facebook || ""));
-        results[target] = { ok: true, ...result };
-      } catch (error) {
-        console.error(`SOCIAL PUBLISH ${target.toUpperCase()} ERROR:`, error.message, error.meta || "");
-        results[target] = { ok: false, message: error.message };
-      }
-    }
+    // (2026-10-29) Instagram + Facebook at the same time (faster)
+    await Promise.all(
+      targets.map(async (target) => {
+        try {
+          const result =
+            target === "instagram"
+              ? await publishInstagram(ids, kind, urls, String(captions.instagram || "").slice(0, 2200))
+              : await publishFacebook(ids, kind, urls, String(captions.facebook || ""));
+          results[target] = { ok: true, ...result };
+        } catch (error) {
+          console.error(`SOCIAL PUBLISH ${target.toUpperCase()} ERROR:`, error.message, error.meta || "");
+          results[target] = { ok: false, message: error.message };
+        }
+      })
+    );
     return res.json({ success: true, results });
   } catch (error) {
     console.error("SOCIAL PUBLISH ERROR:", error.message);
