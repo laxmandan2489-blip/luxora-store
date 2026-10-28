@@ -5160,7 +5160,7 @@ function marketingEmailHtml({ content, products, recipientName, unsubscribeUrl, 
          <div style="font-size:20px;line-height:1;color:#d8b56a;">&#10022; &#10022; &#10022;</div>
          <div style="font-family:Georgia,serif;font-size:28px;color:#f3e6c8;margin-top:12px;">Diwali Festive Sale</div>
          ${bestOff ? `<div style="font-size:15px;color:#d8b56a;margin-top:10px;letter-spacing:1px;">UP TO <strong style="font-size:22px;">${bestOff}% OFF</strong></div>` : ""}
-         <div style="font-size:12px;color:#e8d3d6;margin-top:10px;">Free delivery across India &middot; Limited festive stock</div>
+         <div style="font-size:12px;color:#e8d3d6;margin-top:10px;">Free delivery on prepaid orders &middot; COD available</div>
        </div>`
     : "";
 
