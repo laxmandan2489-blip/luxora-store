@@ -322,6 +322,7 @@ export default function StoryMaker({ API, adminFetch, products }) {
             API={API}
             adminFetch={adminFetch}
             mode="story"
+            label={picked.map((bag) => bag.name).filter(Boolean).join(" + ")}
             getImage={() => (ready && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
             canAdd={ready}
             addHint="Pehle bag chuno."

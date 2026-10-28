@@ -922,6 +922,7 @@ export default function AdMaker({ API, adminFetch, products }) {
             API={API}
             adminFetch={adminFetch}
             mode="post"
+            label={name}
             getImage={() => (img && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
             canAdd={!!img && size !== "story"}
             addHint={img ? "Post ke liye Size mein “Feed 4:5” ya “Feed 1:1” chuno (9:16 story ke liye hai)." : "Pehle bag chuno."}
