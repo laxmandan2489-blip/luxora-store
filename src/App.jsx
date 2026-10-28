@@ -361,11 +361,11 @@ const CATEGORY_PAGE_COPY = {
     edit: "The Shoulder Bag Edit",
     line: "Effortless shapes that sit beautifully on the shoulder.",
     description:
-      "Soft curves, clean lines and just the right size - shoulder bags designed to be reached for every day and styled with everything.",
+      "Soft curves, clean lines and just the right size - shoulder bags chosen to be reached for every day and styled with everything.",
   },
   "Crossbody Bags": {
     edit: "The Crossbody Edit",
-    line: "Beautifully designed crossbody bags for wherever life takes you.",
+    line: "Beautiful crossbody bags for wherever life takes you.",
     description:
       "Chic, hands-free and versatile - our crossbody bags bring modern minimalism to city strolls, daily errands and weekend plans.",
   },
@@ -397,13 +397,13 @@ const CATEGORY_PAGE_COPY = {
     edit: "The Accessories Edit",
     line: "The small details that complete your style.",
     description:
-      "Finishing touches designed to pair beautifully with your SHRIMOH bag.",
+      "Finishing touches chosen to pair beautifully with your SHRIMOH bag.",
   },
   [ALL_BAGS_LABEL]: {
     edit: "Bags for Every Moment",
-    line: "Thoughtfully designed styles for work, weekends, travel and everything in between.",
+    line: "Thoughtfully chosen styles for work, weekends, travel and everything in between.",
     description:
-      "Every SHRIMOH bag in one place - handbags, shoulder bags, crossbody bags, totes and more, each designed for everyday elegance.",
+      "Every SHRIMOH bag in one place - handbags, shoulder bags, crossbody bags, totes and more, each chosen for everyday elegance.",
   },
   "New Arrivals": {
     edit: "Just Landed",
@@ -419,9 +419,9 @@ const CATEGORY_PAGE_COPY = {
   },
   All: {
     edit: "The SHRIMOH Collection",
-    line: "Every piece, thoughtfully designed for modern moments.",
+    line: "Every piece, thoughtfully chosen for modern moments.",
     description:
-      "Browse the full SHRIMOH collection - bags and accessories designed to feel considered, refined and made to be carried every day.",
+      "Browse the full SHRIMOH collection - bags and accessories chosen to feel considered, refined and made to be carried every day.",
   },
 };
 
@@ -1675,13 +1675,13 @@ function App() {
   const HERO_SLIDE_COPY = [
     {
       lines: ["Carry Your", "Everyday Elegance."],
-      text: "Curated bags designed for the woman who carries confidence everywhere.",
+      text: "Curated bags chosen for the woman who carries confidence everywhere.",
       primaryLabel: "Discover Products",
       primaryPath: "/new-arrivals",
     },
     {
       lines: ["Structured Shapes.", "Quiet Luxury."],
-      text: "Refined silhouettes designed for everyday elegance, from desk to dinner.",
+      text: "Refined silhouettes chosen for everyday elegance, from desk to dinner.",
       primaryLabel: "Shop Bestsellers",
       primaryPath: "/bestsellers",
     },
@@ -2109,7 +2109,7 @@ function App() {
   const listingCopy =
     CATEGORY_PAGE_COPY[listingKey] || {
       edit: `The ${selectedCategory} Edit`,
-      line: "Thoughtfully designed for everyday elegance.",
+      line: "Thoughtfully chosen for everyday elegance.",
       description: "",
     };
 
@@ -4518,7 +4518,7 @@ function App() {
                   )}
                 </button>
                 <h2>{row.category}</h2>
-                <p>{CATEGORY_TAGLINES[row.category] || "Thoughtfully designed for everyday elegance."}</p>
+                <p>{CATEGORY_TAGLINES[row.category] || "Thoughtfully chosen for everyday elegance."}</p>
                 <button type="button" className="lux-shop-now" onClick={() => goToCategory(row.category)}>
                   Shop now <LuxIcon name="arrow-right" size={18} />
                 </button>
@@ -4538,7 +4538,7 @@ function App() {
               <h2>Featured Products</h2>
               <p className="lux-section-subtitle">
                 {bestsellers.length > 0
-                  ? "Our Bestsellers — Loved by Customers"
+                  ? "Our Bestsellers — Most Ordered"
                   : "Curated Favourites — The SHRIMOH Edit"}
               </p>
             </div>
@@ -4618,7 +4618,7 @@ function App() {
           <section className="lux-section-header lux-section-header-center" id="lux-shop-by-category">
             <div>
               <h2>Explore Our Collections</h2>
-              <p className="lux-section-subtitle">Discover timeless pieces designed for modern moments</p>
+              <p className="lux-section-subtitle">Discover timeless pieces chosen for modern moments</p>
             </div>
           </section>
 
@@ -5381,7 +5381,7 @@ function App() {
 
                   <div className="lux-details-content">
                     {!selectedProduct.description && (
-                      <p>A refined SHRIMOH piece designed for everyday elegance.</p>
+                      <p>A refined SHRIMOH pick for everyday elegance.</p>
                     )}
 
                     {Array.isArray(selectedProduct.keyFeatures) && selectedProduct.keyFeatures.length > 0 && (

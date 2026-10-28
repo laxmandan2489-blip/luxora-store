@@ -92,7 +92,7 @@ export const CATEGORY_SEO = {
     title: "Bag Accessories | SHRIMOH",
     heading: "Accessories",
     description:
-      "Finishing touches from SHRIMOH, designed to pair beautifully with your handbag. Shop bag accessories online with free delivery.",
+      "Finishing touches from SHRIMOH, chosen to pair beautifully with your handbag. Shop bag accessories online with free delivery.",
   },
   [ALL_BAGS_LABEL]: {
     title: "All Women's Bags – Handbags, Totes & More | SHRIMOH",
@@ -124,7 +124,7 @@ export const COLLECTION_SEO = {
     title: "Bestselling Women's Bags | SHRIMOH",
     heading: "Bestsellers",
     description:
-      "SHRIMOH's most-loved women's bags – the styles customers reorder and carry every day. Free delivery on prepaid orders.",
+      "SHRIMOH's most-ordered women's bags – the styles customers pick most. Free delivery on prepaid orders.",
     canonicalPath: "/shop",
   },
 };

@@ -7,6 +7,7 @@ import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 import { removeGeminiMarkFromImage } from "./geminiMark";
 import GeminiCleanup from "./GeminiCleanup";
+import DescriptionCheck from "./DescriptionCheck";
 
 const API = "https://luxora-store-mkva.onrender.com";
 
@@ -5847,6 +5848,9 @@ function Admin() {
 
             {/* (2026-10-27) Purani photos se Gemini ✦ hatana - GeminiCleanup.jsx */}
             <GeminiCleanup API={API} adminFetch={adminFetch} products={products} onDone={loadProducts} />
+
+            {/* (2026-10-28) Description se jhoothe dawe hatana - DescriptionCheck.jsx */}
+            <DescriptionCheck API={API} adminFetch={adminFetch} products={products} onDone={loadProducts} />
 
             <div className="panel">
               <div className="panel-header">

@@ -74,13 +74,13 @@ const PRESETS = {
     subject: "✨ Diwali Sale is live - your favourite bags at festive prices",
     heading: "This Diwali, carry something special",
     message:
-      "Diwali is almost here, and we have something special for you. SHRIMOH now has its own website, and our festive collection of handbags, slings and totes is live at special Diwali prices.\n\nEvery bag you see below is photographed as it is, packed with care and dispatched within 1-3 days. Free delivery all over India, easy 5-day returns and safe online payment.\n\nFestive prices last only for the season and stock is limited - pick your favourite before it's gone.",
+      "Diwali is almost here, and we have something special for you. SHRIMOH now has its own website, and our festive collection of handbags, slings and totes is live at special Diwali prices.\n\nEvery bag below is handpicked for you. Free delivery on prepaid orders (COD available), easy 5-day returns and safe online payment.\n\nFestive prices last only for the season and stock is limited - pick your favourite before it's gone.",
   },
   normal: {
     subject: "New bags just arrived at SHRIMOH 👜",
     heading: "Fresh styles, made for every day",
     message:
-      "Thank you for shopping with SHRIMOH before. We now have our own website, and our newest handbags, slings and totes have just arrived.\n\nEvery bag you see below is photographed as it is, packed with care and dispatched within 1-3 days. Free delivery all over India, easy 5-day returns and safe online payment.\n\nTake a look - your next favourite bag might be waiting.",
+      "Thank you for shopping with SHRIMOH before. We now have our own website, and our newest handbags, slings and totes have just arrived.\n\nEvery bag below is handpicked for you. Free delivery on prepaid orders (COD available), easy 5-day returns and safe online payment.\n\nTake a look - your next favourite bag might be waiting.",
   },
 };
 
