@@ -2430,6 +2430,230 @@ app.post("/api/admin/products/save-generated-image", requireAdmin, async functio
 });
 
 /*
+ * ============================================================
+ * SOCIAL POSTING - Instagram + Facebook Page (2026-10-28)
+ * ------------------------------------------------------------
+ * Admin > Ad Maker ("Post to Instagram / Facebook") and
+ * Admin > Story Maker ("Story lagao") send photos here.
+ *  1. Admin first saves each photo with /save-generated-image
+ *     (Supabase public link - Meta downloads the photo from there).
+ *  2. Then calls /api/admin/social/publish with those links.
+ * Render env:
+ *   META_ACCESS_TOKEN = system user token (Business settings >
+ *                       System users > shrimoh-poster, never expires)
+ *   FB_PAGE_ID        = 1296661276874176 (optional - if missing, the
+ *                       first Page the token can see is used)
+ * The Instagram account is found from the Page automatically.
+ * ============================================================
+ */
+const META_GRAPH = "https://graph.facebook.com/v26.0";
+let metaIdsCache = null;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function metaCall(pathPart, { method = "GET", params = {}, token } = {}) {
+  const accessToken = token || String(process.env.META_ACCESS_TOKEN || "").trim();
+  if (!accessToken) throw new Error("META_ACCESS_TOKEN Render mein nahi mila.");
+  const url = new URL(`${META_GRAPH}/${String(pathPart).replace(/^\//, "")}`);
+  const options = { method };
+  if (method === "GET") {
+    for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+    url.searchParams.set("access_token", accessToken);
+  } else {
+    const body = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      body.set(key, typeof value === "object" ? JSON.stringify(value) : String(value));
+    }
+    body.set("access_token", accessToken);
+    options.body = body;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
+  let response;
+  try {
+    response = await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    const info = data.error || {};
+    const error = new Error(info.error_user_msg || info.message || `Meta error ${response.status}`);
+    error.meta = info;
+    throw error;
+  }
+  return data;
+}
+
+async function getMetaIds(force = false) {
+  if (!force && metaIdsCache && Date.now() - metaIdsCache.at < 30 * 60 * 1000) return metaIdsCache;
+  const fields = "id,name,access_token,instagram_business_account{id,username}";
+  const pageId = String(process.env.FB_PAGE_ID || "").trim();
+  let page = null;
+  if (pageId) {
+    page = await metaCall(pageId, { params: { fields } });
+  } else {
+    const list = await metaCall("me/accounts", { params: { fields } });
+    page = (list.data || [])[0] || null;
+  }
+  if (!page || !page.id) throw new Error("Facebook Page nahi mila - token ko Page ka access do.");
+  const ig = page.instagram_business_account || null;
+  metaIdsCache = {
+    at: Date.now(),
+    pageId: page.id,
+    pageName: page.name || "",
+    pageToken: page.access_token || null,
+    igId: ig && ig.id ? ig.id : null,
+    igUsername: ig && ig.username ? ig.username : null,
+  };
+  return metaIdsCache;
+}
+
+// Instagram makes a "container" first; it must be FINISHED before publishing.
+async function waitForIgContainer(id) {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const info = await metaCall(id, { params: { fields: "status_code,status" } });
+    if (info.status_code === "FINISHED") return;
+    if (info.status_code === "ERROR" || info.status_code === "EXPIRED") {
+      throw new Error(`Instagram ne photo nahi li (${info.status || info.status_code}).`);
+    }
+    await sleep(2000);
+  }
+  throw new Error("Instagram photo process karne mein bahut der laga raha hai.");
+}
+
+async function igPublishContainer(igId, creationId) {
+  await waitForIgContainer(creationId);
+  const published = await metaCall(`${igId}/media_publish`, { method: "POST", params: { creation_id: creationId } });
+  let link = null;
+  try {
+    link = (await metaCall(published.id, { params: { fields: "permalink" } })).permalink || null;
+  } catch {
+    // link is only a nice-to-have
+  }
+  return { id: published.id, link };
+}
+
+async function publishInstagram(ids, kind, urls, caption) {
+  if (!ids.igId) throw new Error("Instagram account Facebook Page se juda nahi mila.");
+  const igId = ids.igId;
+  if (kind === "story") {
+    const done = [];
+    for (const url of urls) {
+      const container = await metaCall(`${igId}/media`, {
+        method: "POST",
+        params: { image_url: url, media_type: "STORIES" },
+      });
+      done.push(await igPublishContainer(igId, container.id));
+    }
+    return { id: done.map((item) => item.id).join(","), link: done[0] && done[0].link };
+  }
+  if (urls.length === 1) {
+    const container = await metaCall(`${igId}/media`, {
+      method: "POST",
+      params: { image_url: urls[0], caption: caption || "" },
+    });
+    return igPublishContainer(igId, container.id);
+  }
+  const children = [];
+  for (const url of urls) {
+    const child = await metaCall(`${igId}/media`, {
+      method: "POST",
+      params: { image_url: url, is_carousel_item: "true" },
+    });
+    children.push(child.id);
+  }
+  for (const child of children) await waitForIgContainer(child);
+  const container = await metaCall(`${igId}/media`, {
+    method: "POST",
+    params: { media_type: "CAROUSEL", children: children.join(","), caption: caption || "" },
+  });
+  return igPublishContainer(igId, container.id);
+}
+
+async function publishFacebook(ids, kind, urls, caption) {
+  const token = ids.pageToken || undefined;
+  const pageId = ids.pageId;
+  if (kind === "story") {
+    const done = [];
+    for (const url of urls) {
+      const photo = await metaCall(`${pageId}/photos`, { method: "POST", token, params: { url, published: "false" } });
+      const story = await metaCall(`${pageId}/photo_stories`, { method: "POST", token, params: { photo_id: photo.id } });
+      done.push(story.post_id || story.id || photo.id);
+    }
+    return { id: done.join(","), link: `https://www.facebook.com/${pageId}` };
+  }
+  if (urls.length === 1) {
+    const result = await metaCall(`${pageId}/photos`, {
+      method: "POST",
+      token,
+      params: { url: urls[0], message: caption || "" },
+    });
+    const postId = result.post_id || result.id;
+    return { id: postId, link: `https://www.facebook.com/${postId}` };
+  }
+  const params = { message: caption || "" };
+  for (let index = 0; index < urls.length; index++) {
+    const photo = await metaCall(`${pageId}/photos`, { method: "POST", token, params: { url: urls[index], published: "false" } });
+    params[`attached_media[${index}]`] = { media_fbid: photo.id };
+  }
+  const result = await metaCall(`${pageId}/feed`, { method: "POST", token, params });
+  return { id: result.id, link: `https://www.facebook.com/${result.id}` };
+}
+
+app.get("/api/admin/social/status", requireAdmin, async function (req, res) {
+  try {
+    const ids = await getMetaIds(true);
+    return res.json({
+      success: true,
+      page: { id: ids.pageId, name: ids.pageName },
+      instagram: ids.igId ? { id: ids.igId, username: ids.igUsername } : null,
+    });
+  } catch (error) {
+    console.error("SOCIAL STATUS ERROR:", error.message);
+    return res.json({ success: false, message: error.message });
+  }
+});
+
+app.post("/api/admin/social/publish", requireAdmin, async function (req, res) {
+  try {
+    const body = req.body || {};
+    const kind = body.kind === "story" ? "story" : "post";
+    const urls = (Array.isArray(body.imageUrls) ? body.imageUrls : [])
+      .map((url) => String(url || "").trim())
+      .filter((url) => /^https:\/\//.test(url));
+    const targets = (Array.isArray(body.targets) ? body.targets : []).filter(
+      (target) => target === "instagram" || target === "facebook"
+    );
+    const captions = body.captions || {};
+    if (!urls.length) return res.status(400).json({ success: false, message: "Koi photo nahi mili." });
+    if (urls.length > 10) return res.status(400).json({ success: false, message: "Ek post mein 10 se zyada photos nahi." });
+    if (!targets.length) return res.status(400).json({ success: false, message: "Instagram ya Facebook chuno." });
+
+    const ids = await getMetaIds();
+    const results = {};
+    for (const target of targets) {
+      try {
+        const result =
+          target === "instagram"
+            ? await publishInstagram(ids, kind, urls, String(captions.instagram || "").slice(0, 2200))
+            : await publishFacebook(ids, kind, urls, String(captions.facebook || ""));
+        results[target] = { ok: true, ...result };
+      } catch (error) {
+        console.error(`SOCIAL PUBLISH ${target.toUpperCase()} ERROR:`, error.message, error.meta || "");
+        results[target] = { ok: false, message: error.message };
+      }
+    }
+    return res.json({ success: true, results });
+  } catch (error) {
+    console.error("SOCIAL PUBLISH ERROR:", error.message);
+    return res.status(500).json({ success: false, message: error.message || "Post nahi ho paya." });
+  }
+});
+
+/*
  * Move an imported (or any) product between draft / review /
  * published. Setting "published" also flips active=true so it
  * shows on the live site immediately - moving it out of
