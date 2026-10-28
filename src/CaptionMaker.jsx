@@ -112,7 +112,7 @@ function colourLine(colours) {
   return `🎨 ${colours.length} colours: ${joined}`;
 }
 
-function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
+export function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
   const hook = HOOKS[hookIndex % HOOKS.length];
   const priceNumber = Number(price) || 0;
   const mrpNumber = Number(mrp) || 0;

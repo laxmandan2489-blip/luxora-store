@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import urbanist500 from "./assets/urbanist-latin-500-normal.woff2";
 import urbanist600 from "./assets/urbanist-latin-600-normal.woff2";
-import CaptionMaker from "./CaptionMaker";
+import CaptionMaker, { buildCaption } from "./CaptionMaker";
+import SocialPoster from "./SocialPoster";
 
 /*
  * ADMIN > AD MAKER (2026-10-21)
@@ -34,7 +35,7 @@ const SLOGANS = [
   "Carry elegance every day",
   "Made to be noticed",
   "Your everyday luxury",
-  "Crafted for the modern woman",
+  "Chosen for the modern woman",
   "Style that goes everywhere",
   "The bag you'll reach for daily",
   "Festive ready, always",
@@ -230,7 +231,7 @@ function drawPriceInner(ctx, { price, mrp, x, y, size, color, mutedColor, align 
    tiny line. Background = the photo's own background colour, so the
    photo blends in instead of sitting in a box.
 --------------------------------------------------------------------- */
-const CLEAN_LINE = "FREE DELIVERY  ·  COD AVAILABLE";
+const CLEAN_LINE = "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE";
 // Background choices for the clean "text below / above" designs.
 const CLEAN_BACKGROUNDS = {
   auto: { label: "Photo colour", color: "" },
@@ -915,6 +916,18 @@ export default function AdMaker({ API, adminFetch, products }) {
             name={name}
             price={price}
             mrp={mrp}
+          />
+          {/* (2026-10-28) Admin se seedha Instagram / Facebook post - SocialPoster.jsx */}
+          <SocialPoster
+            API={API}
+            adminFetch={adminFetch}
+            mode="post"
+            getImage={() => (img && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
+            canAdd={!!img && size !== "story"}
+            addHint={img ? "Post ke liye Size mein “Feed 4:5” ya “Feed 1:1” chuno (9:16 story ke liye hai)." : "Pehle bag chuno."}
+            buildCaption={(platform) =>
+              name ? buildCaption(platform, { product: currentProduct, name, price, mrp, hookIndex: 0 }) : ""
+            }
           />
         </div>
 

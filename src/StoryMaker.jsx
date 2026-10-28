@@ -3,6 +3,7 @@ import {
   loadFonts, rupees, spacedText, fitFont, wrapLines, photoBackground, drawPrice,
   isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS, productVariants, absoluteUrl,
 } from "./AdMaker";
+import SocialPoster from "./SocialPoster";
 
 /*
  * ADMIN > STORY MAKER (2026-10-25)
@@ -90,7 +91,7 @@ function drawStory(ctx, type, bags) {
       }
     });
     // 1400-1700: empty for the POLL sticker
-    smallCaps(ctx, "FREE DELIVERY  ·  COD AVAILABLE", W / 2, 1720, soft, 24, 6);
+    smallCaps(ctx, "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE", W / 2, 1720, soft, 24, 6);
     return;
   }
 
@@ -124,7 +125,7 @@ function drawStory(ctx, type, bags) {
     }
   }
   // ~1500-1700 stays empty for the LINK / QUIZ sticker
-  smallCaps(ctx, "FREE DELIVERY  ·  COD AVAILABLE", W / 2, 1720, soft, 24, 6);
+  smallCaps(ctx, "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE", W / 2, 1720, soft, 24, 6);
 }
 
 export default function StoryMaker({ API, adminFetch, products }) {
@@ -316,6 +317,15 @@ export default function StoryMaker({ API, adminFetch, products }) {
               ⬇ Save story
             </button>
           </div>
+          {/* (2026-10-28) Story seedha Instagram / Facebook par - SocialPoster.jsx */}
+          <SocialPoster
+            API={API}
+            adminFetch={adminFetch}
+            mode="story"
+            getImage={() => (ready && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
+            canAdd={ready}
+            addHint="Pehle bag chuno."
+          />
         </div>
 
         <div>
