@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFonts, productVariants, absoluteUrl } from "./AdMaker";
 import { STUDIO_BACKGROUNDS } from "./studioDesign";
-import { renderReel, drawPreview, REEL_W, REEL_H } from "./reelEngine";
+import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } from "./reelEngine";
 
 /*
  * ADMIN > REEL MAKER (2026-10-29)
@@ -37,6 +37,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
   const [bg, setBg] = useState("beige");
   const [hook, setHook] = useState(STYLES.newin.hook);
   const [showPrice, setShowPrice] = useState(true);
+  const [quality, setQuality] = useState("fast");
   const [search, setSearch] = useState("");
   const [pickedIds, setPickedIds] = useState([]);
   const [bags, setBags] = useState([]); // loaded: [{ img, name, price, mrp, label }]
@@ -130,6 +131,8 @@ export default function ReelMaker({ API, adminFetch, products }) {
           if (next.length && !(Number(product.price) > 0)) setNotice("⚠️ Is bag ka price khaali hai - Products mein price bharo.");
         }
         if (!cancelled) setBags(next);
+        // cut the bags out now, so "Reel banao" starts straight away
+        await prepareCutouts(next.map((bag) => bag.img));
       } catch (error) {
         if (!cancelled) setNotice(`❌ ${error.message || "Photo load nahi hui."} Dobara try karo.`);
       } finally {
@@ -187,7 +190,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
       const result = await renderReel({
         style,
         bags,
-        options: { bg, hook, showPrice },
+        options: { bg, hook, showPrice, quality },
         onProgress: (value, text) => {
           setProgress(value);
           if (text) setStage(text);
@@ -343,6 +346,11 @@ export default function ReelMaker({ API, adminFetch, products }) {
         <div>
           <label className="form-label">Reel type</label>
           <div className="rm-row">{Object.entries(STYLES).map(([value, item]) => chip(style === value, item.label, () => chooseStyle(value), value))}</div>
+
+          <label className="form-label">Quality</label>
+          <div className="rm-row">
+            {Object.entries(QUALITIES).map(([value, item]) => chip(quality === value, item.label, () => { setQuality(value); setVideo(null); }, value))}
+          </div>
 
           <label className="form-label">Background</label>
           <div className="rm-row">

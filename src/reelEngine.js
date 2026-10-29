@@ -10,13 +10,22 @@
  * used. If the phone has no WebCodecs (old iOS), a slower fallback
  * records the canvas in real time (MediaRecorder).
  * No sound: the song is added in Instagram (library music).
+ *
+ * (2026-10-29 v2) FASTER: "⚡ Tez" quality renders at 720x1280 (2.25x fewer
+ * pixels - Instagram shows reels at about this size anyway), bag cut-outs
+ * are prepared while you pick bags (prepareCutouts), and all drawing uses
+ * 1080x1920 coordinates scaled to the output size.
  */
 
-import { drawStudio, drawStudioBackdrop, STUDIO_BACKGROUNDS } from "./studioDesign";
+import { drawStudio, drawStudioBackdrop, cutoutBag, STUDIO_BACKGROUNDS } from "./studioDesign";
 
 export const REEL_W = 1080;
 export const REEL_H = 1920;
 const FPS = 30;
+export const QUALITIES = {
+  fast: { label: "⚡ Tez (HD 720p)", w: 720, h: 1280, bitrate: 5_000_000 },
+  full: { label: "💎 Full HD 1080p (thoda dheere)", w: 1080, h: 1920, bitrate: 8_000_000 },
+};
 const FADE = 0.45; // seconds of cross-fade between scenes
 
 const SERIF = '"Cormorant Garamond", Georgia, "Times New Roman", serif';
@@ -184,21 +193,41 @@ export function buildTimeline(style, bags, options) {
 /* ---------------------------- drawing ------------------------------ */
 
 // Pre-draw each scene's background + bag once ("plate").
-function makePlates(scenes, bgKey) {
+async function makePlates(scenes, bgKey, OW = REEL_W, OH = REEL_H, onStep = () => {}) {
   const plates = [];
   let busy = 0;
-  for (const scene of scenes) {
-    const plate = makeCanvas(REEL_W, REEL_H);
+  // one plate per different photo (the same photo is reused, not redrawn)
+  const byImage = new Map();
+  for (let index = 0; index < scenes.length; index++) {
+    const scene = scenes[index];
+    const key = scene.img || "__backdrop";
+    if (byImage.has(key)) {
+      plates.push(byImage.get(key));
+      continue;
+    }
+    const plate = makeCanvas(OW, OH);
     const ctx = plate.getContext("2d");
     if (scene.img) {
-      const result = drawStudio(ctx, { W: REEL_W, H: REEL_H, img: scene.img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true } });
+      const result = drawStudio(ctx, { W: OW, H: OH, img: scene.img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true } });
       if (result && result.cutout === false) busy += 1;
     } else {
-      drawStudioBackdrop(ctx, REEL_W, REEL_H, bgKey);
+      drawStudioBackdrop(ctx, OW, OH, bgKey);
     }
+    byImage.set(key, plate);
     plates.push(plate);
+    onStep((index + 1) / scenes.length);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
   return { plates, busy };
+}
+
+/** Cut the bags out ahead of time (while the person is still picking). */
+export async function prepareCutouts(images) {
+  for (const img of images) {
+    if (!img) continue;
+    cutoutBag(img);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 }
 
 function drawPlate(ctx, plate, zoom, alpha) {
@@ -212,7 +241,8 @@ function drawPlate(ctx, plate, zoom, alpha) {
   ctx.restore();
 }
 
-function drawFrame(ctx, t, scenes, plates, starts, theme) {
+function drawFrame(ctx, t, scenes, plates, starts, theme, scale = 1) {
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
   let index = scenes.length - 1;
   for (let i = 0; i < scenes.length; i++) {
     if (t < starts[i] + scenes[i].duration) {
@@ -256,11 +286,11 @@ function drawFrame(ctx, t, scenes, plates, starts, theme) {
 
 const CODECS = ["avc1.640028", "avc1.4d0028", "avc1.42e028", "avc1.640033", "avc1.4d0033"];
 
-async function pickCodec() {
+async function pickCodec(q) {
   if (typeof window.VideoEncoder === "undefined" || typeof window.VideoFrame === "undefined") return null;
   for (const codec of CODECS) {
     try {
-      const { supported } = await window.VideoEncoder.isConfigSupported({ codec, width: REEL_W, height: REEL_H, bitrate: 8_000_000, framerate: FPS });
+      const { supported } = await window.VideoEncoder.isConfigSupported({ codec, width: q.w, height: q.h, bitrate: q.bitrate, framerate: FPS });
       if (supported) return codec;
     } catch {
       // try the next one
@@ -269,10 +299,10 @@ async function pickCodec() {
   return null;
 }
 
-async function encodeWebCodecs(codec, totalFrames, draw, canvas, onProgress) {
-  const { Muxer, ArrayBufferTarget } = await import("./vendor/mp4-muxer.mjs");
+async function encodeWebCodecs(codec, q, totalFrames, draw, canvas, onProgress) {
+  const { Muxer, ArrayBufferTarget } = await import("./mp4-muxer.mjs");
   const target = new ArrayBufferTarget();
-  const muxer = new Muxer({ target, video: { codec: "avc", width: REEL_W, height: REEL_H, frameRate: FPS }, fastStart: "in-memory" });
+  const muxer = new Muxer({ target, video: { codec: "avc", width: q.w, height: q.h, frameRate: FPS }, fastStart: "in-memory" });
   let failure = null;
   const encoder = new window.VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
@@ -280,7 +310,7 @@ async function encodeWebCodecs(codec, totalFrames, draw, canvas, onProgress) {
       failure = error;
     },
   });
-  encoder.configure({ codec, width: REEL_W, height: REEL_H, bitrate: 8_000_000, framerate: FPS, avc: { format: "avc" } });
+  encoder.configure({ codec, width: q.w, height: q.h, bitrate: q.bitrate, framerate: FPS, avc: { format: "avc" } });
   for (let frameIndex = 0; frameIndex < totalFrames; frameIndex++) {
     if (failure) throw failure;
     draw(frameIndex / FPS);
@@ -293,7 +323,7 @@ async function encodeWebCodecs(codec, totalFrames, draw, canvas, onProgress) {
         check();
       });
     }
-    if (frameIndex % 6 === 0) {
+    if (frameIndex % 10 === 0) {
       onProgress(frameIndex / totalFrames);
       await new Promise((resolve) => setTimeout(resolve, 0)); // keep the screen alive
     }
@@ -305,13 +335,13 @@ async function encodeWebCodecs(codec, totalFrames, draw, canvas, onProgress) {
   return new Blob([target.buffer], { type: "video/mp4" });
 }
 
-async function encodeRealtime(totalSeconds, draw, canvas, onProgress) {
+async function encodeRealtime(q, totalSeconds, draw, canvas, onProgress) {
   if (typeof canvas.captureStream !== "function" || typeof window.MediaRecorder === "undefined") {
     throw new Error("Is phone/browser mein video banana support nahi hai. iPhone ka iOS update karke try karo.");
   }
   const type = window.MediaRecorder.isTypeSupported("video/mp4") ? "video/mp4" : "video/webm";
   const stream = canvas.captureStream(FPS);
-  const recorder = new window.MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8_000_000 });
+  const recorder = new window.MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: q.bitrate });
   const parts = [];
   recorder.ondataavailable = (event) => event.data && event.data.size && parts.push(event.data);
   const done = new Promise((resolve) => {
@@ -340,39 +370,43 @@ async function encodeRealtime(totalSeconds, draw, canvas, onProgress) {
  * Renders the reel. Returns { blob, seconds, busy, method }.
  */
 export async function renderReel({ style, bags, options, onProgress = () => {} }) {
+  const q = QUALITIES[options.quality] || QUALITIES.fast;
   const bgKey = STUDIO_BACKGROUNDS[options.bg] ? options.bg : "beige";
   const theme = STUDIO_BACKGROUNDS[bgKey];
   const scenes = buildTimeline(style, bags, options);
   onProgress(0, "Bags taiyar ho rahe hain...");
-  await new Promise((resolve) => setTimeout(resolve, 30));
-  const { plates, busy } = makePlates(scenes, bgKey);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const { plates, busy } = await makePlates(scenes, bgKey, q.w, q.h, (p) => onProgress(p * 0.1, "Bags taiyar ho rahe hain..."));
   const starts = [];
   let total = 0;
   for (const scene of scenes) {
     starts.push(total);
     total += scene.duration;
   }
-  const canvas = makeCanvas(REEL_W, REEL_H);
-  const ctx = canvas.getContext("2d");
-  const draw = (t) => drawFrame(ctx, Math.min(t, total - 0.001), scenes, plates, starts, theme);
+  const canvas = makeCanvas(q.w, q.h);
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.imageSmoothingQuality = "medium";
+  const scale = q.w / REEL_W;
+  const draw = (t) => drawFrame(ctx, Math.min(t, total - 0.001), scenes, plates, starts, theme, scale);
+  const later = (p, text) => onProgress(0.1 + p * 0.9, text);
 
-  const codec = await pickCodec();
+  const codec = await pickCodec(q);
   let blob;
   let method;
   if (codec) {
     try {
       method = "fast";
-      blob = await encodeWebCodecs(codec, Math.round(total * FPS), draw, canvas, (p) => onProgress(p, "Video ban rahi hai..."));
+      blob = await encodeWebCodecs(codec, q, Math.round(total * FPS), draw, canvas, (p) => later(p, "Video ban rahi hai..."));
     } catch {
       blob = null; // phone's fast encoder refused - use the slower way below
     }
   }
   if (!blob) {
     method = "realtime";
-    blob = await encodeRealtime(total, draw, canvas, (p) => onProgress(p, "Video ban rahi hai (purane iOS par thoda dheere)..."));
+    blob = await encodeRealtime(q, total, draw, canvas, (p) => later(p, "Video ban rahi hai (reel jitna time lagega)..."));
   }
   // free the big canvases right away (phone memory)
-  plates.forEach((plate) => {
+  new Set(plates).forEach((plate) => {
     plate.width = 1;
     plate.height = 1;
   });
@@ -387,8 +421,11 @@ export function drawPreview(ctx, style, bags, options) {
   const bgKey = STUDIO_BACKGROUNDS[options.bg] ? options.bg : "beige";
   const theme = STUDIO_BACKGROUNDS[bgKey];
   const scenes = buildTimeline(style, bags, options);
-  const { plates } = makePlates(scenes.slice(0, 1), bgKey);
-  drawFrame(ctx, scenes[0].duration * 0.9, scenes.slice(0, 1), plates, [0], theme);
-  plates[0].width = 1;
-  plates[0].height = 1;
+  const plate = makeCanvas(REEL_W / 2, REEL_H / 2); // small = fast preview
+  const pctx = plate.getContext("2d");
+  if (scenes[0].img) drawStudio(pctx, { W: REEL_W / 2, H: REEL_H / 2, img: scenes[0].img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true } });
+  else drawStudioBackdrop(pctx, REEL_W / 2, REEL_H / 2, bgKey);
+  drawFrame(ctx, scenes[0].duration * 0.9, scenes.slice(0, 1), [plate], [0], theme);
+  plate.width = 1;
+  plate.height = 1;
 }
