@@ -4,6 +4,7 @@ import {
   isLight, drawPhotoSoft, INK, DEEP_GOLD, SERIF, SANS, productVariants, absoluteUrl,
 } from "./AdMaker";
 import SocialPoster from "./SocialPoster";
+import SaveBasket from "./SaveBasket";
 
 /*
  * ADMIN > STORY MAKER (2026-10-25)
@@ -354,6 +355,15 @@ export default function StoryMaker({ API, adminFetch, products }) {
               ⬇ Save story
             </button>
           </div>
+          {/* (2026-10-29) Kai stories ek saath phone mein - SaveBasket.jsx */}
+          <SaveBasket
+            basketKey="story"
+            word="stories"
+            label={picked.map((bag) => bag.name).filter(Boolean).join(" + ")}
+            getImage={() => (ready && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
+            getLink={() => (picked[0] ? storyLink(picked[0]) : "")}
+            canAdd={ready}
+          />
           {picked.length > 0 && (
             <div className="sm-links">
               <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🔗 Story ka link (Link sticker ke liye)</div>

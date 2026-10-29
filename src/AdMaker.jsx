@@ -3,6 +3,7 @@ import urbanist500 from "./assets/urbanist-latin-500-normal.woff2";
 import urbanist600 from "./assets/urbanist-latin-600-normal.woff2";
 import CaptionMaker, { buildCaption } from "./CaptionMaker";
 import SocialPoster from "./SocialPoster";
+import SaveBasket from "./SaveBasket";
 
 /*
  * ADMIN > AD MAKER (2026-10-21)
@@ -911,6 +912,13 @@ export default function AdMaker({ API, adminFetch, products }) {
               ⬇ Save image
             </button>
           </div>
+          {/* (2026-10-29) Kai designs ek saath phone mein - SaveBasket.jsx */}
+          <SaveBasket
+            basketKey="ad"
+            label={name}
+            getImage={() => (img && canvasRef.current ? canvasRef.current.toDataURL("image/jpeg", 0.92) : "")}
+            canAdd={!!img}
+          />
           <CaptionMaker
             product={currentProduct}
             name={name}
