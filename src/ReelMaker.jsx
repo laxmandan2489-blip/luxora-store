@@ -11,13 +11,34 @@ import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } fr
  * add a song in Instagram.
  */
 
+// (2026-10-29 v3) 10 many-bag + 11 one-bag templates. kind:
+//   bags    - one photo per bag (pick several bags)
+//   photos  - ONE bag, choose up to `photos` of its photos
+//   colours - ONE bag, one photo per colour
 const STYLES = {
-  newin: { label: "New in", hint: "3 se 6 alag bags chuno.", min: 3, max: 6, hook: "new in this week", kind: "bags" },
-  colours: { label: "Kaunsa colour? 1-2-3", hint: "Ek bag chuno jiske 2-4 colour hon.", min: 1, max: 1, hook: "kaunsa colour lenge?", kind: "colours" },
-  guess: { label: "Guess the price", hint: "Ek bag chuno, neeche uski 3 photos chuno.", min: 1, max: 1, hook: "guess the price 👀", kind: "guess" },
-  fastcuts: { label: "⚡ Fast cuts (trending)", hint: "3 se 6 alag bags chuno. Tez cuts, har bag alag colour par.", min: 3, max: 6, hook: "new drop", kind: "bags" },
-  collage: { label: "🖼 Collage", hint: "2 se 4 bags chuno. Mood-board jaisa grid.", min: 2, max: 4, hook: "which one is you?", kind: "bags" },
-  polaroid: { label: "📸 Polaroid", hint: "3 se 5 bags chuno. Asli photos polaroid ki tarah girti hain.", min: 3, max: 5, hook: "my bag edit ✨", kind: "bags" },
+  // ---- many bags ----
+  newin: { group: "multi", label: "New in", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new in this week", kind: "bags" },
+  fastcuts: { group: "multi", label: "⚡ Fast cuts", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new drop", kind: "bags" },
+  colorpop: { group: "multi", label: "🎨 Color pop", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new drop", kind: "bags" },
+  swipe: { group: "multi", label: "👉 Swipe", hint: "3 se 6 bags.", min: 3, max: 6, hook: "swipe through ➡️", kind: "bags" },
+  spotlight: { group: "multi", label: "🔦 Spotlight", hint: "3 se 5 bags.", min: 3, max: 5, hook: "in the spotlight", kind: "bags" },
+  magazine: { group: "multi", label: "📰 Magazine", hint: "2 se 5 bags.", min: 2, max: 5, hook: "", kind: "bags" },
+  toplist: { group: "multi", label: "🏆 Top picks", hint: "3 se 5 bags.", min: 3, max: 5, hook: "", kind: "bags" },
+  split: { group: "multi", label: "↔️ This or that", hint: "2, 4 ya 6 bags (jodiyan).", min: 2, max: 6, hook: "this or that?", kind: "bags" },
+  collage: { group: "multi", label: "🖼 Collage", hint: "2 se 4 bags.", min: 2, max: 4, hook: "which one is you?", kind: "bags" },
+  polaroid: { group: "multi", label: "📸 Polaroid", hint: "3 se 5 bags.", min: 3, max: 5, hook: "my bag edit ✨", kind: "bags" },
+  // ---- one bag ----
+  showcase: { group: "single", label: "✨ Showcase", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "", kind: "photos" },
+  details: { group: "single", label: "🔍 Zoom details", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "zoom in 🔍", kind: "photos" },
+  angles: { group: "single", label: "🔄 Every angle", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "every angle 🔄", kind: "photos" },
+  fastcuts1: { group: "single", label: "⚡ Fast cuts", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "new drop", kind: "photos" },
+  colorpop1: { group: "single", label: "🎨 Color pop", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "new drop", kind: "photos" },
+  spotlight1: { group: "single", label: "🔦 Spotlight", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "in the spotlight", kind: "photos" },
+  magazine1: { group: "single", label: "📰 Magazine", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "", kind: "photos" },
+  polaroid1: { group: "single", label: "📸 Polaroid", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "one bag, every look", kind: "photos" },
+  grid: { group: "single", label: "🖼 Grid", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "one bag, 4 looks", kind: "photos" },
+  guess: { group: "single", label: "👀 Guess the price", hint: "Ek bag, uski 1-3 photos.", min: 1, max: 1, photos: 3, hook: "guess the price 👀", kind: "photos" },
+  colours: { group: "single", label: "1-2-3 Kaunsa colour", hint: "Ek bag jiske 2-4 colour hon.", min: 1, max: 1, hook: "kaunsa colour lenge?", kind: "colours" },
 };
 
 function captionFor(style, bags) {
@@ -28,6 +49,12 @@ function captionFor(style, bags) {
   }
   if (style === "guess") {
     return [`${first.name || "new bag"}`, "guess kiya? price video ke end mein 👀", "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
+  }
+  if (STYLES[style] && STYLES[style].group === "single") {
+    const price = Number(first.price) > 0 ? `₹${Number(first.price).toLocaleString("en-IN")}` : "";
+    return [`${first.name || "new bag"} 🤍`, "one bag, every look.", "", price, "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags]
+      .filter((line, index) => line !== "" || index === 2 || index === 6)
+      .join("\n");
   }
   const names = bags.map((bag) => `— ${bag.name}`).filter((line) => line.length > 2);
   if (style === "collage" || style === "polaroid") {
@@ -119,12 +146,17 @@ export default function ReelMaker({ API, adminFetch, products }) {
         .slice(0, 4)
         .map((variant) => ({ key: `${product.id}|c|${variant.key}`, product, title: variant.label, options: variant.urls, label: variant.label }));
     }
-    if (rule.kind === "guess") {
+    if (rule.kind === "photos") {
       const product = chosen[0];
       const urls = allUrls(product);
-      return [0, 1, 2]
-        .filter((index) => index < Math.max(1, Math.min(3, urls.length)))
-        .map((index) => ({ key: `${product.id}|g|${index}`, product, title: `Photo ${index + 1}`, options: urls, fallback: urls[index] }));
+      const count = Math.max(1, Math.min(rule.photos || 4, urls.length));
+      return Array.from({ length: count }, (_, index) => ({
+        key: `${product.id}|p|${index}`,
+        product,
+        title: `Photo ${index + 1}`,
+        options: urls,
+        fallback: urls[index],
+      }));
     }
     return chosen.map((product) => ({ key: `${product.id}|b`, product, title: product.name, options: allUrls(product) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -155,10 +187,11 @@ export default function ReelMaker({ API, adminFetch, products }) {
           });
         }
         if (rule.kind === "colours" && next.length < 2) setNotice("⚠️ Is bag ka ek hi colour hai. “Kaunsa colour” ke liye 2-4 colour wala bag chuno.");
-        if (rule.kind === "guess" && next.length && !(next[0].price > 0)) setNotice("⚠️ Is bag ka price khaali hai - Products mein price bharo.");
+        if (style === "guess" && next.length && !(next[0].price > 0)) setNotice("⚠️ Is bag ka price khaali hai - Products mein price bharo.");
+        if (rule.kind === "photos" && next.length < 2 && style !== "guess") setNotice("ℹ️ Is bag ki ek hi photo hai - reel ban jayegi, par 2-4 photos wale bag par zyada achhi lagegi.");
         if (!cancelled) setBags(next);
         // cut the bags out now, so "Reel banao" starts straight away
-        if (!noCutout && style !== "polaroid") await prepareCutouts(next.map((bag) => bag.img));
+        if (!noCutout && !/^polaroid/.test(style)) await prepareCutouts(next.map((bag) => bag.img));
       } catch (error) {
         if (!cancelled) setNotice(`❌ ${error.message || "Photo load nahi hui."} Dobara try karo.`);
       } finally {
@@ -224,6 +257,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
   }
 
   const enough = rule.kind === "bags" ? bags.length >= rule.min : rule.kind === "colours" ? bags.length >= 2 : bags.length >= 1;
+  const group = rule.group;
 
   async function make() {
     if (!enough || busy) return;
@@ -397,8 +431,17 @@ export default function ReelMaker({ API, adminFetch, products }) {
         </div>
 
         <div>
-          <label className="form-label">Reel type</label>
-          <div className="rm-row">{Object.entries(STYLES).map(([value, item]) => chip(style === value, item.label, () => chooseStyle(value), value))}</div>
+          <label className="form-label">Reel kis ki?</label>
+          <div className="rm-row">
+            {chip(group === "single", "👜 Ek bag (uski photos)", () => group !== "single" && chooseStyle("showcase"), "g1")}
+            {chip(group === "multi", "🛍 Kai bags", () => group !== "multi" && chooseStyle("newin"), "g2")}
+          </div>
+          <label className="form-label">Style ({Object.values(STYLES).filter((item) => item.group === group).length})</label>
+          <div className="rm-row">
+            {Object.entries(STYLES)
+              .filter(([, item]) => item.group === group)
+              .map(([value, item]) => chip(style === value, item.label, () => chooseStyle(value), value))}
+          </div>
 
           <label className="form-label">Quality</label>
           <div className="rm-row">
@@ -415,14 +458,14 @@ export default function ReelMaker({ API, adminFetch, products }) {
             <input className="form-input" value={hook} onChange={(event) => { setHook(event.target.value); setVideo(null); }} disabled={busy} />
           </div>
 
-          {style !== "polaroid" ? (
+          {!/^polaroid/.test(style) ? (
             <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
               <input type="checkbox" checked={!noCutout} onChange={(event) => { setNoCutout(!event.target.checked); setVideo(null); }} disabled={busy} />
               Bag ka background hatao (Studio look). Kisi photo mein dikkat ho to tick hatao.
             </label>
           ) : null}
 
-          {style === "newin" || style === "fastcuts" || style === "collage" ? (
+          {style !== "colours" && style !== "guess" ? (
             <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
               <input type="checkbox" checked={showPrice} onChange={(event) => { setShowPrice(event.target.checked); setVideo(null); }} disabled={busy} />
               Har bag ke saath price chhota sa dikhao

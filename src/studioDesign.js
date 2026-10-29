@@ -141,9 +141,24 @@ function makeCutout(img) {
     const queue = new Int32Array(N);
     let head = 0;
     let tail = 0;
-    const globalTol = 70;
-    const stepTol = 9;
-    const edgeStop = 22;
+    // (2026-10-29 v2) LIGHT BAG GUARD: a cream / white / light-grey bag on
+    // a white photo is close to the background colour, and the normal
+    // settings "bite" into it. Measure the bag's own colour in the middle
+    // of the photo; if it is light, every step below becomes careful.
+    const cs = [];
+    for (let y = Math.floor(H * 0.3); y < H * 0.7; y += 2) {
+      for (let x = Math.floor(W * 0.3); x < W * 0.7; x += 2) {
+        const i = (y * W + x) * 4;
+        const dist = colorDistance(data, i, br, bg, bb);
+        if (dist > 12) cs.push(dist);
+      }
+    }
+    const boxCount = Math.ceil((H * 0.4) / 2) * Math.ceil((W * 0.4) / 2);
+    const centerDist = cs.length > boxCount * 0.08 ? median(cs) : 0;
+    const lightBag = centerDist < 95;
+    const globalTol = lightBag ? Math.max(18, Math.min(45, centerDist * 0.55)) : 70;
+    const stepTol = lightBag ? 7 : 9;
+    const edgeStop = lightBag ? 14 : 22;
     for (let x = 0; x < W; x++) {
       for (const y of [0, H - 1]) {
         const p = y * W + x;
@@ -176,7 +191,7 @@ function makeCutout(img) {
         // Old photo shadow = smooth, grey (no colour) and not too dark:
         // allowed further from the background colour than other pixels.
         const chroma = Math.max(data[qi], data[qi + 1], data[qi + 2]) - Math.min(data[qi], data[qi + 1], data[qi + 2]);
-        const shadowLike = chroma < 12 && lum[q] > 110 && grad[q] < 10;
+        const shadowLike = !lightBag && chroma < 12 && lum[q] > 110 && grad[q] < 10;
         if (colorDistance(data, qi, br, bg, bb) > (shadowLike ? 220 : globalTol)) continue;
         isBg[q] = 1;
         queue[tail++] = q;
@@ -187,7 +202,7 @@ function makeCutout(img) {
     //     background (old photo shadow, JPEG fuzz at the bag's foot).
     head = 0;
     tail = 0;
-    const peelTol = 34;
+    const peelTol = lightBag ? Math.max(10, Math.min(22, centerDist * 0.4)) : 34;
     for (let p = 0; p < N; p++) {
       if (isBg[p]) continue;
       const x = p % W;
@@ -205,6 +220,7 @@ function makeCutout(img) {
       const neighbours = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, y > 0 ? p - W : -1, y < H - 1 ? p + W : -1];
       for (const q of neighbours) {
         if (q < 0 || isBg[q]) continue;
+        if (grad[q] > (lightBag ? 10 : 18)) continue; // never walk across an edge
         if (colorDistance(data, q * 4, br, bg, bb) >= peelTol) continue;
         isBg[q] = 1;
         queue[tail++] = q;
@@ -216,7 +232,8 @@ function makeCutout(img) {
     const holeLike = (p, maxGrad) => {
       if (grad[p] > maxGrad) return false;
       const i = p * 4;
-      if (colorDistance(data, i, br, bg, bb) <= 22) return true;
+      if (colorDistance(data, i, br, bg, bb) <= (lightBag ? 12 : 22)) return true;
+      if (lightBag) return false;
       const chroma = Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]);
       const bgLum = br * 0.299 + bg * 0.587 + bb * 0.114;
       return chroma < 10 && lum[p] > 150 && Math.abs(lum[p] - bgLum) < 70;
@@ -247,7 +264,7 @@ function makeCutout(img) {
 
     // 4b. Thin grey fuzz left from the old shadow: peel at most 4 pixels
     //     of light, colourless pixels touching the background.
-    for (let pass = 0; pass < 4; pass++) {
+    for (let pass = 0; pass < (lightBag ? 1 : 4); pass++) {
       const peel = [];
       for (let p = 0; p < N; p++) {
         if (isBg[p]) continue;
@@ -489,7 +506,7 @@ export function drawStudio(ctx, { W, H, img, d }) {
   const storyLayout = Boolean(d.storyLayout) && isStory;
   const reel = storyLayout && Boolean(d.reel); // Reel Maker: bigger bag
   const floorY = reel ? H * 0.69 : storyLayout ? H * 0.63 : H * (isStory ? 0.7 : isSquare ? 0.72 : 0.74);
-  drawBackdrop(ctx, W, H, theme, floorY);
+  if (!d.noBackdrop) drawBackdrop(ctx, W, H, theme, floorY); // Reel sprites: bag only
 
   const ink = theme.dark ? "rgba(245,239,228,0.95)" : "rgba(28,21,13,0.92)";
   const muted = theme.dark ? "rgba(245,239,228,0.7)" : "rgba(28,21,13,0.6)";
