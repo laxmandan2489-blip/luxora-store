@@ -75,18 +75,6 @@ function hashtagsFor(product, name) {
   return [...new Set(tags)].slice(0, 15).join(" ");
 }
 
-function featureLines(product) {
-  const lines = [];
-  const features = Array.isArray(product?.keyFeatures) ? product.keyFeatures : [];
-  for (const feature of features) {
-    const clean = String(feature || "").trim();
-    if (clean) lines.push(clean);
-    if (lines.length >= 3) break;
-  }
-  if (product?.materials && lines.length < 3) lines.push(`Material: ${String(product.materials).trim()}`);
-  if (product?.dimensions && lines.length < 3) lines.push(`Size: ${String(product.dimensions).trim()}`);
-  return lines.slice(0, 3);
-}
 
 // (2026-10-26) All colours of the bag (Products > colours / colour photos),
 // so the caption says e.g. "🎨 3 colours: Black, Tan & Cream".
@@ -124,26 +112,16 @@ const STUDIO_HOOKS = [
   "pairs with a kurti, jeans or a dress.",
 ];
 
-function studioCaption(platform, { product, name, price, mrp, hookIndex, line }) {
+function studioCaption(platform, { product, name, price, hookIndex, line }) {
   const hook = String(line || "").trim() ? `${String(line).trim()}.`.replace(/\.\.$/, ".") : STUDIO_HOOKS[hookIndex % STUDIO_HOOKS.length];
   const priceNumber = Number(price) || 0;
-  const mrpNumber = Number(mrp) || 0;
-  const features = featureLines(product).slice(0, 3);
   const colours = colourList(product);
   const productLink = product?.id ? `${SITE}/product/${product.id}` : SITE;
-  const lines = [name, hook, ""];
-  if (features.length) {
-    for (const feature of features) lines.push(`— ${feature}`);
-    lines.push("");
-  }
-  if (priceNumber > 0) lines.push(`${rupees(priceNumber)}${mrpNumber > priceNumber ? ` (MRP ${rupees(mrpNumber)})` : ""}`);
-  if (colours.length >= 2) {
-    const joined = colours.length === 2 ? `${colours[0]} & ${colours[1]}` : `${colours.slice(0, -1).join(", ")} & ${colours[colours.length - 1]}`;
-    lines.push(`in ${joined.toLowerCase()}${platform === "instagram" ? " — swipe →" : ""}`);
-  }
-  lines.push("free delivery on prepaid orders · cash on delivery available", "");
-  lines.push(platform === "facebook" ? `shop here: ${productLink}?utm_source=facebook` : "shop via the link in bio ✦");
-  lines.push("", hashtagsFor(product, name).split(/\s+/).slice(0, 8).join(" "));
+  const lines = [name, hook];
+  if (priceNumber > 0) lines.push(`${rupees(priceNumber)}${colours.length >= 2 ? ` · ${colours.length} colours${platform === "instagram" ? " →" : ""}` : ""}`);
+  lines.push("free delivery (prepaid) · cod available");
+  lines.push(platform === "facebook" ? `shop: ${productLink}?utm_source=facebook` : "link in bio ✦");
+  lines.push("", hashtagsFor(product, name).split(/\s+/).slice(0, 6).join(" "));
   return lines.join("\n");
 }
 
@@ -156,7 +134,6 @@ export function buildCaption(platform, { product, name, price, mrp, hookIndex, s
   const priceLine = priceNumber > 0
     ? `✨ Just ${rupees(priceNumber)}${off > 0 ? ` (MRP ${rupees(mrpNumber)} · ${off}% OFF)` : ""}`
     : "";
-  const features = featureLines(product);
   const productLink = product?.id ? `${SITE}/product/${product.id}` : SITE;
   const colours = colourList(product);
   const coloursText = colourLine(colours);
@@ -176,21 +153,13 @@ export function buildCaption(platform, { product, name, price, mrp, hookIndex, s
       .join("\n");
   }
 
-  const lines = [`${name} 👜`, "", hook];
-  if (features.length) {
-    lines.push("");
-    for (const feature of features) lines.push(`• ${feature}`);
-  }
-  lines.push("");
-  if (priceLine) lines.push(priceLine);
-  if (coloursText) lines.push(`${coloursText}${platform === "instagram" ? " - swipe karo ➡️" : ""}`);
-  lines.push("🚚 Free Delivery (prepaid) | 💵 COD Available", "🇮🇳 Shipping all over India", "");
-  if (platform === "facebook") {
-    lines.push(`Order now 👉 ${productLink}?utm_source=facebook`);
-  } else {
-    lines.push("Shop now 👉 link in bio");
-  }
-  lines.push("", hashtagsFor(product, name));
+  // (2026-10-29) SHORT caption: 4-5 lines only, like big brand pages.
+  const short = hashtagsFor(product, name).split(/\s+/).slice(0, 6).join(" ");
+  const lines = [`${name} 🤍`, hook];
+  if (priceNumber > 0) lines.push(`${rupees(priceNumber)}${colours.length >= 2 ? ` · ${colours.length} colours${platform === "instagram" ? " ➡️" : ""}` : ""}`);
+  lines.push("Free delivery (prepaid) · COD available");
+  lines.push(platform === "facebook" ? `Shop: ${productLink}?utm_source=facebook` : "Link in bio 🛍");
+  lines.push("", short);
   return lines.join("\n");
 }
 

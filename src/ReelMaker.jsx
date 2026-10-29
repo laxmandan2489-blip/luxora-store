@@ -39,26 +39,17 @@ const STYLES = {
   colours: { group: "single", label: "1-2-3 Kaunsa colour", hint: "Ek bag jiske 2-4 colour hon.", min: 1, max: 1, hook: "kaunsa colour lenge?", kind: "colours" },
 };
 
+// (2026-10-29) Short captions (4-5 lines), like big brand pages.
 function captionFor(style, bags) {
   const first = bags[0] || {};
-  const tags = "#handbags #bagsforwomen #handbagsindia #newin #shrimoh #officebag #bagsofinstagram";
-  if (style === "colours") {
-    return [`${first.name || "new bag"} 🤍`, "kaunsa colour aapka? comment karo 👇", "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
-  }
-  if (style === "guess") {
-    return [`${first.name || "new bag"}`, "guess kiya? price video ke end mein 👀", "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
-  }
-  if (STYLES[style] && STYLES[style].group === "single") {
-    const price = Number(first.price) > 0 ? `₹${Number(first.price).toLocaleString("en-IN")}` : "";
-    return [`${first.name || "new bag"} 🤍`, "one bag, every look.", "", price, "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags]
-      .filter((line, index) => line !== "" || index === 2 || index === 6)
-      .join("\n");
-  }
-  const names = bags.map((bag) => `— ${bag.name}`).filter((line) => line.length > 2);
-  if (style === "collage" || style === "polaroid") {
-    return [style === "collage" ? "which one is you? 🤍" : "my bag edit ✨", "", ...names, "", "comment your pick 👇", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
-  }
-  return [style === "fastcuts" ? "new drop ⚡" : "new in this week ✨", "", ...names, "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
+  const tags = "#handbags #bagsforwomen #handbagsindia #newin #shrimoh #bagsofinstagram";
+  const price = Number(first.price) > 0 ? `₹${Number(first.price).toLocaleString("en-IN")}` : "";
+  const end = ["Free delivery (prepaid) · COD available", "Link in bio 🛍", "", tags];
+  if (style === "colours") return [`${first.name || "New bag"} 🤍`, "Kaunsa colour aapka? Comment karo 👇", ...end].join("\n");
+  if (style === "guess") return [`${first.name || "New bag"} 🤍`, "Guess kiya? Price end mein 👀", ...end].join("\n");
+  if (STYLES[style] && STYLES[style].group === "single") return [`${first.name || "New bag"} 🤍`, price, ...end].filter(Boolean).join("\n").replace("\n#", "\n\n#");
+  const hook = style === "collage" || style === "split" ? "Which one is you? Comment karo 👇" : style === "toplist" ? "This week's top picks 🏆" : "New in this week ✨";
+  return [hook, `${bags.length} new bags · swipe the reel`, ...end].join("\n");
 }
 
 export default function ReelMaker({ API, adminFetch, products }) {
