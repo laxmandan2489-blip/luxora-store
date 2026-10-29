@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { loadFonts, productVariants, absoluteUrl } from "./AdMaker";
-import { STUDIO_BACKGROUNDS } from "./studioDesign";
 import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } from "./reelEngine";
 
 /*
@@ -16,24 +15,23 @@ import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } fr
 //   photos  - ONE bag, choose up to `photos` of its photos
 //   colours - ONE bag, one photo per colour
 const STYLES = {
-  // ---- many bags ----
+  // ---- many bags (10) ----
   newin: { group: "multi", label: "New in", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new in this week", kind: "bags" },
   fastcuts: { group: "multi", label: "⚡ Fast cuts", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new drop", kind: "bags" },
-  colorpop: { group: "multi", label: "🎨 Color pop", hint: "3 se 6 bags.", min: 3, max: 6, hook: "new drop", kind: "bags" },
   swipe: { group: "multi", label: "👉 Swipe", hint: "3 se 6 bags.", min: 3, max: 6, hook: "swipe through ➡️", kind: "bags" },
-  spotlight: { group: "multi", label: "🔦 Spotlight", hint: "3 se 5 bags.", min: 3, max: 5, hook: "in the spotlight", kind: "bags" },
+  bounce: { group: "multi", label: "🏀 Bounce", hint: "3 se 6 bags.", min: 3, max: 6, hook: "just landed ✨", kind: "bags" },
+  filmstrip: { group: "multi", label: "🎞 Film strip", hint: "3 se 6 bags.", min: 3, max: 6, hook: "the new edit 🎞", kind: "bags" },
   magazine: { group: "multi", label: "📰 Magazine", hint: "2 se 5 bags.", min: 2, max: 5, hook: "", kind: "bags" },
   toplist: { group: "multi", label: "🏆 Top picks", hint: "3 se 5 bags.", min: 3, max: 5, hook: "", kind: "bags" },
   split: { group: "multi", label: "↔️ This or that", hint: "2, 4 ya 6 bags (jodiyan).", min: 2, max: 6, hook: "this or that?", kind: "bags" },
   collage: { group: "multi", label: "🖼 Collage", hint: "2 se 4 bags.", min: 2, max: 4, hook: "which one is you?", kind: "bags" },
   polaroid: { group: "multi", label: "📸 Polaroid", hint: "3 se 5 bags.", min: 3, max: 5, hook: "my bag edit ✨", kind: "bags" },
-  // ---- one bag ----
+  // ---- one bag (10) ----
   showcase: { group: "single", label: "✨ Showcase", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "", kind: "photos" },
   details: { group: "single", label: "🔍 Zoom details", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "zoom in 🔍", kind: "photos" },
   angles: { group: "single", label: "🔄 Every angle", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "every angle 🔄", kind: "photos" },
   fastcuts1: { group: "single", label: "⚡ Fast cuts", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "new drop", kind: "photos" },
-  colorpop1: { group: "single", label: "🎨 Color pop", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "new drop", kind: "photos" },
-  spotlight1: { group: "single", label: "🔦 Spotlight", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "in the spotlight", kind: "photos" },
+  bounce1: { group: "single", label: "🏀 Bounce", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "just landed ✨", kind: "photos" },
   magazine1: { group: "single", label: "📰 Magazine", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "", kind: "photos" },
   polaroid1: { group: "single", label: "📸 Polaroid", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "one bag, every look", kind: "photos" },
   grid: { group: "single", label: "🖼 Grid", hint: "Ek bag, uski 2-4 photos.", min: 1, max: 1, photos: 4, hook: "one bag, 4 looks", kind: "photos" },
@@ -67,11 +65,9 @@ export default function ReelMaker({ API, adminFetch, products }) {
   const previewRef = useRef(null);
   const cache = useRef(new Map());
   const [style, setStyle] = useState("newin");
-  const [bg, setBg] = useState("beige");
   const [hook, setHook] = useState(STYLES.newin.hook);
   const [showPrice, setShowPrice] = useState(true);
   const [quality, setQuality] = useState("fast");
-  const [noCutout, setNoCutout] = useState(false);
   const [picks, setPicks] = useState({}); // slot key -> chosen photo url
   const [search, setSearch] = useState("");
   const [pickedIds, setPickedIds] = useState([]);
@@ -191,7 +187,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
         if (rule.kind === "photos" && next.length < 2 && style !== "guess") setNotice("ℹ️ Is bag ki ek hi photo hai - reel ban jayegi, par 2-4 photos wale bag par zyada achhi lagegi.");
         if (!cancelled) setBags(next);
         // cut the bags out now, so "Reel banao" starts straight away
-        if (!noCutout && !/^polaroid/.test(style)) await prepareCutouts(next.map((bag) => bag.img));
+        await prepareCutouts(next.map((bag) => bag.img));
       } catch (error) {
         if (!cancelled) setNotice(`❌ ${error.message || "Photo load nahi hui."} Dobara try karo.`);
       } finally {
@@ -220,7 +216,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
     const off = document.createElement("canvas");
     off.width = REEL_W;
     off.height = REEL_H;
-    drawPreview(off.getContext("2d"), style, bags, { bg, hook, showPrice, noCutout })
+    drawPreview(off.getContext("2d"), style, bags, { hook, showPrice })
       .then(() => {
         if (!stale) ctx.drawImage(off, 0, 0);
       })
@@ -232,7 +228,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
     return () => {
       stale = true;
     };
-  }, [bags, style, bg, hook, showPrice, noCutout, fontsReady, video]);
+  }, [bags, style, hook, showPrice, fontsReady, video]);
 
   function chooseStyle(value) {
     setStyle(value);
@@ -270,7 +266,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
       const result = await renderReel({
         style,
         bags,
-        options: { bg, hook, showPrice, quality, noCutout },
+        options: { hook, showPrice, quality },
         onProgress: (value, text) => {
           setProgress(value);
           if (text) setStage(text);
@@ -448,22 +444,10 @@ export default function ReelMaker({ API, adminFetch, products }) {
             {Object.entries(QUALITIES).map(([value, item]) => chip(quality === value, item.label, () => { setQuality(value); setVideo(null); }, value))}
           </div>
 
-          <label className="form-label">Background</label>
-          <div className="rm-row">
-            {Object.entries(STUDIO_BACKGROUNDS).map(([value, item]) => chip(bg === value, item.label, () => { setBg(value); setVideo(null); }, value))}
-          </div>
-
           <div className="form-group">
             <label className="form-label">Shuru ka text (pehle 2 second)</label>
             <input className="form-input" value={hook} onChange={(event) => { setHook(event.target.value); setVideo(null); }} disabled={busy} />
           </div>
-
-          {!/^polaroid/.test(style) ? (
-            <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-              <input type="checkbox" checked={!noCutout} onChange={(event) => { setNoCutout(!event.target.checked); setVideo(null); }} disabled={busy} />
-              Bag ka background hatao (Studio look). Kisi photo mein dikkat ho to tick hatao.
-            </label>
-          ) : null}
 
           {style !== "colours" && style !== "guess" ? (
             <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
@@ -495,7 +479,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
               );
             })}
           </div>
-          <div className="rm-small">💡 White / plain background wali photo wale bags sabse premium dikhte hain.</div>
+          <div className="rm-small">💡 Reel ka background safed rehta hai aur bag ki photo jaisi hai waisi lagti hai. White background wali photos sabse saaf dikhti hain.</div>
 
           {slots.length ? (
             <div style={{ marginTop: 16 }}>

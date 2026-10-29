@@ -1,68 +1,50 @@
 /*
- * REEL STYLES (2026-10-29 v3) - extra Reel Maker templates
- * ---------------------------------------------------------
+ * REEL STYLES (2026-10-29 v4 - WHITE BACKGROUND) - Reel Maker templates
+ * ----------------------------------------------------------------------
  * Every template is a "plan": { total, busy, previewAt, draw(ctx, t, scale),
  * dispose() }. Items = [{ img, name, label, price, mrp }]:
  *   - many-bag reels: one item per bag
  *   - one-bag reels (options.single): one item per chosen photo of that bag
- * Bags are always the real product photos (cut out onto backdrops or shown
- * as they are). Text never claims anything about material or quality.
+ * The page is always white and the bag photo is used as it is (its own
+ * white background melts into the page - reelPhoto.js). Movement,
+ * transitions and text make it feel edited. Text never claims anything
+ * about material or quality.
  */
 
-import { drawStudio, drawStudioBackdrop, STUDIO_BACKGROUNDS } from "./studioDesign";
-import {
-  REEL_W, REEL_H, SERIF, SANS, easeOut, easeInOut, easeOutBack, makeCanvas, spaced, fitSize, rupees,
-  inkOf, tick, rotateBgs, brandMark, roundRectPath, boldText,
-} from "./reelKit";
+import { REEL_W, REEL_H, SERIF, SANS, easeOut, easeInOut, easeOutBack, makeCanvas, spaced, fitSize, rupees, inkOf, tick, brandMark, roundRectPath } from "./reelKit";
+import { WHITE, PHOTO_CY, photoSprite, drawPhotoInBox } from "./reelPhoto";
 
-const BAG_CY = REEL_H * 0.515; // centre of the bag inside a reel sprite
+const INK = (a = 0.95) => inkOf(WHITE, a);
 
 /* ------------------------------ helpers ----------------------------- */
 
-// Bag only (transparent background), placed like the other reels.
-async function makeSprites(items, OW, OH, options, onStep) {
+export async function makeSprites(items, OW, OH, onStep = () => {}) {
   const byImg = new Map();
   const sprites = [];
-  let busy = 0;
   for (let index = 0; index < items.length; index++) {
     const img = items[index].img;
-    if (!byImg.has(img)) {
-      const sprite = makeCanvas(OW, OH);
-      const result = drawStudio(sprite.getContext("2d"), {
-        W: OW,
-        H: OH,
-        img,
-        d: { studioBg: options.bg || "beige", storyLayout: true, bare: true, reel: true, noBackdrop: true, noCutout: options.noCutout },
-      });
-      if (result && result.cutout === false && !options.noCutout) busy += 1;
-      byImg.set(img, sprite);
-    }
+    if (!byImg.has(img)) byImg.set(img, photoSprite(img, OW, OH).sprite);
     sprites.push(byImg.get(img));
     onStep((index + 1) / items.length);
     await tick();
   }
-  return { sprites, busy, all: [...byImg.values()] };
+  return { sprites, all: [...byImg.values()] };
 }
 
-function backdropCanvas(OW, OH, key) {
-  const canvas = makeCanvas(OW, OH);
-  drawStudioBackdrop(canvas.getContext("2d"), OW, OH, key);
-  return canvas;
-}
-
-// sprite drawn scaled around the bag's centre, moved to (cx, cy)
-function drawSprite(ctx, sprite, { cx = REEL_W / 2, cy = BAG_CY, scale = 1, alpha = 1, rotate = 0 } = {}) {
+// sprite drawn scaled around the photo's centre, moved to (cx, cy)
+export function drawSprite(ctx, sprite, { cx = REEL_W / 2, cy = PHOTO_CY, scale = 1, sx = null, sy = null, alpha = 1, rotate = 0, multiply = false } = {}) {
   if (!sprite || alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
+  if (multiply) ctx.globalCompositeOperation = "multiply";
   ctx.translate(cx, cy);
   if (rotate) ctx.rotate(rotate);
-  ctx.scale(scale, scale);
-  ctx.drawImage(sprite, -REEL_W / 2, -BAG_CY, REEL_W, REEL_H);
+  ctx.scale(sx ?? scale, sy ?? scale);
+  ctx.drawImage(sprite, -REEL_W / 2, -PHOTO_CY, REEL_W, REEL_H);
   ctx.restore();
 }
 
-function italic(ctx, text, y, size, color, alpha = 1, maxWidth = REEL_W * 0.86, x = REEL_W / 2, align = "center") {
+export function italic(ctx, text, y, size, color = INK(), alpha = 1, maxWidth = REEL_W * 0.86, x = REEL_W / 2, align = "center") {
   if (!text || alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
@@ -74,7 +56,7 @@ function italic(ctx, text, y, size, color, alpha = 1, maxWidth = REEL_W * 0.86, 
   ctx.restore();
 }
 
-function caps(ctx, text, y, color, alpha = 1, size = 30, spacing = 6) {
+export function caps(ctx, text, y, color = INK(0.7), alpha = 1, size = 30, spacing = 6) {
   if (!text || alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = Math.min(1, alpha);
@@ -91,7 +73,7 @@ function caps(ctx, text, y, color, alpha = 1, size = 30, spacing = 6) {
   ctx.restore();
 }
 
-function pricePill(ctx, price, y, theme, k = 1) {
+export function pricePill(ctx, price, y, k = 1) {
   if (!(Number(price) > 0) || k <= 0) return;
   const label = rupees(price);
   ctx.save();
@@ -99,10 +81,10 @@ function pricePill(ctx, price, y, theme, k = 1) {
   const width = ctx.measureText(label).width + 56;
   ctx.translate(REEL_W / 2, y);
   ctx.scale(k, k);
-  ctx.fillStyle = inkOf(theme, 0.92);
+  ctx.fillStyle = INK(0.92);
   roundRectPath(ctx, -width / 2, -46, width, 66, 33);
   ctx.fill();
-  ctx.fillStyle = theme.dark ? "#1c150d" : "#f6f1e7";
+  ctx.fillStyle = "#ffffff";
   ctx.textAlign = "center";
   ctx.fillText(label, 0, 2);
   ctx.restore();
@@ -110,37 +92,32 @@ function pricePill(ctx, price, y, theme, k = 1) {
 
 // Single-bag reels: what to write on each photo.
 export const SINGLE_LINES = ["every angle", "the details", "office se dinner tak", "your new favourite"];
-function lineFor(items, index, options, hook) {
+export function lineFor(items, index, options, hook) {
   if (index === 0) return hook;
   if (options.single) return SINGLE_LINES[(index - 1) % SINGLE_LINES.length];
   return items[index].name || "";
 }
 
-function outroLines(options, items) {
+export function drawOutro(ctx, local, options, items, title = null) {
   const first = items[0] || {};
-  return {
-    title: options.single ? first.name || "" : "shop the edit",
-    price: options.single && options.showPrice !== false ? first.price : 0,
-  };
-}
-
-function drawOutro(ctx, theme, local, options, items, title = null) {
-  const lines = outroLines(options, items);
-  italic(ctx, title || lines.title, REEL_H * 0.44, 84, inkOf(theme), easeOut(local / 0.4));
-  if (lines.price > 0) caps(ctx, rupees(lines.price), REEL_H * 0.485, inkOf(theme, 0.75), easeOut((local - 0.2) / 0.4), 34, 4);
-  caps(ctx, "shop via the link in bio", REEL_H * (lines.price > 0 ? 0.53 : 0.49), inkOf(theme, 0.75), easeOut((local - 0.35) / 0.4));
-  caps(ctx, "free delivery (prepaid) · cod available", REEL_H * (lines.price > 0 ? 0.56 : 0.52), inkOf(theme, 0.6), easeOut((local - 0.5) / 0.4), 24, 4);
+  const name = title || (options.single ? first.name || "" : "shop the edit");
+  const price = options.single && options.showPrice !== false ? Number(first.price) || 0 : 0;
+  italic(ctx, name, REEL_H * 0.44, 84, INK(), easeOut(local / 0.4));
+  if (price > 0) caps(ctx, rupees(price), REEL_H * 0.485, INK(0.75), easeOut((local - 0.2) / 0.4), 34, 4);
+  caps(ctx, "shop via the link in bio", REEL_H * (price > 0 ? 0.53 : 0.49), INK(0.75), easeOut((local - 0.35) / 0.4));
+  caps(ctx, "free delivery (prepaid) · cod available", REEL_H * (price > 0 ? 0.56 : 0.52), INK(0.6), easeOut((local - 0.5) / 0.4), 24, 4);
 }
 
 const disposeAll = (list) => () => list.forEach((c) => c && ((c.width = 1), (c.height = 1)));
+const white = (ctx) => {
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, REEL_W, REEL_H);
+};
 
 /* -------------------------------- SWIPE ------------------------------ */
-// Bags glide in like swiping through a carousel, dots at the bottom.
+// Photos glide in like swiping through a carousel, dots underneath.
 export async function swipePlan(items, options, OW, OH, onStep) {
-  const key = options.bg || "beige";
-  const theme = STUDIO_BACKGROUNDS[key];
-  const back = backdropCanvas(OW, OH, key);
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
   const PER = 1.45;
   const MOVE = 0.42;
   const OUTRO = 1.8;
@@ -149,115 +126,42 @@ export async function swipePlan(items, options, OW, OH, onStep) {
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(back, 0, 0, REEL_W, REEL_H);
-    brandMark(ctx, theme);
+    white(ctx);
+    brandMark(ctx, WHITE);
     const end = PER * items.length;
     if (t >= end) {
-      drawOutro(ctx, theme, t - end, options, items);
+      drawOutro(ctx, t - end, options, items);
       return;
     }
     const index = Math.min(items.length - 1, Math.floor(t / PER));
     const local = t - index * PER;
-    const bob = Math.sin(local * 2.2) * 6;
     if (index > 0 && local < MOVE) {
       const p = easeInOut(local / MOVE);
-      const squash = 1 - 0.07 * Math.sin(Math.PI * p);
-      drawSprite(ctx, sprites[index - 1], { cx: REEL_W / 2 - REEL_W * 0.95 * p, scale: squash, rotate: -0.06 * p });
-      drawSprite(ctx, sprites[index], { cx: REEL_W / 2 + REEL_W * 0.95 * (1 - p), scale: squash, rotate: 0.06 * (1 - p) });
+      const squash = 1 - 0.08 * Math.sin(Math.PI * p);
+      drawSprite(ctx, sprites[index - 1], { cx: REEL_W / 2 - REEL_W * 0.95 * p, scale: squash, rotate: -0.05 * p });
+      drawSprite(ctx, sprites[index], { cx: REEL_W / 2 + REEL_W * 0.95 * (1 - p), scale: squash, rotate: 0.05 * (1 - p) });
     } else {
-      drawSprite(ctx, sprites[index], { cy: BAG_CY + bob });
+      drawSprite(ctx, sprites[index], { cy: PHOTO_CY + Math.sin(local * 2.2) * 6 });
     }
     const textIn = easeOut((local - (index > 0 ? MOVE * 0.6 : 0.1)) / 0.35);
-    italic(ctx, lineFor(items, index, options, hook), REEL_H * 0.2, index === 0 ? 86 : 64, inkOf(theme), textIn);
-    if (!options.single && index > 0 && options.showPrice) caps(ctx, rupees(items[index].price), REEL_H * 0.235, inkOf(theme, 0.7), textIn, 30, 4);
-    // dots
+    italic(ctx, lineFor(items, index, options, hook), REEL_H * 0.2, index === 0 ? 86 : 64, INK(), textIn);
+    if (!options.single && index > 0 && options.showPrice) caps(ctx, rupees(items[index].price), REEL_H * 0.235, INK(0.7), textIn, 30, 4);
     const gap = 30;
     const start = REEL_W / 2 - ((items.length - 1) * gap) / 2;
     for (let d = 0; d < items.length; d++) {
       ctx.beginPath();
-      ctx.fillStyle = inkOf(theme, d === index ? 0.9 : 0.25);
-      ctx.arc(start + d * gap, REEL_H * 0.765, d === index ? 9 : 7, 0, Math.PI * 2);
+      ctx.fillStyle = INK(d === index ? 0.9 : 0.2);
+      ctx.arc(start + d * gap, REEL_H * 0.79, d === index ? 9 : 7, 0, Math.PI * 2);
       ctx.fill();
     }
   }
-  return { total, busy, previewAt: 1.0, draw, dispose: disposeAll([...all, back]) };
-}
-
-/* ------------------------------ SPOTLIGHT ---------------------------- */
-// Dark stage, a warm spotlight opens on each bag.
-export async function spotlightPlan(items, options, OW, OH, onStep) {
-  const theme = STUDIO_BACKGROUNDS.noir;
-  const back = backdropCanvas(OW, OH, "noir");
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, { ...options, bg: "noir" }, onStep);
-  const INTRO = 1.2;
-  const PER = 1.65;
-  const OUTRO = 1.8;
-  const total = INTRO + PER * items.length + OUTRO;
-  const gold = (a) => `rgba(222,199,150,${a})`;
-  const hook = String(options.hook || "in the spotlight").trim();
-
-  function light(ctx, radius) {
-    // everything outside the circle goes dark
-    const g = ctx.createRadialGradient(REEL_W / 2, BAG_CY, Math.max(1, radius * 0.45), REEL_W / 2, BAG_CY, Math.max(2, radius));
-    g.addColorStop(0, "rgba(10,8,6,0)");
-    g.addColorStop(1, "rgba(10,8,6,0.9)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, REEL_W, REEL_H);
-    const warm = ctx.createRadialGradient(REEL_W / 2, BAG_CY - 200, 0, REEL_W / 2, BAG_CY - 200, Math.max(2, radius));
-    warm.addColorStop(0, "rgba(255,226,180,0.12)");
-    warm.addColorStop(1, "rgba(255,226,180,0)");
-    ctx.fillStyle = warm;
-    ctx.fillRect(0, 0, REEL_W, REEL_H);
-  }
-
-  function draw(ctx, t, scale) {
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(back, 0, 0, REEL_W, REEL_H);
-    if (t < INTRO) {
-      ctx.fillStyle = "rgba(10,8,6,0.75)";
-      ctx.fillRect(0, 0, REEL_W, REEL_H);
-      // a thin light sweeps across the title
-      const sweep = -300 + (REEL_W + 600) * easeInOut(t / INTRO);
-      const g = ctx.createLinearGradient(sweep - 200, 0, sweep + 200, 0);
-      g.addColorStop(0, "rgba(255,226,180,0)");
-      g.addColorStop(0.5, "rgba(255,226,180,0.16)");
-      g.addColorStop(1, "rgba(255,226,180,0)");
-      ctx.fillStyle = g;
-      ctx.fillRect(0, 0, REEL_W, REEL_H);
-      italic(ctx, hook, REEL_H * 0.46, 96, gold(0.95), easeOut(t / 0.5));
-      brandMark(ctx, theme, easeOut(t / 0.5));
-      return;
-    }
-    const tt = t - INTRO;
-    const end = PER * items.length;
-    if (tt >= end) {
-      ctx.fillStyle = "rgba(10,8,6,0.75)";
-      ctx.fillRect(0, 0, REEL_W, REEL_H);
-      brandMark(ctx, theme);
-      drawOutro(ctx, { dark: true }, tt - end, options, items);
-      return;
-    }
-    const index = Math.min(items.length - 1, Math.floor(tt / PER));
-    const local = tt - index * PER;
-    const open = easeOut(local / 0.45);
-    const close = local > PER - 0.3 ? easeInOut((local - (PER - 0.3)) / 0.3) : 0;
-    const radius = 60 + 760 * open * (1 - close);
-    drawSprite(ctx, sprites[index], { scale: 1 + 0.04 * (local / PER) });
-    light(ctx, radius);
-    brandMark(ctx, theme);
-    const textA = easeOut((local - 0.25) / 0.35) * (1 - close);
-    italic(ctx, options.single ? lineFor(items, index + 1, options, hook) : items[index].name, REEL_H * 0.2, 64, gold(0.95), textA);
-    if (options.showPrice && !options.single) caps(ctx, rupees(items[index].price), REEL_H * 0.235, gold(0.8), textA, 30, 4);
-  }
-  return { total, busy, previewAt: INTRO + 0.9, draw, dispose: disposeAll([...all, back]) };
+  return { total, busy: 0, previewAt: 1.0, draw, dispose: disposeAll(all) };
 }
 
 /* ------------------------------ MAGAZINE ----------------------------- */
-// Each bag becomes a fashion magazine cover; covers flip like pages.
+// Each photo is a clean white magazine cover; covers flip like pages.
 export async function magazinePlan(items, options, OW, OH, onStep) {
-  const keys = rotateBgs(options.bg || "blush", items.length);
-  const backs = keys.map((key) => backdropCanvas(OW, OH, key));
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
   const PER = 1.9;
   const FLIP = 0.36;
   const OUTRO = 1.8;
@@ -265,43 +169,38 @@ export async function magazinePlan(items, options, OW, OH, onStep) {
   const month = new Date().toLocaleString("en-US", { month: "short" }).toUpperCase();
 
   function cover(ctx, index) {
-    const theme = STUDIO_BACKGROUNDS[keys[index]];
-    ctx.drawImage(backs[index], 0, 0, REEL_W, REEL_H);
-    // masthead
+    white(ctx);
     ctx.save();
-    ctx.fillStyle = inkOf(theme, 0.92);
+    ctx.fillStyle = INK(0.94);
     ctx.textAlign = "center";
     fitSize(ctx, "SHRIMOH", "600", 250, SERIF, REEL_W * 0.92);
     ctx.fillText("SHRIMOH", REEL_W / 2, REEL_H * 0.29);
-    ctx.restore();
-    ctx.save();
-    ctx.fillStyle = inkOf(theme, 0.75);
+    ctx.fillStyle = INK(0.7);
     ctx.font = `600 26px ${SANS}`;
     ctx.textAlign = "left";
     ctx.fillText(`ISSUE ${String(index + 1).padStart(2, "0")} · ${month}`, 70, REEL_H * 0.155);
     ctx.textAlign = "right";
     ctx.fillText(options.single ? "ONE BAG, EVERY LOOK" : "THE NEW EDIT", REEL_W - 70, REEL_H * 0.155);
     ctx.restore();
-    // bag overlaps the masthead a little, like a real cover
-    drawSprite(ctx, sprites[index], { cy: BAG_CY - REEL_H * 0.045, scale: 1.04 });
-    // cover lines
+    // multiply: the photo's white melts away, the bag sits over the title
+    drawSprite(ctx, sprites[index], { cy: PHOTO_CY + REEL_H * 0.02, scale: 1.02, multiply: true });
     const item = items[index];
     const title = options.single ? (index === 0 ? item.name : SINGLE_LINES[(index - 1) % SINGLE_LINES.length]) : item.name;
-    italic(ctx, title, REEL_H * 0.735, 58, inkOf(theme), 1, REEL_W * 0.6, 70, "left");
+    italic(ctx, title, REEL_H * 0.8, 56, INK(), 1, REEL_W * 0.6, 70, "left");
     if (options.showPrice !== false && Number(item.price) > 0) {
       ctx.save();
-      ctx.fillStyle = inkOf(theme, 0.8);
+      ctx.fillStyle = INK(0.8);
       ctx.font = `600 32px ${SANS}`;
       ctx.textAlign = "left";
-      ctx.fillText(rupees(item.price), 72, REEL_H * 0.765);
+      ctx.fillText(rupees(item.price), 72, REEL_H * 0.83);
       ctx.restore();
     }
     ctx.save();
-    ctx.fillStyle = inkOf(theme, 0.7);
+    ctx.fillStyle = INK(0.65);
     ctx.font = `600 22px ${SANS}`;
     ctx.textAlign = "right";
-    ctx.fillText("FREE DELIVERY (PREPAID)", REEL_W - 70, REEL_H * 0.735);
-    ctx.fillText("COD AVAILABLE", REEL_W - 70, REEL_H * 0.755);
+    ctx.fillText("FREE DELIVERY (PREPAID)", REEL_W - 70, REEL_H * 0.8);
+    ctx.fillText("COD AVAILABLE", REEL_W - 70, REEL_H * 0.82);
     ctx.restore();
   }
 
@@ -309,21 +208,18 @@ export async function magazinePlan(items, options, OW, OH, onStep) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
     const end = PER * items.length;
     if (t >= end) {
-      const key = keys[keys.length - 1];
-      const theme = STUDIO_BACKGROUNDS[key];
-      ctx.drawImage(backs[backs.length - 1], 0, 0, REEL_W, REEL_H);
-      brandMark(ctx, theme);
-      drawOutro(ctx, theme, t - end, options, items, options.single ? null : "read it, love it, own it");
+      white(ctx);
+      brandMark(ctx, WHITE);
+      drawOutro(ctx, t - end, options, items, options.single ? null : "read it, love it, own it");
       return;
     }
     const index = Math.min(items.length - 1, Math.floor(t / PER));
     const local = t - index * PER;
     if (index > 0 && local < FLIP) {
-      // page flip: old cover narrows away, new cover opens
       const p = local / FLIP;
       const which = p < 0.5 ? index - 1 : index;
       const sx = p < 0.5 ? 1 - easeInOut(p * 2) : easeInOut((p - 0.5) * 2);
-      ctx.fillStyle = "#1c150d";
+      ctx.fillStyle = "#ece9e4";
       ctx.fillRect(0, 0, REEL_W, REEL_H);
       ctx.save();
       ctx.translate(REEL_W / 2, 0);
@@ -331,10 +227,8 @@ export async function magazinePlan(items, options, OW, OH, onStep) {
       ctx.translate(-REEL_W / 2, 0);
       cover(ctx, which);
       ctx.restore();
-      ctx.setTransform(scale, 0, 0, scale, 0, 0);
       return;
     }
-    // slow push-in on the cover
     const z = 1 + 0.035 * easeInOut(local / PER);
     ctx.save();
     ctx.translate(REEL_W / 2, REEL_H / 2);
@@ -343,7 +237,7 @@ export async function magazinePlan(items, options, OW, OH, onStep) {
     cover(ctx, index);
     ctx.restore();
   }
-  return { total, busy, previewAt: 0.8, draw, dispose: disposeAll([...all, ...backs]) };
+  return { total, busy: 0, previewAt: 0.8, draw, dispose: disposeAll(all) };
 }
 
 /* -------------------------------- SPLIT ------------------------------ */
@@ -352,34 +246,30 @@ export async function splitPlan(items, options, OW, OH, onStep) {
   const list = items.length % 2 ? [...items, items[0]] : items;
   const pairs = [];
   for (let index = 0; index < list.length; index += 2) pairs.push([list[index], list[index + 1]]);
-  const keys = rotateBgs(options.bg || "beige", 4);
-  const backs = [backdropCanvas(OW, OH, keys[0]), backdropCanvas(OW, OH, keys[1])];
-  const { sprites, busy, all } = await makeSprites(list, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(list, OW, OH, onStep);
   const PER = 2.1;
   const IN = 0.5;
   const OUTRO = 1.8;
   const total = PER * pairs.length + OUTRO;
   const hook = String(options.hook || "this or that?").trim();
-  const themeL = STUDIO_BACKGROUNDS[keys[0]];
-  const themeR = STUDIO_BACKGROUNDS[keys[1]];
 
   function half(ctx, side, sprite, item, offsetY, number) {
     const x = side === 0 ? 0 : REEL_W / 2;
-    const theme = side === 0 ? themeL : themeR;
     ctx.save();
     ctx.beginPath();
     ctx.rect(x, 0, REEL_W / 2, REEL_H);
     ctx.clip();
     ctx.translate(0, offsetY);
-    ctx.drawImage(backs[side], 0, 0, REEL_W, REEL_H);
-    drawSprite(ctx, sprite, { cx: x + REEL_W / 4, scale: 0.6 });
-    ctx.fillStyle = inkOf(theme, 0.9);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(x, 0, REEL_W / 2, REEL_H);
+    drawSprite(ctx, sprite, { cx: x + REEL_W / 4, scale: 0.5 });
+    ctx.fillStyle = INK(0.9);
     ctx.textAlign = "center";
     ctx.font = `600 120px ${SERIF}`;
     ctx.fillText(String(number), x + REEL_W / 4, REEL_H * 0.36);
-    if (!options.single) italic(ctx, item.name, REEL_H * 0.68, 40, inkOf(theme), 1, REEL_W * 0.44, x + REEL_W / 4);
+    if (!options.single) italic(ctx, item.name, REEL_H * 0.68, 40, INK(), 1, REEL_W * 0.44, x + REEL_W / 4);
     if (options.showPrice && Number(item.price) > 0) {
-      ctx.fillStyle = inkOf(theme, 0.7);
+      ctx.fillStyle = INK(0.7);
       ctx.font = `600 28px ${SANS}`;
       ctx.fillText(rupees(item.price), x + REEL_W / 4, REEL_H * 0.71);
     }
@@ -388,38 +278,33 @@ export async function splitPlan(items, options, OW, OH, onStep) {
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    white(ctx);
     const end = PER * pairs.length;
     if (t >= end) {
-      ctx.drawImage(backs[0], 0, 0, REEL_W, REEL_H);
-      brandMark(ctx, themeL);
-      drawOutro(ctx, themeL, t - end, options, items, "comment 1 or 2 👇");
+      brandMark(ctx, WHITE);
+      drawOutro(ctx, t - end, options, items, "comment 1 or 2 👇");
       return;
     }
     const index = Math.min(pairs.length - 1, Math.floor(t / PER));
     const local = t - index * PER;
     const enter = easeOut(local / IN);
     const leave = local > PER - 0.3 ? easeInOut((local - (PER - 0.3)) / 0.3) : 0;
-    ctx.drawImage(backs[0], 0, 0, REEL_W, REEL_H);
     const [a, b] = pairs[index];
     half(ctx, 0, sprites[index * 2], a, -REEL_H * (1 - enter) + REEL_H * leave, 1);
     half(ctx, 1, sprites[index * 2 + 1], b, REEL_H * (1 - enter) - REEL_H * leave, 2);
-    // thin divider + title band
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillRect(REEL_W / 2 - 1, REEL_H * 0.3, 2, REEL_H * 0.45 * enter);
-    italic(ctx, hook, REEL_H * 0.2, 80, inkOf(themeL), easeOut((t - 0.2) / 0.4));
-    brandMark(ctx, themeL);
+    ctx.fillStyle = INK(0.15);
+    ctx.fillRect(REEL_W / 2 - 1, REEL_H * 0.3, 2, REEL_H * 0.42 * enter * (1 - leave));
+    italic(ctx, hook, REEL_H * 0.2, 80, INK(), easeOut((t - 0.2) / 0.4));
+    brandMark(ctx, WHITE);
   }
-  return { total, busy, previewAt: 1.0, draw, dispose: disposeAll([...all, ...backs]) };
+  return { total, busy: 0, previewAt: 1.0, draw, dispose: disposeAll(all) };
 }
 
 /* ------------------------------ TOP LIST ----------------------------- */
 // "top 5 picks": big outline numbers count down behind each bag.
 export async function topListPlan(items, options, OW, OH, onStep) {
-  const key = options.bg || "beige";
-  const theme = STUDIO_BACKGROUNDS[key];
-  const back = backdropCanvas(OW, OH, key);
   const order = [...items].reverse();
-  const { sprites, busy, all } = await makeSprites(order, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(order, OW, OH, onStep);
   const INTRO = 1.3;
   const PER = 1.55;
   const OUTRO = 1.8;
@@ -428,188 +313,209 @@ export async function topListPlan(items, options, OW, OH, onStep) {
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(back, 0, 0, REEL_W, REEL_H);
-    brandMark(ctx, theme);
+    white(ctx);
+    brandMark(ctx, WHITE);
     if (t < INTRO) {
       const k = easeOutBack(t / 0.5);
       ctx.save();
       ctx.translate(REEL_W / 2, REEL_H * 0.45);
       ctx.scale(0.7 + 0.3 * k, 0.7 + 0.3 * k);
-      italic(ctx, hook, 0, 104, inkOf(theme), Math.min(1, t * 3), REEL_W * 0.86, 0);
+      italic(ctx, hook, 0, 104, INK(), Math.min(1, t * 3), REEL_W * 0.86, 0);
       ctx.restore();
-      caps(ctx, "this week at shrimoh", REEL_H * 0.5, inkOf(theme, 0.7), easeOut((t - 0.4) / 0.4));
+      caps(ctx, "this week at shrimoh", REEL_H * 0.5, INK(0.7), easeOut((t - 0.4) / 0.4));
       return;
     }
     const tt = t - INTRO;
     const end = PER * order.length;
     if (tt >= end) {
-      drawOutro(ctx, theme, tt - end, options, items, "which is your no. 1?");
+      drawOutro(ctx, tt - end, options, items, "which is your no. 1?");
       return;
     }
     const index = Math.min(order.length - 1, Math.floor(tt / PER));
     const local = tt - index * PER;
     const number = order.length - index;
-    // giant outline number
     const k = easeOut(local / 0.45);
     ctx.save();
-    ctx.translate(REEL_W / 2, REEL_H * 0.66);
+    ctx.translate(REEL_W / 2, REEL_H * 0.68);
     ctx.scale(1.25 - 0.25 * k, 1.25 - 0.25 * k);
     ctx.globalAlpha = 0.9 * k;
-    ctx.strokeStyle = inkOf(theme, 0.22);
+    ctx.strokeStyle = INK(0.14);
     ctx.lineWidth = 5;
     ctx.textAlign = "center";
     ctx.font = `600 900px ${SERIF}`;
     ctx.strokeText(String(number), 0, 0);
     ctx.restore();
     const up = easeOut((local - 0.1) / 0.45);
-    drawSprite(ctx, sprites[index], { cy: BAG_CY + 90 * (1 - up), alpha: up });
-    caps(ctx, `no. ${number}`, REEL_H * 0.165, inkOf(theme, 0.7), up, 30, 6);
-    italic(ctx, order[index].name, REEL_H * 0.205, 62, inkOf(theme), up);
-    if (options.showPrice) caps(ctx, rupees(order[index].price), REEL_H * 0.237, inkOf(theme, 0.7), up, 30, 4);
+    drawSprite(ctx, sprites[index], { cy: PHOTO_CY + 90 * (1 - up), alpha: up, multiply: true });
+    caps(ctx, `no. ${number}`, REEL_H * 0.165, INK(0.7), up, 30, 6);
+    italic(ctx, order[index].name, REEL_H * 0.205, 62, INK(), up);
+    if (options.showPrice) caps(ctx, rupees(order[index].price), REEL_H * 0.237, INK(0.7), up, 30, 4);
   }
-  return { total, busy, previewAt: INTRO + 0.9, draw, dispose: disposeAll([...all, back]) };
+  return { total, busy: 0, previewAt: INTRO + 0.9, draw, dispose: disposeAll(all) };
 }
 
-/* ------------------------------ COLOR POP ---------------------------- */
-// Bold colour for each bag, moving SHRIMOH text behind, circle wipes.
-const POP_COLORS = ["#c96f4a", "#e3c46f", "#9fbcd6", "#97a886", "#e3aea4", "#6e4b3b"];
-function isLightHex(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  const r = (n >> 16) & 255;
-  const g = (n >> 8) & 255;
-  const b = n & 255;
-  return 0.299 * r + 0.587 * g + 0.114 * b > 165;
+/* ------------------------------- BOUNCE ------------------------------ */
+// Each bag drops in with a playful bounce and a soft shadow.
+const bounceEase = (x) => {
+  const t = Math.min(1, Math.max(0, x));
+  const n = 7.5625;
+  const d = 2.75;
+  if (t < 1 / d) return n * t * t;
+  if (t < 2 / d) return n * (t - 1.5 / d) * (t - 1.5 / d) + 0.75;
+  if (t < 2.5 / d) return n * (t - 2.25 / d) * (t - 2.25 / d) + 0.9375;
+  return n * (t - 2.625 / d) * (t - 2.625 / d) + 0.984375;
+};
+
+export async function bouncePlan(items, options, OW, OH, onStep) {
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
+  const PER = 1.5;
+  const DROP = 0.75;
+  const OUTRO = 1.8;
+  const total = PER * items.length + OUTRO;
+  const hook = String(options.hook || "just landed ✨").trim();
+  const ground = REEL_H * 0.78;
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    white(ctx);
+    brandMark(ctx, WHITE);
+    const end = PER * items.length;
+    if (t >= end) {
+      drawOutro(ctx, t - end, options, items);
+      return;
+    }
+    const index = Math.min(items.length - 1, Math.floor(t / PER));
+    const local = t - index * PER;
+    const fall = bounceEase(local / DROP);
+    const leave = local > PER - 0.28 ? easeInOut((local - (PER - 0.28)) / 0.28) : 0;
+    const x = local / DROP;
+    const impact = x > 0.36 && x < 0.55 ? Math.sin(((x - 0.36) / 0.19) * Math.PI) : 0;
+    const cy = PHOTO_CY - (1 - fall) * 1300 - leave * 1500;
+    const shadowK = Math.max(0, fall * (1 - leave));
+    ctx.save();
+    ctx.translate(REEL_W / 2, ground);
+    ctx.scale(1, 0.12);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 360);
+    g.addColorStop(0, `rgba(0,0,0,${0.2 * shadowK})`);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 360, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    drawSprite(ctx, sprites[index], { cy, sx: 1 + 0.06 * impact, sy: 1 - 0.07 * impact });
+    const text = lineFor(items, index, options, hook);
+    const pop = easeOutBack((local - 0.35) / 0.35) * (1 - leave);
+    if (pop > 0.01) {
+      ctx.save();
+      ctx.translate(REEL_W / 2, REEL_H * 0.2);
+      ctx.scale(pop, pop);
+      italic(ctx, text, 0, index === 0 ? 86 : 64, INK(), Math.min(1, pop * 1.5), REEL_W * 0.86, 0);
+      ctx.restore();
+    }
+    if (options.showPrice && (!options.single || index === 0)) pricePill(ctx, items[index].price, REEL_H * 0.238, easeOutBack((local - 0.5) / 0.35) * (1 - leave));
+  }
+  return { total, busy: 0, previewAt: 1.0, draw, dispose: disposeAll(all) };
 }
 
-export async function colorPopPlan(items, options, OW, OH, onStep) {
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, options, onStep);
-  const INTRO = 0.9;
-  const PER = 1.2;
-  const WIPE = 0.36;
-  const OUTRO = 1.7;
-  const total = INTRO + PER * items.length + OUTRO;
-  const hook = String(options.hook || "new drop").trim().toUpperCase();
-  const colorFor = (i) => POP_COLORS[i % POP_COLORS.length];
-  const inkFor = (hex, a = 1) => (isLightHex(hex) ? `rgba(28,21,13,${a})` : `rgba(255,255,255,${a})`);
+/* ------------------------------ FILM STRIP --------------------------- */
+// A film strip of all the bags rolls by, then each frame zooms to full.
+export async function filmStripPlan(items, options, OW, OH, onStep) {
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
+  const k = OW / REEL_W;
+  const FW = 330;
+  const FH = 420;
+  const thumbs = [];
+  for (const item of items) {
+    const c = makeCanvas(Math.round(FW * k), Math.round(FH * k));
+    const x = c.getContext("2d");
+    x.scale(k, k);
+    x.fillStyle = "#fff";
+    x.fillRect(0, 0, FW, FH);
+    drawPhotoInBox(x, item.img, { x: 12, y: 12, w: FW - 24, h: FH - 24 });
+    thumbs.push(c);
+    await tick();
+  }
+  const ROLL = 2.2;
+  const PER = 1.3;
+  const OUTRO = 1.8;
+  const total = ROLL + PER * items.length + OUTRO;
+  const hook = String(options.hook || "the new edit 🎞").trim();
+  const stripY = REEL_H * 0.5;
 
-  function scene(ctx, i, t) {
-    // i = -1 intro, items.length = outro
-    const color = i < 0 ? colorFor(0) : i >= items.length ? "#1c150d" : colorFor(i + 1);
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, REEL_W, REEL_H);
-    // moving marquee rows
+  function strip(ctx, offset, alpha) {
     ctx.save();
-    ctx.font = `600 170px ${SANS}`;
-    ctx.fillStyle = inkFor(color, 0.13);
-    ctx.textBaseline = "middle";
-    const word = "SHRIMOH · ";
-    const w = ctx.measureText(word).width;
-    [0.36, 0.52, 0.68].forEach((row, r) => {
-      const dir = r % 2 ? 1 : -1;
-      let x = ((t * 240 * dir) % w) - w;
-      while (x < REEL_W + w) {
-        ctx.fillText(word, x, REEL_H * row);
-        x += w;
-      }
-    });
-    ctx.restore();
-    ctx.save();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = inkFor(color, 0.95);
-    ctx.textBaseline = "alphabetic";
-    ctx.font = `600 ${Math.round(REEL_W * 0.026)}px ${SERIF}`;
-    spaced(ctx, "SHRIMOH", REEL_W / 2, 270, REEL_W * 0.017);
-    ctx.restore();
-    if (i < 0) {
-      const k = easeOutBack(t / 0.4);
-      ctx.save();
-      ctx.translate(REEL_W / 2, REEL_H * 0.5);
-      ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
-      boldText(ctx, hook, 0, 50, 170, inkFor(color));
-      ctx.restore();
-      return;
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#1c150d";
+    ctx.fillRect(0, stripY - FH / 2 - 50, REEL_W, FH + 100);
+    ctx.fillStyle = "#ffffff";
+    for (let x = (offset % 60) - 60; x < REEL_W + 60; x += 60) {
+      roundRectPath(ctx, x, stripY - FH / 2 - 38, 30, 18, 4);
+      ctx.fill();
+      roundRectPath(ctx, x, stripY + FH / 2 + 20, 30, 18, 4);
+      ctx.fill();
     }
-    if (i >= items.length) {
-      const k = easeOutBack(t / 0.4);
-      ctx.save();
-      ctx.translate(REEL_W / 2, REEL_H * 0.46);
-      ctx.scale(0.7 + 0.3 * k, 0.7 + 0.3 * k);
-      boldText(ctx, "LINK IN BIO", 0, 0, 130, inkFor(color));
-      ctx.restore();
-      caps(ctx, "free delivery (prepaid) · cod available", REEL_H * 0.51, inkFor(color, 0.8), easeOut((t - 0.3) / 0.4), 28, 5);
-      return;
+    const span = FW + 30;
+    const count = Math.ceil(REEL_W / span) + 3;
+    const first = Math.floor(-offset / span) - 1;
+    for (let n = first; n < first + count; n++) {
+      const x = n * span + offset;
+      const thumb = thumbs[((n % thumbs.length) + thumbs.length) % thumbs.length];
+      ctx.drawImage(thumb, x, stripY - FH / 2, FW, FH);
     }
-    const pop = easeOutBack(t / 0.4);
-    drawSprite(ctx, sprites[i], { scale: 0.92 + 0.08 * pop });
-    const textIn = easeOut((t - 0.1) / 0.3);
-    const label = options.single ? (i === 0 ? items[i].name : SINGLE_LINES[(i - 1) % SINGLE_LINES.length]) : items[i].name;
-    ctx.save();
-    ctx.globalAlpha = textIn;
-    ctx.translate(-60 * (1 - textIn), 0);
-    boldText(ctx, String(label || "").toUpperCase(), REEL_W / 2, REEL_H * 0.2, 62, inkFor(color));
     ctx.restore();
-    if (options.showPrice && Number(items[i].price) > 0 && (!options.single || i === 0)) {
-      pricePill(ctx, items[i].price, REEL_H * 0.235, { dark: !isLightHex(color) }, easeOutBack((t - 0.2) / 0.3));
-    }
   }
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    let i;
-    let start;
-    if (t < INTRO) {
-      i = -1;
-      start = 0;
-    } else if (t < INTRO + PER * items.length) {
-      i = Math.floor((t - INTRO) / PER);
-      start = INTRO + i * PER;
-    } else {
-      i = items.length;
-      start = INTRO + PER * items.length;
+    white(ctx);
+    brandMark(ctx, WHITE);
+    if (t < ROLL) {
+      strip(ctx, -t * 520, 1);
+      italic(ctx, hook, REEL_H * 0.2, 88, INK(), easeOut(t / 0.4));
+      return;
     }
-    const local = t - start;
-    if (i >= 0 && local < WIPE) {
-      // circle wipe from the centre
-      scene(ctx, i - 1, t - (i === 0 ? 0 : start - PER) || 0);
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(REEL_W / 2, REEL_H / 2, 1200 * easeInOut(local / WIPE), 0, Math.PI * 2);
-      ctx.clip();
-      scene(ctx, i, local);
-      ctx.restore();
-    } else {
-      scene(ctx, i, local);
+    const tt = t - ROLL;
+    const end = PER * items.length;
+    if (tt >= end) {
+      drawOutro(ctx, tt - end, options, items);
+      return;
     }
+    const index = Math.min(items.length - 1, Math.floor(tt / PER));
+    const local = tt - index * PER;
+    if (index === 0 && local < 0.45) strip(ctx, -ROLL * 520 - local * 200, 1 - easeOut(local / 0.45));
+    const grow = easeOutBack(local / 0.45);
+    drawSprite(ctx, sprites[index], { scale: 0.45 + 0.55 * grow, alpha: Math.min(1, local / 0.2) });
+    const textIn = easeOut((local - 0.25) / 0.3);
+    italic(ctx, index === 0 ? items[0].name : lineFor(items, index, options, hook), REEL_H * 0.2, 64, INK(), textIn);
+    if (!options.single && options.showPrice) caps(ctx, rupees(items[index].price), REEL_H * 0.235, INK(0.7), textIn, 30, 4);
   }
-  return { total, busy, previewAt: INTRO + 0.7, draw, dispose: disposeAll(all) };
+  return { total, busy: 0, previewAt: 1.0, draw, dispose: disposeAll([...all, ...thumbs]) };
 }
 
 /* ------------------------- DETAILS (one bag) ------------------------- */
 // Slow zoom into different parts of the bag, photo after photo.
 export async function detailsPlan(items, options, OW, OH, onStep) {
-  const key = options.bg || "stone";
-  const theme = STUDIO_BACKGROUNDS[key];
-  const back = backdropCanvas(OW, OH, key);
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
   const PER = 1.9;
   const OUTRO = 1.8;
   const total = PER * items.length + OUTRO;
   const focus = [
-    [REEL_W / 2, REEL_H * 0.5, 1.0],
-    [REEL_W / 2, REEL_H * 0.38, 1.7],
-    [REEL_W / 2, REEL_H * 0.6, 1.6],
-    [REEL_W * 0.42, REEL_H * 0.5, 1.7],
-    [REEL_W * 0.58, REEL_H * 0.45, 1.6],
+    [REEL_W / 2, PHOTO_CY, 1.0],
+    [REEL_W / 2, PHOTO_CY - 200, 1.7],
+    [REEL_W / 2, PHOTO_CY + 180, 1.6],
+    [REEL_W * 0.42, PHOTO_CY, 1.7],
+    [REEL_W * 0.58, PHOTO_CY - 80, 1.6],
   ];
   const words = [String(options.hook || "zoom in 🔍").trim(), "closer look", "the details", "the finish", "up close"];
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(back, 0, 0, REEL_W, REEL_H);
+    white(ctx);
     const end = PER * items.length;
     if (t >= end) {
-      brandMark(ctx, theme);
-      drawOutro(ctx, theme, t - end, options, items);
+      brandMark(ctx, WHITE);
+      drawOutro(ctx, t - end, options, items);
       return;
     }
     const index = Math.min(items.length - 1, Math.floor(t / PER));
@@ -623,23 +529,26 @@ export async function detailsPlan(items, options, OW, OH, onStep) {
     ctx.translate(-fx, -fy);
     drawSprite(ctx, sprites[index]);
     ctx.restore();
-    if (local < 0.12 && index > 0) {
-      ctx.fillStyle = `rgba(255,255,255,${0.6 * (1 - local / 0.12)})`;
+    if (local < 0.14 && index > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.85 * (1 - local / 0.14)})`;
       ctx.fillRect(0, 0, REEL_W, REEL_H);
     }
-    brandMark(ctx, theme);
-    italic(ctx, words[index % words.length], REEL_H * 0.2, index === 0 ? 88 : 66, inkOf(theme), easeOut((local - 0.1) / 0.35));
+    // top stays white so the words are always clear
+    const band = ctx.createLinearGradient(0, REEL_H * 0.1, 0, REEL_H * 0.27);
+    band.addColorStop(0, "rgba(255,255,255,1)");
+    band.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = band;
+    ctx.fillRect(0, 0, REEL_W, REEL_H * 0.27);
+    brandMark(ctx, WHITE);
+    italic(ctx, words[index % words.length], REEL_H * 0.2, index === 0 ? 88 : 66, INK(), easeOut((local - 0.1) / 0.35));
   }
-  return { total, busy, previewAt: 1.2, draw, dispose: disposeAll([...all, back]) };
+  return { total, busy: 0, previewAt: 1.2, draw, dispose: disposeAll(all) };
 }
 
 /* -------------------------- ANGLES (one bag) ------------------------- */
 // Stop-motion: photos flick fast like turning the bag around, then rest.
 export async function anglesPlan(items, options, OW, OH, onStep) {
-  const key = options.bg || "beige";
-  const theme = STUDIO_BACKGROUNDS[key];
-  const back = backdropCanvas(OW, OH, key);
-  const { sprites, busy, all } = await makeSprites(items, OW, OH, options, onStep);
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
   const FLICK = 0.3;
   const SPIN = Math.max(2.4, FLICK * items.length * 2);
   const HOLD = 1.7;
@@ -649,25 +558,295 @@ export async function anglesPlan(items, options, OW, OH, onStep) {
 
   function draw(ctx, t, scale) {
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    ctx.drawImage(back, 0, 0, REEL_W, REEL_H);
-    brandMark(ctx, theme);
+    white(ctx);
+    brandMark(ctx, WHITE);
     if (t < SPIN) {
       const step = Math.floor(t / FLICK);
       const local = t - step * FLICK;
-      const bounce = 1.04 - 0.04 * easeOut(local / 0.15);
-      drawSprite(ctx, sprites[step % sprites.length], { scale: bounce });
-      italic(ctx, hook, REEL_H * 0.2, 88, inkOf(theme), easeOut(t / 0.35));
+      drawSprite(ctx, sprites[step % sprites.length], { scale: 1.04 - 0.04 * easeOut(local / 0.15) });
+      italic(ctx, hook, REEL_H * 0.2, 88, INK(), easeOut(t / 0.35));
       return;
     }
     if (t < SPIN + HOLD) {
       const local = t - SPIN;
       drawSprite(ctx, sprites[0], { scale: 1 + 0.05 * easeInOut(local / HOLD) });
-      const a = easeOut(local / 0.35);
-      italic(ctx, items[0].name, REEL_H * 0.2, 66, inkOf(theme), a);
-      if (options.showPrice !== false && Number(items[0].price) > 0) pricePill(ctx, items[0].price, REEL_H * 0.237, theme, easeOutBack((local - 0.15) / 0.35));
+      italic(ctx, items[0].name, REEL_H * 0.2, 66, INK(), easeOut(local / 0.35));
+      if (options.showPrice !== false) pricePill(ctx, items[0].price, REEL_H * 0.237, easeOutBack((local - 0.15) / 0.35));
       return;
     }
-    drawOutro(ctx, theme, t - SPIN - HOLD, options, items, "which side do you like? 👀");
+    drawOutro(ctx, t - SPIN - HOLD, options, items, "which side do you like? 👀");
   }
-  return { total, busy, previewAt: SPIN + 0.6, draw, dispose: disposeAll([...all, back]) };
+  return { total, busy: 0, previewAt: SPIN + 0.6, draw, dispose: disposeAll(all) };
+}
+
+/* ------------------------------ FAST CUTS ---------------------------- */
+// Quick beat-style cuts: whip in from alternating sides, punch zoom,
+// progress bar on top, bold words.
+export async function fastCutsPlan(items, options, OW, OH, onStep) {
+  const { sprites, all } = await makeSprites(items, OW, OH, onStep);
+  const INTRO = 1.0;
+  const CUT = 0.8;
+  const OUTRO = 1.7;
+  const total = INTRO + CUT * items.length + OUTRO;
+  const words = String(options.hook || "new drop").trim().toUpperCase().split(/\s+/).filter(Boolean);
+
+  function bigWord(ctx, text, x, y, size, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, alpha);
+    ctx.fillStyle = INK();
+    ctx.textAlign = "center";
+    fitSize(ctx, text, "600", size, SANS, REEL_W * 0.86);
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    white(ctx);
+    brandMark(ctx, WHITE);
+    if (t < INTRO) {
+      const lineH = 150;
+      const top = REEL_H * 0.47 - ((words.length - 1) * lineH) / 2;
+      words.forEach((word, index) => {
+        const local = (t - 0.12 - index * 0.16) / 0.3;
+        if (local <= 0) return;
+        const k = easeOutBack(local);
+        ctx.save();
+        ctx.translate(REEL_W / 2, top + index * lineH);
+        ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
+        bigWord(ctx, word, 0, 0, 150, local * 2);
+        ctx.restore();
+      });
+      return;
+    }
+    const tc = t - INTRO;
+    if (tc < CUT * items.length) {
+      const index = Math.min(items.length - 1, Math.floor(tc / CUT));
+      const local = tc - index * CUT;
+      const dir = index % 2 ? -1 : 1;
+      const whip = easeOut(local / 0.22);
+      const zoom = 1.14 - 0.14 * easeOut(local / 0.32);
+      const cx = REEL_W / 2 + dir * 700 * (1 - whip);
+      // motion trail while whipping in
+      if (whip < 1) {
+        for (let trail = 3; trail >= 1; trail--) {
+          drawSprite(ctx, sprites[index], { cx: cx + dir * trail * 70 * (1 - whip), scale: zoom, alpha: 0.12 * (1 - whip) });
+        }
+      }
+      drawSprite(ctx, sprites[index], { cx, scale: zoom });
+      // progress segments
+      const segW = (REEL_W * 0.7) / items.length;
+      for (let s2 = 0; s2 < items.length; s2++) {
+        const fill = s2 < index ? 1 : s2 === index ? Math.min(1, local / CUT) : 0;
+        const x = REEL_W * 0.15 + s2 * segW + 4;
+        ctx.fillStyle = INK(0.12);
+        ctx.fillRect(x, 300, segW - 8, 5);
+        ctx.fillStyle = INK(0.85);
+        ctx.fillRect(x, 300, (segW - 8) * fill, 5);
+      }
+      const label = options.single && index > 0 ? SINGLE_LINES[(index - 1) % SINGLE_LINES.length] : items[index].name;
+      const e = easeOut((local - 0.05) / 0.3);
+      ctx.save();
+      ctx.translate(-70 * dir * (1 - e), 0);
+      bigWord(ctx, String(label || "").toUpperCase(), REEL_W / 2, REEL_H * 0.2, 60, e);
+      ctx.restore();
+      if (options.showPrice && (!options.single || index === 0)) pricePill(ctx, items[index].price, REEL_H * 0.235, easeOutBack((local - 0.18) / 0.3));
+      return;
+    }
+    const to = t - INTRO - CUT * items.length;
+    const a = easeOutBack(to / 0.35);
+    ctx.save();
+    ctx.translate(REEL_W / 2, REEL_H * 0.46);
+    ctx.scale(0.7 + 0.3 * a, 0.7 + 0.3 * a);
+    bigWord(ctx, "LINK IN BIO", 0, 0, 130, Math.min(1, to * 4));
+    ctx.restore();
+    caps(ctx, "free delivery (prepaid) · cod available", REEL_H * 0.51, INK(0.7), easeOut((to - 0.35) / 0.4), 28, 5);
+  }
+  return { total, busy: 0, previewAt: INTRO + 0.6, draw, dispose: disposeAll(all) };
+}
+
+/* ------------------------------- COLLAGE ----------------------------- */
+// Mood-board grid of white cards; tiles pop in, then a spotlight on each.
+function collageLayout(count) {
+  const left = 70;
+  const right = REEL_W - 70;
+  const top = 430;
+  const gap = 30;
+  const tileW = (right - left - gap) / 2;
+  if (count <= 2) return [0, 1].slice(0, count).map((i) => ({ x: left + i * (tileW + gap), y: top + 80, w: tileW, h: 760 }));
+  const h = 500;
+  const boxes = [
+    { x: left, y: top, w: tileW, h },
+    { x: left + tileW + gap, y: top, w: tileW, h },
+  ];
+  if (count === 3) boxes.push({ x: (REEL_W - tileW) / 2, y: top + h + gap, w: tileW, h });
+  else boxes.push({ x: left, y: top + h + gap, w: tileW, h }, { x: left + tileW + gap, y: top + h + gap, w: tileW, h });
+  return boxes;
+}
+
+export async function collagePlan(items, options, OW, OH, onStep) {
+  const list = items.slice(0, 4);
+  const k = OW / REEL_W;
+  const boxes = collageLayout(list.length);
+  const tiles = [];
+  for (let index = 0; index < list.length; index++) {
+    const box = boxes[index];
+    const tile = makeCanvas(Math.round(box.w * k), Math.round(box.h * k));
+    const c = tile.getContext("2d");
+    c.scale(k, k);
+    c.fillStyle = "#ffffff";
+    c.fillRect(0, 0, box.w, box.h);
+    drawPhotoInBox(c, list[index].img, { x: 16, y: 16, w: box.w - 32, h: box.h - 32 });
+    tiles.push(tile);
+    onStep((index + 1) / list.length);
+    await tick();
+  }
+  const POP = 0.3;
+  const IN_START = 0.35;
+  const inEnd = IN_START + POP * list.length + 0.45;
+  const SPOT = 0.9;
+  const OUTRO = 1.7;
+  const total = inEnd + SPOT * list.length + OUTRO;
+  const hook = String(options.hook || (options.single ? "one bag, 4 looks" : "which one is you?")).trim();
+  const tilts = [-3, 2.5, 2, -2.5];
+
+  function drawTile(ctx, index, boost, alpha, tiltFactor) {
+    const box = boxes[index];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
+    ctx.rotate(((tilts[index] || 0) * tiltFactor * Math.PI) / 180);
+    ctx.scale(boost, boost);
+    ctx.shadowColor = "rgba(0,0,0,0.14)";
+    ctx.shadowBlur = 36;
+    ctx.shadowOffsetY = 14;
+    roundRectPath(ctx, -box.w / 2, -box.h / 2, box.w, box.h, 26);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.strokeStyle = "rgba(0,0,0,0.06)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.clip();
+    ctx.drawImage(tiles[index], -box.w / 2, -box.h / 2, box.w, box.h);
+    ctx.restore();
+  }
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    white(ctx);
+    brandMark(ctx, WHITE);
+    const outroStart = inEnd + SPOT * list.length;
+    const fadeAll = t > outroStart ? 1 - easeOut((t - outroStart) / 0.4) : 1;
+    italic(ctx, hook, 390, 84, INK(), easeOut((t - 0.05) / 0.4) * fadeAll);
+    const spotIndex = t >= inEnd && t < outroStart ? Math.floor((t - inEnd) / SPOT) : -1;
+    list.forEach((_, index) => {
+      const local = (t - IN_START - index * POP) / 0.45;
+      if (local <= 0) return;
+      const pop = easeOutBack(local);
+      let boost = 0.8 + 0.2 * pop;
+      let alpha = Math.min(1, local * 1.6) * fadeAll;
+      if (spotIndex >= 0) {
+        const sl = (t - inEnd - spotIndex * SPOT) / 0.25;
+        if (index === spotIndex) boost *= 1 + 0.05 * easeOut(sl);
+        else alpha *= 1 - 0.6 * easeOut(sl);
+      }
+      if (alpha > 0) drawTile(ctx, index, boost, alpha, 1 - 0.4 * pop);
+    });
+    if (spotIndex >= 0) {
+      const sl = easeOut((t - inEnd - spotIndex * SPOT) / 0.3);
+      const bag = list[spotIndex];
+      const y = boxes[boxes.length - 1].y + boxes[boxes.length - 1].h + 110;
+      const label = options.single ? `look ${spotIndex + 1} of ${list.length}` : bag.name || "";
+      italic(ctx, label, y, 56, INK(), sl);
+      if (options.showPrice && !options.single) caps(ctx, rupees(bag.price), y + 56, INK(0.7), sl, 32, 4);
+    }
+    if (t >= outroStart) drawOutro(ctx, t - outroStart - 0.2, options, list, options.single ? null : "comment your pick 👇");
+  }
+  return { total, busy: 0, previewAt: inEnd + 0.05, draw, dispose: disposeAll(tiles) };
+}
+
+/* ------------------------------- POLAROID ---------------------------- */
+// Real photos drop in as polaroid prints and stack up on a white table.
+export async function polaroidPlan(items, options, OW, OH, onStep) {
+  const list = items.slice(0, 5);
+  const k = OW / REEL_W;
+  const CARD_W = 620;
+  const CARD_H = 760;
+  const PAD = 34;
+  const PHOTO_H = 590;
+  const singleCaptions = [
+    list[0].name || "",
+    Number(list[0].price) > 0 ? `only ${rupees(list[0].price)}` : "every angle",
+    "free delivery (prepaid)",
+    "cash on delivery",
+    "5-day returns",
+  ];
+  const cards = [];
+  for (let index = 0; index < list.length; index++) {
+    const card = makeCanvas(Math.round(CARD_W * k), Math.round(CARD_H * k));
+    const c = card.getContext("2d");
+    c.scale(k, k);
+    c.fillStyle = "#fdfcfa";
+    c.fillRect(0, 0, CARD_W, CARD_H);
+    c.fillStyle = "#ffffff";
+    c.fillRect(PAD, PAD, CARD_W - PAD * 2, PHOTO_H);
+    drawPhotoInBox(c, list[index].img, { x: PAD, y: PAD, w: CARD_W - PAD * 2, h: PHOTO_H });
+    c.strokeStyle = "rgba(0,0,0,0.06)";
+    c.strokeRect(PAD, PAD, CARD_W - PAD * 2, PHOTO_H);
+    const caption = options.single ? singleCaptions[index % singleCaptions.length] : list[index].label || list[index].name || "";
+    c.fillStyle = "rgba(28,21,13,0.85)";
+    c.textAlign = "center";
+    fitSize(c, caption, "italic 500", 44, SERIF, CARD_W - PAD * 2);
+    c.fillText(caption, CARD_W / 2, PAD + PHOTO_H + 82);
+    cards.push(card);
+    onStep((index + 1) / list.length);
+    await tick();
+  }
+  const DROP = 1.0;
+  const START = 0.5;
+  const HOLD = 1.1;
+  const OUTRO = 1.8;
+  const dropsEnd = START + DROP * list.length;
+  const total = dropsEnd + HOLD + OUTRO;
+  const angles = [-6, 5, -3, 7, -4];
+  const shifts = [
+    [-30, 10],
+    [35, -20],
+    [-10, 25],
+    [25, 5],
+    [0, -10],
+  ];
+  const hook = String(options.hook || (options.single ? "one bag, every look" : "my bag edit ✨")).trim();
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    white(ctx);
+    brandMark(ctx, WHITE);
+    const outroStart = dropsEnd + HOLD;
+    const dim = t > outroStart ? easeOut((t - outroStart) / 0.5) : 0;
+    italic(ctx, hook, 400, 84, INK(), easeOut((t - 0.05) / 0.4) * (1 - dim));
+    list.forEach((_, index) => {
+      const local = (t - START - index * DROP) / 0.65;
+      if (local <= 0) return;
+      const e = easeOutBack(local);
+      const [sx, sy] = shifts[index % shifts.length];
+      const angle = ((angles[index % angles.length] + (1 - e) * 14) * Math.PI) / 180;
+      ctx.save();
+      ctx.translate(REEL_W / 2 + sx, 1040 + sy - (1 - e) * 1100);
+      ctx.rotate(angle);
+      ctx.shadowColor = "rgba(0,0,0,0.2)";
+      ctx.shadowBlur = 36;
+      ctx.shadowOffsetY = 16;
+      ctx.drawImage(cards[index], -CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H);
+      ctx.restore();
+    });
+    if (dim > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${0.88 * dim})`;
+      ctx.fillRect(0, 0, REEL_W, REEL_H);
+      brandMark(ctx, WHITE);
+      drawOutro(ctx, t - outroStart - 0.2, options, list, options.single ? null : "which one would you carry?");
+    }
+  }
+  return { total, busy: 0, previewAt: dropsEnd + 0.3, draw, dispose: disposeAll(cards) };
 }
