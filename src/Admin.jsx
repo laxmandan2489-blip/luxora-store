@@ -4,6 +4,7 @@ import EmailCampaign from "./EmailCampaign";
 import AdMaker from "./AdMaker";
 import StoryMaker from "./StoryMaker";
 import ReelMaker from "./ReelMaker";
+import InstaPlanner from "./InstaPlanner";
 import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 import { removeGeminiMarkFromImage } from "./geminiMark";
@@ -5058,6 +5059,17 @@ function Admin() {
           >
             Reel Maker
           </button>
+          <button
+            type="button"
+            className={
+              activeTab === "planner"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("planner")}
+          >
+            Insta Planner
+          </button>
         </div>
 
         {activeTab === "stories" && (
@@ -5066,6 +5078,18 @@ function Admin() {
 
         {activeTab === "reels" && (
           <ReelMaker API={API} adminFetch={adminFetch} products={products} />
+        )}
+
+        {activeTab === "planner" && (
+          <InstaPlanner
+            API={API}
+            adminFetch={adminFetch}
+            products={products}
+            onOpen={(tab) => {
+              setActiveTab(tab);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
         )}
 
         {activeTab === "analytics" && (
