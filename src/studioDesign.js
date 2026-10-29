@@ -436,6 +436,13 @@ function drawBackdrop(ctx, W, H, theme, floorY) {
   ctx.restore();
 }
 
+// Empty studio backdrop (Reel Maker's last "shop now" frame).
+export function drawStudioBackdrop(ctx, W, H, bgKey) {
+  const theme = STUDIO_BACKGROUNDS[bgKey] || STUDIO_BACKGROUNDS.beige;
+  drawBackdrop(ctx, W, H, theme, H * 0.63);
+  return theme;
+}
+
 /* ------------------------------ DESIGN ------------------------------ */
 
 function spaced(ctx, text, x, y, spacing) {
@@ -462,7 +469,8 @@ export function drawStudio(ctx, { W, H, img, d }) {
   // (2026-10-29) Story Maker layout: text at the top (under Instagram's
   // profile bar), bag in the middle, empty floor below for the LINK sticker.
   const storyLayout = Boolean(d.storyLayout) && isStory;
-  const floorY = storyLayout ? H * 0.63 : H * (isStory ? 0.7 : isSquare ? 0.72 : 0.74);
+  const reel = storyLayout && Boolean(d.reel); // Reel Maker: bigger bag
+  const floorY = reel ? H * 0.69 : storyLayout ? H * 0.63 : H * (isStory ? 0.7 : isSquare ? 0.72 : 0.74);
   drawBackdrop(ctx, W, H, theme, floorY);
 
   const ink = theme.dark ? "rgba(245,239,228,0.95)" : "rgba(28,21,13,0.92)";
@@ -470,16 +478,16 @@ export function drawStudio(ctx, { W, H, img, d }) {
 
   // Space for the bag
   const lineText = String(d.line || "").trim();
-  const top = storyLayout ? H * 0.29 : H * (isStory ? 0.17 : isSquare ? 0.13 : 0.13);
+  const top = reel ? H * 0.3 : storyLayout ? H * 0.29 : H * (isStory ? 0.17 : isSquare ? 0.13 : 0.13);
   const textSpace = storyLayout ? 0 : lineText || d.showName ? H * 0.17 : H * 0.08;
   const bottomLimit = H - textSpace;
-  const maxW = W * (isSquare ? 0.62 : 0.7);
+  const maxW = W * (reel ? 0.8 : isSquare ? 0.62 : 0.7);
   const result = cutoutBag(img);
 
   if (result.ok) {
     const { canvas, box } = result;
     // bag stands on the floor line
-    const base = storyLayout ? floorY + H * 0.03 : Math.min(floorY + H * 0.03, bottomLimit - H * 0.02);
+    const base = reel ? floorY + H * 0.04 : storyLayout ? floorY + H * 0.03 : Math.min(floorY + H * 0.03, bottomLimit - H * 0.02);
     const maxH = base - top;
     const scale = Math.min(maxW / box.w, maxH / box.h);
     const dw = box.w * scale;
@@ -528,6 +536,9 @@ export function drawStudio(ctx, { W, H, img, d }) {
     ctx.restore();
     ctx.drawImage(img, dx, dy, dw, dh);
   }
+
+  // (2026-10-29) Reel Maker draws its own moving text on top.
+  if (d.bare) return { cutout: result.ok };
 
   // Small SHRIMOH mark
   ctx.textBaseline = "alphabetic";

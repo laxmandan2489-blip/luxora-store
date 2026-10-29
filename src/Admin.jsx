@@ -3,6 +3,7 @@ import { PRODUCT_CATEGORIES, DEFAULT_BAG_CATEGORY, canonicalizeCategory } from "
 import EmailCampaign from "./EmailCampaign";
 import AdMaker from "./AdMaker";
 import StoryMaker from "./StoryMaker";
+import ReelMaker from "./ReelMaker";
 import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 import { removeGeminiMarkFromImage } from "./geminiMark";
@@ -5046,10 +5047,25 @@ function Admin() {
           >
             Story Maker
           </button>
+          <button
+            type="button"
+            className={
+              activeTab === "reels"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("reels")}
+          >
+            Reel Maker
+          </button>
         </div>
 
         {activeTab === "stories" && (
           <StoryMaker API={API} adminFetch={adminFetch} products={products} />
+        )}
+
+        {activeTab === "reels" && (
+          <ReelMaker API={API} adminFetch={adminFetch} products={products} />
         )}
 
         {activeTab === "analytics" && (
