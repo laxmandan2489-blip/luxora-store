@@ -31,17 +31,35 @@ const SINGLE = [
   ["grid", "🖼 Grid"],
   ["guess", "👀 Guess the price"],
 ];
+// (v5) Post looks rotate so two posts in a row never look the same.
+// kind: studio = Ad Maker "✨ Studio"; clean = "Clean · text below".
+const POST_LOOKS = [
+  { kind: "studio", bg: "Beige", line: "the everyday bag", short: "Studio · Beige" },
+  { kind: "clean", bg: "Black", short: "Clean · Black" },
+  { kind: "studio", bg: "Sage green", line: "office se dinner tak", short: "Studio · Sage green" },
+  { kind: "clean", bg: "Cream", short: "Clean · Cream" },
+  { kind: "studio", bg: "Stone grey", line: "your new favourite", short: "Studio · Stone grey" },
+  { kind: "studio", bg: "Blush", line: "simple. classy. yours.", short: "Studio · Blush" },
+  { kind: "clean", bg: "Beige", short: "Clean · Beige" },
+  { kind: "studio", bg: "Mocha", line: "one bag, every outfit", short: "Studio · Mocha" },
+];
+const LIFE_LOOKS = [
+  { design: "On photo", short: "Model photo · On photo" },
+  { design: "Clean · text below (White)", short: "Model photo · Clean White" },
+];
+
+// [id, label, how many bags that template takes]
 const MULTI = [
-  ["newin", "New in"],
-  ["fastcuts", "⚡ Fast cuts"],
-  ["filmstrip", "🎞 Film strip"],
-  ["toplist", "🏆 Top picks"],
-  ["collage", "🖼 Collage"],
-  ["swipe", "👉 Swipe"],
-  ["bounce", "🏀 Bounce"],
-  ["magazine", "📰 Magazine"],
-  ["split", "↔️ This or that"],
-  ["polaroid", "📸 Polaroid"],
+  ["newin", "New in", 6],
+  ["fastcuts", "⚡ Fast cuts", 6],
+  ["filmstrip", "🎞 Film strip", 6],
+  ["toplist", "🏆 Top picks", 5],
+  ["collage", "🖼 Collage", 4],
+  ["swipe", "👉 Swipe", 6],
+  ["bounce", "🏀 Bounce", 6],
+  ["magazine", "📰 Magazine", 5],
+  ["split", "↔️ This or that", 6],
+  ["polaroid", "📸 Polaroid", 5],
 ];
 
 function load() {
@@ -124,18 +142,24 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
     if (!bags.length) return jobs;
     let single = 0;
     let multi = 0;
-    let groupAt = 0;
+    let posts = 0;
+    let lifes = 0;
+    const nextLook = () => POST_LOOKS[posts++ % POST_LOOKS.length];
+    const nextLife = () => LIFE_LOOKS[lifes++ % LIFE_LOOKS.length];
     const nextSingle = () => SINGLE[single++ % SINGLE.length];
     const nextMulti = () => MULTI[multi++ % MULTI.length];
-    const group = () => {
+    // (v4) many-bag reel = the bag just done + the next bags in line
+    // (as many as the template takes), so it always includes that bag
+    const group = (order, anchor, size) => {
+      const start = Math.max(0, order.indexOf(anchor));
       const out = [];
-      for (let k = 0; k < Math.min(5, bags.length); k++) out.push(bags[(groupAt + k) % bags.length]);
-      groupAt += Math.min(5, bags.length);
+      for (let k = 0; k < Math.min(size, order.length); k++) out.push(order[(start + k) % order.length]);
       return out;
     };
     for (let cycle = 0; cycle < 60; cycle++) {
       const shift = (cycle * 4) % bags.length;
       const queue = [...bags.slice(shift), ...bags.slice(0, shift)];
+      const order = [...queue];
       const design = cycle % 2 === 0 ? "studio" : "clean";
       let round = 0;
       while (queue.length) {
@@ -144,18 +168,25 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         const b = bIndex >= 0 ? queue.splice(bIndex, 1)[0] : queue.shift();
         const c = queue.shift();
         const r = `c${cycle}r${round++}`;
-        jobs.push({ key: `${r}-post-${a.id}`, type: "post", design, cycle, bags: [a] });
+        jobs.push({ key: `${r}-post-${a.id}`, type: "post", design, look: nextLook(), cycle, bags: [a] });
         jobs.push({ key: `${r}-reel-${a.id}`, type: "reel", cycle, bags: [a], template: nextSingle() });
-        if (bags.length >= 3) jobs.push({ key: `${r}-multi1`, type: "multi", cycle, bags: group(), template: nextMulti() });
+        if (bags.length >= 3) {
+          const t = nextMulti();
+          jobs.push({ key: `${r}-multi1`, type: "multi", cycle, bags: group(order, a, t[2]), template: t });
+        }
         if (b) {
-          jobs.push({ key: `${r}-life-${b.id}`, type: lifeOf(b).length ? "life" : "post", design, cycle, bags: [b] });
+          const isLife = lifeOf(b).length > 0;
+          jobs.push({ key: `${r}-life-${b.id}`, type: isLife ? "life" : "post", design, look: isLife ? nextLife() : nextLook(), cycle, bags: [b] });
           jobs.push({ key: `${r}-reel-${b.id}`, type: "reel", cycle, bags: [b], template: nextSingle() });
         }
         if (c) {
           jobs.push({ key: `${r}-reel-${c.id}`, type: "reel", cycle, bags: [c], template: nextSingle() });
-          jobs.push({ key: `${r}-post-${c.id}`, type: "post", design, cycle, bags: [c] });
+          jobs.push({ key: `${r}-post-${c.id}`, type: "post", design, look: nextLook(), cycle, bags: [c] });
         }
-        if (bags.length >= 3 && (b || c)) jobs.push({ key: `${r}-multi2`, type: "multi", cycle, bags: group(), template: nextMulti() });
+        if (bags.length >= 3 && (b || c)) {
+          const t = nextMulti();
+          jobs.push({ key: `${r}-multi2`, type: "multi", cycle, bags: group(order, c || b, t[2]), template: t });
+        }
       }
       // stop once there are plenty of jobs ahead of the next open one
       const open = jobs.findIndex((job) => !state.done[job.key]);
@@ -234,34 +265,36 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
     const bag = job.bags[0];
     if (job.type === "post" || job.type === "life") {
       const isLife = job.type === "life";
-      return {
-        icon: "📷",
-        title: isLife ? "MODEL / LIFESTYLE photo wali POST" : job.design === "clean" ? "POST (Clean design, carousel)" : "Studio POST (carousel)",
-        tool: "ads",
-        toolLabel: "Ad Maker kholo",
-        lines: isLife
+      const look = job.look || POST_LOOKS[0];
+      const lines = isLife
+        ? [
+            "Ad Maker → is bag ko search karo → Photo mein neeche wali MODEL photo chuno",
+            `Design: “${look.design}” → Size: Feed 4:5 → Post mein jodo`,
+            "Slide 2: wahi bag, white background wali photo, “Clean · text below” (price) → jodo",
+            "Post karo. Caption mein ise apna photoshoot mat batana",
+            "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
+          ]
+        : look.kind === "clean"
           ? [
-              "Ad Maker → is bag ko search karo → neeche wali model photo chuno",
-              "Design: “On photo” ya “Clean · text below” → Post mein jodo",
-              "Slide 2: Studio design (price) → jodo",
-              "Post karo. Caption mein ise apna photoshoot mat batana",
+              "Ad Maker → is bag ko search karo → Size: Feed 4:5",
+              `Slide 1: Design “Clean · text below” → Background: ${look.bg} → Post mein jodo`,
+              `Slide 2-3: dusre colours → Design “No text · only bag” → Background: ${look.bg} → jodo`,
+              "Post karo (caption apne-aap aata hai)",
               "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
             ]
-          : job.design === "clean"
-            ? [
-                "Ad Maker → is bag ko search karo",
-                "Slide 1: “Clean · text below” (naam + price) → Post mein jodo",
-                "Slide 2-3: dusre colours (“No text · only bag”) → jodo",
-                "Post karo",
-                "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
-              ]
-            : [
-                "Ad Maker → is bag ko search karo",
-                "Slide 1: ✨ Studio + chhoti line → Post mein jodo",
-                "Slide 2-3: dusre colours (Studio, “Koi line nahi”) → jodo",
-                "Post karo",
-                "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
-              ],
+          : [
+              "Ad Maker → is bag ko search karo → Size: Feed 4:5",
+              `Slide 1: Design “✨ Studio” → Studio background: ${look.bg} → Line: “${look.line}” → Post mein jodo`,
+              `Slide 2-3: dusre colours → wahi ${look.bg} → Line: “Koi line nahi” → jodo`,
+              "Post karo (caption apne-aap aata hai)",
+              "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
+            ];
+      return {
+        icon: isLife ? "👩" : "📷",
+        title: isLife ? `MODEL photo POST · ${look.short}` : `POST · ${look.short}`,
+        tool: "ads",
+        toolLabel: "Ad Maker kholo",
+        lines,
         photos: isLife ? lifeOf(bag).slice(0, 4) : [],
         done: isLife ? "✓ Model post + story + highlight ho gaya" : "✓ Post + story + highlight ho gaya",
       };
@@ -289,7 +322,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
       toolLabel: "Reel Maker kholo",
       lines: [
         `Reel Maker → 🛍 Kai bags → “${job.template[1]}”`,
-        `Ye ${job.bags.length} bags chuno (neeche dikhe hain) → 🎬 Reel banao → Save`,
+        `Neeche dikhe ${job.bags.length} bags isi kram mein chuno (pehla = jiski abhi post/reel hui) → 🎬 Reel banao → Save`,
         "Instagram: + → Reel → gaana → cover = pehle bag ki Studio photo",
         "Story mein share kar sakte ho (highlight mein NAHI)",
       ],
@@ -324,7 +357,11 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         .ip-cell { position: relative; aspect-ratio: 3 / 4; background: #fff; border: 1px solid #eee; overflow: hidden; }
         .ip-cell img { width: 100%; height: 100%; object-fit: contain; }
         .ip-cell .tag { position: absolute; top: 4px; right: 4px; font-size: 13px; }
-        .ip-cell.todo { opacity: 0.45; border-style: dashed; }
+        .ip-cell.todo { opacity: 0.55; border-style: dashed; }
+        .ip-cell .num { position: absolute; left: 4px; top: 4px; background: #1c150d; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 2px 7px; }
+        .ip-next { display: flex; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid #f0ebe0; font-size: 14px; }
+        .ip-next img { width: 44px; height: 44px; object-fit: contain; background: #fff; border: 1px solid #eee; border-radius: 8px; flex: 0 0 44px; }
+        .ip-next b { flex: 0 0 26px; text-align: center; }
         .ip-cell.now { outline: 3px solid #1c150d; opacity: 1; }
         .ip-rules { background: #f6f3ea; border-radius: 12px; padding: 12px 14px; font-size: 14px; line-height: 1.6; margin-bottom: 14px; }
         .ip-small { font-size: 12px; color: #777; line-height: 1.5; }
@@ -345,10 +382,10 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
             👉 Aaj ka kaam: {c.icon} {c.title}
           </h3>
           <div className="ip-bags">
-            {next.bags.map((bag) => (
+            {next.bags.map((bag, i) => (
               <div className="ip-b" key={bag.id}>
                 <img src={thumb(bag)} alt="" />
-                <span>{bag.name}</span>
+                <span>{next.bags.length > 1 ? `${i + 1}. ` : ""}{bag.name}</span>
               </div>
             ))}
           </div>
@@ -364,6 +401,17 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
               </div>
             </>
           ) : null}
+          {(() => {
+            const kinds = next.type === "multi" ? ["multi"] : next.type === "reel" ? ["reel"] : ["post", "life"];
+            const before = plan.slice(0, nextIndex).reverse().find((job) => kinds.includes(job.type));
+            if (!before) return null;
+            const was = before.type === "reel" || before.type === "multi" ? before.template[1] : before.look ? before.look.short : "";
+            return (
+              <div className="ip-small" style={{ marginBottom: 4 }}>
+                Pichhli baar: {was} ({before.bags[0].name}) → is baar alag 👇
+              </div>
+            );
+          })()}
           <ol className="ip-steps">
             {c.lines.map((line) => (
               <li key={line}>{line}</li>
@@ -399,18 +447,40 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         </div>
       )}
 
+      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>📅 Agle kaam (ek din mein ek)</div>
+      <div style={{ marginBottom: 16 }}>
+        {plan.slice(nextIndex >= 0 ? nextIndex : plan.length, (nextIndex >= 0 ? nextIndex : plan.length) + 6).map((job, i) => {
+          const what =
+            job.type === "post" ? `📷 Post · ${job.look ? job.look.short : ""}` : job.type === "life" ? `👩 Model photo post` : job.type === "reel" ? `🎬 Reel (${job.template[1]})` : `🎞 Kai bags reel (${job.template[1]})`;
+          return (
+            <div className="ip-next" key={job.key}>
+              <b>{i === 0 ? "Aaj" : `${i + 1}`}</b>
+              <img src={job.type === "life" && lifeOf(job.bags[0])[0] ? lifeOf(job.bags[0])[0] : thumb(job.bags[0])} alt="" />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600 }}>{what}</div>
+                <div style={{ fontSize: 12, color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {job.type === "multi" ? `${job.bags.length} bags: ${job.bags.map((b) => b.name).join(", ")}` : job.bags[0].name}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <div style={{ fontWeight: 700, fontSize: 14 }}>Aapka grid aisa dikhega (upar = sabse naya)</div>
-      <div className="ip-small">📷 post · 🎬 ek bag ki reel · 🎞 kai bags ki reel · 👩 model post. Dhundhle wale abhi baaki hain.</div>
+      <div className="ip-small">📷 post · 🎬 ek bag ki reel · 🎞 kai bags ki reel · 👩 model post. “AAJ” wala aaj ka kaam hai, 2, 3... agle dino ke. Instagram mein nayi post sabse upar aati hai, isliye number neeche se upar badhte hain.</div>
       <div className="ip-grid">
         {preview.map((job) => {
           const index = plan.indexOf(job);
           const cls = state.done[job.key] ? "ip-cell" : index === nextIndex ? "ip-cell now" : "ip-cell todo";
           const tag = job.type === "post" ? "📷" : job.type === "life" ? "👩" : job.type === "reel" ? "🎬" : "🎞";
           const img = job.type === "life" && lifeOf(job.bags[0])[0] ? lifeOf(job.bags[0])[0] : thumb(job.bags[0]);
+          const order = index >= nextIndex && nextIndex >= 0 ? index - nextIndex + 1 : 0;
           return (
             <div className={cls} key={job.key}>
               <img src={img} alt="" loading="lazy" />
               <span className="tag">{tag}</span>
+              {order ? <span className="num">{order === 1 ? "AAJ" : order}</span> : null}
             </div>
           );
         })}
