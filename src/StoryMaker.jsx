@@ -5,6 +5,7 @@ import {
 } from "./AdMaker";
 import SocialPoster from "./SocialPoster";
 import SaveBasket from "./SaveBasket";
+import { drawStudio, STUDIO_BACKGROUNDS, STUDIO_LINES } from "./studioDesign";
 
 /*
  * ADMIN > STORY MAKER (2026-10-25)
@@ -22,6 +23,7 @@ const H = 1920;
 const CREAM = "rgb(246,243,238)";
 
 const STORY_TYPES = {
+  studio: { label: "✨ Studio", bags: 1, tip: "Premium look. Neeche khaali zameen par LINK sticker lagao (📋 Link copy karo se bag ka link)." },
   newin: { label: "New In", bags: 1, tip: "Instagram mein neeche khaali jagah par LINK sticker lagao (bag ka website link)." },
   thisorthat: { label: "This or That", bags: 2, tip: "Beech ki khaali jagah par POLL sticker lagao: option 1 = Left, option 2 = Right." },
   guess: { label: "Guess the price", bags: 1, tip: "Neeche QUIZ sticker lagao (3 price options, ek sahi). Agle din “Price reveal” wali story daalo." },
@@ -49,9 +51,17 @@ function wordmark(ctx, y, color) {
   spacedText(ctx, "SHRIMOH", W / 2, y, 18);
 }
 
-function drawStory(ctx, type, bags) {
+function drawStory(ctx, type, bags, studio = {}) {
   ctx.textBaseline = "alphabetic";
   const first = bags[0];
+  if (type === "studio") {
+    return drawStudio(ctx, {
+      W,
+      H,
+      img: first.img,
+      d: { studioBg: studio.bg, line: studio.line, showName: true, name: first.name, price: studio.showPrice ? first.price : 0, storyLayout: true },
+    });
+  }
   const bg = first && type !== "thisorthat" ? photoBackground(first.img) : CREAM;
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -132,6 +142,10 @@ function drawStory(ctx, type, bags) {
 export default function StoryMaker({ API, adminFetch, products }) {
   const canvasRef = useRef(null);
   const [type, setType] = useState("newin");
+  const [studioBg, setStudioBg] = useState("beige");
+  const [studioLine, setStudioLine] = useState(STUDIO_LINES[0]);
+  const [studioPrice, setStudioPrice] = useState(true);
+  const [studioCut, setStudioCut] = useState(true);
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState([]); // [{ id, name, price, mrp, img }]
   const [loadingId, setLoadingId] = useState(null);
@@ -252,8 +266,9 @@ export default function StoryMaker({ API, adminFetch, products }) {
     canvas.height = H;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, W, H);
-    drawStory(ctx, type, picked);
-  }, [type, picked, ready, fontsReady]);
+    const drawn = drawStory(ctx, type, picked, { bg: studioBg, line: studioLine, showPrice: studioPrice });
+    setStudioCut(type !== "studio" || !drawn || drawn.cutout !== false);
+  }, [type, picked, ready, fontsReady, studioBg, studioLine, studioPrice]);
 
   // (2026-10-29) Story link: each picked bag's own page link, ready to
   // paste into Instagram's Link sticker (utm shows it in Analytics).
@@ -403,6 +418,56 @@ export default function StoryMaker({ API, adminFetch, products }) {
             ))}
           </div>
           <div className="sm-tip">💡 {STORY_TYPES[type].tip}</div>
+
+          {type === "studio" ? (
+            <>
+              <label className="form-label">Studio background</label>
+              <div className="sm-row">
+                {Object.entries(STUDIO_BACKGROUNDS).map(([value, item]) => (
+                  <button type="button" key={value} className={studioBg === value ? "sm-chip on" : "sm-chip"} onClick={() => setStudioBg(value)}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+              <label className="form-label">Chhoti line</label>
+              <select
+                className="form-select"
+                style={{ marginBottom: 8 }}
+                value={studioLine === "" ? "__none" : STUDIO_LINES.includes(studioLine) ? studioLine : "__custom"}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setStudioLine(value === "__none" ? "" : value === "__custom" ? " " : value);
+                }}
+              >
+                {STUDIO_LINES.map((line) => (
+                  <option key={line} value={line}>
+                    {line}
+                  </option>
+                ))}
+                <option value="__custom">Apni line likho...</option>
+                <option value="__none">Koi line nahi</option>
+              </select>
+              {studioLine !== "" && !STUDIO_LINES.includes(studioLine) ? (
+                <input
+                  className="form-input"
+                  style={{ marginBottom: 8 }}
+                  value={studioLine.trim() ? studioLine : ""}
+                  onChange={(event) => setStudioLine(event.target.value || " ")}
+                  placeholder="jaise: office se dinner tak"
+                />
+              ) : null}
+              <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+                <input type="checkbox" checked={studioPrice} onChange={(event) => setStudioPrice(event.target.checked)} />
+                Price chhota sa dikhao
+              </label>
+              {!studioCut ? (
+                <div className="sm-tip" style={{ color: "#8a5a00" }}>
+                  ⚠️ Is photo ka background saaf (white / grey) nahi hai, isliye photo frame ki tarah lagi hai. Bag ki white background
+                  wali photo chuno.
+                </div>
+              ) : null}
+            </>
+          ) : null}
 
           <label className="form-label">{needed === 2 ? "Bags (2 chuno)" : "Bag"}</label>
           <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search bags..." />

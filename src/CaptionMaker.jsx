@@ -112,7 +112,43 @@ function colourLine(colours) {
   return `🎨 ${colours.length} colours: ${joined}`;
 }
 
-export function buildCaption(platform, { product, name, price, mrp, hookIndex }) {
+// (2026-10-29) STUDIO caption: quiet, premium tone for the "✨ Studio"
+// design - fewer emojis, short lines, price stays in the caption (not on
+// the photo). Only true things: no material / quality claims.
+const STUDIO_HOOKS = [
+  "the one you'll reach for every day.",
+  "simple, classy, and easy to style.",
+  "for office days and dinner plans.",
+  "your everyday essentials, neatly in one place.",
+  "a little classic, a little modern.",
+  "pairs with a kurti, jeans or a dress.",
+];
+
+function studioCaption(platform, { product, name, price, mrp, hookIndex, line }) {
+  const hook = String(line || "").trim() ? `${String(line).trim()}.`.replace(/\.\.$/, ".") : STUDIO_HOOKS[hookIndex % STUDIO_HOOKS.length];
+  const priceNumber = Number(price) || 0;
+  const mrpNumber = Number(mrp) || 0;
+  const features = featureLines(product).slice(0, 3);
+  const colours = colourList(product);
+  const productLink = product?.id ? `${SITE}/product/${product.id}` : SITE;
+  const lines = [name, hook, ""];
+  if (features.length) {
+    for (const feature of features) lines.push(`— ${feature}`);
+    lines.push("");
+  }
+  if (priceNumber > 0) lines.push(`${rupees(priceNumber)}${mrpNumber > priceNumber ? ` (MRP ${rupees(mrpNumber)})` : ""}`);
+  if (colours.length >= 2) {
+    const joined = colours.length === 2 ? `${colours[0]} & ${colours[1]}` : `${colours.slice(0, -1).join(", ")} & ${colours[colours.length - 1]}`;
+    lines.push(`in ${joined.toLowerCase()}${platform === "instagram" ? " — swipe →" : ""}`);
+  }
+  lines.push("free delivery on prepaid orders · cash on delivery available", "");
+  lines.push(platform === "facebook" ? `shop here: ${productLink}?utm_source=facebook` : "shop via the link in bio ✦");
+  lines.push("", hashtagsFor(product, name).split(/\s+/).slice(0, 8).join(" "));
+  return lines.join("\n");
+}
+
+export function buildCaption(platform, { product, name, price, mrp, hookIndex, studio = false, line = "" }) {
+  if (studio && platform !== "whatsapp") return studioCaption(platform, { product, name, price, mrp, hookIndex, line });
   const hook = HOOKS[hookIndex % HOOKS.length];
   const priceNumber = Number(price) || 0;
   const mrpNumber = Number(mrp) || 0;
@@ -158,14 +194,14 @@ export function buildCaption(platform, { product, name, price, mrp, hookIndex })
   return lines.join("\n");
 }
 
-export default function CaptionMaker({ product, name, price, mrp }) {
+export default function CaptionMaker({ product, name, price, mrp, studio = false, line = "" }) {
   const [platform, setPlatform] = useState("instagram");
   const [hookIndex, setHookIndex] = useState(0);
   const [copied, setCopied] = useState(false);
 
   const caption = useMemo(
-    () => (name ? buildCaption(platform, { product, name, price, mrp, hookIndex }) : ""),
-    [platform, product, name, price, mrp, hookIndex]
+    () => (name ? buildCaption(platform, { product, name, price, mrp, hookIndex, studio, line: hookIndex ? "" : line }) : ""),
+    [platform, product, name, price, mrp, hookIndex, studio, line]
   );
 
   async function copy() {
@@ -213,7 +249,7 @@ export default function CaptionMaker({ product, name, price, mrp }) {
         .cm-btn { padding: 9px 14px; border-radius: 10px; border: 1px solid #1c150d; background: #fff; color: #1c150d; font-size: 14px; cursor: pointer; }
         .cm-btn.main { background: #1c150d; color: #fff; }
       `}</style>
-      <div className="cm-title">Caption</div>
+      <div className="cm-title">Caption{studio ? " · ✨ Studio style" : ""}</div>
       <div className="cm-tabs">
         {tab("instagram", "Instagram")}
         {tab("facebook", "Facebook")}

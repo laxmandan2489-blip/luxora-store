@@ -4,6 +4,7 @@ import urbanist600 from "./assets/urbanist-latin-600-normal.woff2";
 import CaptionMaker, { buildCaption } from "./CaptionMaker";
 import SocialPoster from "./SocialPoster";
 import SaveBasket from "./SaveBasket";
+import { drawStudio, STUDIO_BACKGROUNDS, STUDIO_LINES } from "./studioDesign";
 
 /*
  * ADMIN > AD MAKER (2026-10-21)
@@ -22,6 +23,7 @@ const SIZES = {
 };
 
 const TEMPLATES = {
+  studio: "✨ Studio", // (2026-10-29) premium backdrop - studioDesign.js
   below: "Clean · text below",
   above: "Clean · text above",
   only: "No text · only bag",
@@ -415,6 +417,9 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
 }
 
 function drawAd(ctx, { W, H, img, template, fit, d }) {
+  if (template === "studio") {
+    return drawStudio(ctx, { W, H, img, d: { studioBg: d.studioBg, line: d.studioLine, showName: d.studioName, name: d.name } });
+  }
   if (template === "below" || template === "above" || template === "editorial" || template === "only") {
     drawClean(ctx, { W, H, img, template, fit }, d);
     return;
@@ -687,6 +692,10 @@ export default function AdMaker({ API, adminFetch, products }) {
   const [footer, setFooter] = useState("Free delivery across India  •  shrimoh.vercel.app");
   const [showBadge, setShowBadge] = useState(true);
   const [cleanBg, setCleanBg] = useState("auto");
+  const [studioBg, setStudioBg] = useState("beige");
+  const [studioLine, setStudioLine] = useState(STUDIO_LINES[0]);
+  const [studioName, setStudioName] = useState(false);
+  const [studioCut, setStudioCut] = useState(true);
   const [fontsReady, setFontsReady] = useState(false);
   // (2026-10-22) Every photo load gets a number; only the LATEST one is
   // allowed to show. Fixes "picked another bag but the old photo stays"
@@ -819,15 +828,16 @@ export default function AdMaker({ API, adminFetch, products }) {
     canvas.height = h;
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, w, h);
-    drawAd(ctx, {
+    const drawn = drawAd(ctx, {
       W: w,
       H: h,
       img,
       template,
       fit,
-      d: { name, price: Number(price) || 0, mrp: Number(mrp) || 0, slogan, footer, showBadge, bg: cleanBg },
+      d: { name, price: Number(price) || 0, mrp: Number(mrp) || 0, slogan, footer, showBadge, bg: cleanBg, studioBg, studioLine, studioName },
     });
-  }, [img, template, size, fit, name, price, mrp, slogan, footer, showBadge, cleanBg, fontsReady]);
+    setStudioCut(template !== "studio" || !drawn || drawn.cutout !== false);
+  }, [img, template, size, fit, name, price, mrp, slogan, footer, showBadge, cleanBg, studioBg, studioLine, studioName, fontsReady]);
 
   async function saveImage() {
     const canvas = canvasRef.current;
@@ -857,7 +867,7 @@ export default function AdMaker({ API, adminFetch, products }) {
     setNotice("✅ Image downloaded.");
   }
 
-  const isCleanTemplate = template === "below" || template === "above" || template === "editorial" || template === "only";
+  const isCleanTemplate = template === "studio" || template === "below" || template === "above" || template === "editorial" || template === "only";
 
   const choice = (current, value, setter, label) => (
     <button
@@ -924,6 +934,8 @@ export default function AdMaker({ API, adminFetch, products }) {
             name={name}
             price={price}
             mrp={mrp}
+            studio={template === "studio"}
+            line={template === "studio" ? studioLine : ""}
           />
           {/* (2026-10-28) Admin se seedha Instagram / Facebook post - SocialPoster.jsx */}
           <SocialPoster
@@ -935,7 +947,9 @@ export default function AdMaker({ API, adminFetch, products }) {
             canAdd={!!img && size !== "story"}
             addHint={img ? "Post ke liye Size mein “Feed 4:5” ya “Feed 1:1” chuno (9:16 story ke liye hai)." : "Pehle bag chuno."}
             buildCaption={(platform) =>
-              name ? buildCaption(platform, { product: currentProduct, name, price, mrp, hookIndex: 0 }) : ""
+              name
+                ? buildCaption(platform, { product: currentProduct, name, price, mrp, hookIndex: 0, studio: template === "studio", line: template === "studio" ? studioLine : "" })
+                : ""
             }
           />
         </div>
@@ -1005,6 +1019,53 @@ export default function AdMaker({ API, adminFetch, products }) {
           <label className="form-label">Size</label>
           <div className="am-row">{Object.entries(SIZES).map(([value, item]) => choice(size, value, setSize, item.label))}</div>
 
+          {template === "studio" ? (
+            <>
+              <label className="form-label">Studio background</label>
+              <div className="am-row">
+                {Object.entries(STUDIO_BACKGROUNDS).map(([value, item]) => choice(studioBg, value, setStudioBg, item.label))}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Chhoti line (bina price)</label>
+                <select
+                  className="form-select"
+                  value={studioLine === "" ? "__none" : STUDIO_LINES.includes(studioLine) ? studioLine : "__custom"}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setStudioLine(value === "__none" ? "" : value === "__custom" ? " " : value);
+                  }}
+                >
+                  {STUDIO_LINES.map((line) => (
+                    <option key={line} value={line}>
+                      {line}
+                    </option>
+                  ))}
+                  <option value="__custom">Apni line likho...</option>
+                  <option value="__none">Koi line nahi (sirf bag)</option>
+                </select>
+                {studioLine !== "" && !STUDIO_LINES.includes(studioLine) ? (
+                  <input
+                    className="form-input"
+                    style={{ marginTop: 8 }}
+                    value={studioLine.trim() ? studioLine : ""}
+                    onChange={(event) => setStudioLine(event.target.value || " ")}
+                    placeholder="jaise: office se dinner tak"
+                  />
+                ) : null}
+              </div>
+              <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
+                <input type="checkbox" checked={studioName} onChange={(event) => setStudioName(event.target.checked)} />
+                Bag ka naam chhota sa neeche dikhao
+              </label>
+              {!studioCut && img ? (
+                <div style={{ marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: "#fff6e5", fontSize: 13, lineHeight: 1.5, color: "#8a5a00" }}>
+                  ⚠️ Is photo ka background saaf (white / grey) nahi hai, isliye photo frame ki tarah lagi hai. Best look ke liye bag ki
+                  white background wali photo chuno.
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
           {template === "below" || template === "above" || template === "only" ? (
             <>
               <label className="form-label">Background</label>
@@ -1014,11 +1075,15 @@ export default function AdMaker({ API, adminFetch, products }) {
             </>
           ) : null}
 
-          <label className="form-label">Photo</label>
-          <div className="am-row">
-            {choice(fit, "fit", setFit, "Show whole bag")}
-            {choice(fit, "fill", setFit, "Fill the space")}
-          </div>
+          {template !== "studio" ? (
+            <>
+              <label className="form-label">Photo</label>
+              <div className="am-row">
+                {choice(fit, "fit", setFit, "Show whole bag")}
+                {choice(fit, "fill", setFit, "Fill the space")}
+              </div>
+            </>
+          ) : null}
 
           {!isCleanTemplate ? (
           <div className="form-group">
