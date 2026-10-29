@@ -254,6 +254,39 @@ export default function StoryMaker({ API, adminFetch, products }) {
     drawStory(ctx, type, picked);
   }, [type, picked, ready, fontsReady]);
 
+  // (2026-10-29) Story link: each picked bag's own page link, ready to
+  // paste into Instagram's Link sticker (utm shows it in Analytics).
+  const [copiedId, setCopiedId] = useState(null);
+  function storyLink(bag) {
+    return `https://shrimoh.vercel.app/product/${bag.id}?utm_source=instagram&utm_medium=story`;
+  }
+  async function copyLink(bag) {
+    const text = storyLink(bag);
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(text);
+      ok = true;
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      area.setSelectionRange(0, text.length);
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      area.remove();
+    }
+    setCopiedId(ok ? bag.id : null);
+    if (ok) window.setTimeout(() => setCopiedId((current) => (current === bag.id ? null : current)), 2000);
+    else setNotice("Copy nahi hua - link ko daba ke rakho aur Copy chuno.");
+  }
+
   async function saveImage() {
     const canvas = canvasRef.current;
     if (!canvas || !ready) return;
@@ -296,6 +329,10 @@ export default function StoryMaker({ API, adminFetch, products }) {
         .sm-bag.on { border-color: #1c150d; }
         .sm-bag img { width: 80px; height: 80px; object-fit: cover; border-radius: 7px; display: block; }
         .sm-num { position: absolute; top: 3px; left: 3px; background: #1c150d; color: #fff; border-radius: 999px; width: 22px; height: 22px; font-size: 12px; line-height: 22px; text-align: center; }
+        .sm-links { margin: 4px 0 14px; padding: 12px; border: 1px solid #e8e2d6; border-radius: 12px; background: #fcfbf8; }
+        .sm-link { padding: 8px 0; border-bottom: 1px solid #f0ebe0; }
+        .sm-link:last-of-type { border-bottom: 0; }
+        .sm-link-url { font-size: 12px; color: #555; margin: 3px 0 6px; overflow-wrap: anywhere; user-select: all; -webkit-user-select: all; }
         .sm-tip { padding: 12px 14px; background: #f6f3ea; border-radius: 10px; font-size: 14px; line-height: 1.5; margin-bottom: 14px; }
       `}</style>
       <div className="panel-header">
@@ -317,6 +354,23 @@ export default function StoryMaker({ API, adminFetch, products }) {
               ⬇ Save story
             </button>
           </div>
+          {picked.length > 0 && (
+            <div className="sm-links">
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🔗 Story ka link (Link sticker ke liye)</div>
+              {picked.map((bag) => (
+                <div className="sm-link" key={bag.id}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{bag.name}</div>
+                  <div className="sm-link-url">{storyLink(bag)}</div>
+                  <button type="button" className={copiedId === bag.id ? "sm-chip on" : "sm-chip"} onClick={() => copyLink(bag)}>
+                    {copiedId === bag.id ? "✓ Copy ho gaya" : "📋 Link copy karo"}
+                  </button>
+                </div>
+              ))}
+              <div style={{ fontSize: 12, color: "#666", lineHeight: 1.5, marginTop: 6 }}>
+                Tareeka: ⬇ Save story → 📋 Link copy karo → Instagram mein story kholo → photo chuno → sticker (☺) → <b>Link</b> → paste karo. Sticker par “Shop now” likh sakte ho.
+              </div>
+            </div>
+          )}
           {/* (2026-10-28) Story seedha Instagram / Facebook par - SocialPoster.jsx */}
           <SocialPoster
             API={API}
