@@ -193,7 +193,7 @@ export function buildTimeline(style, bags, options) {
 /* ---------------------------- drawing ------------------------------ */
 
 // Pre-draw each scene's background + bag once ("plate").
-async function makePlates(scenes, bgKey, OW = REEL_W, OH = REEL_H, onStep = () => {}) {
+async function makePlates(scenes, bgKey, OW = REEL_W, OH = REEL_H, onStep = () => {}, noCutout = false) {
   const plates = [];
   let busy = 0;
   // one plate per different photo (the same photo is reused, not redrawn)
@@ -208,8 +208,8 @@ async function makePlates(scenes, bgKey, OW = REEL_W, OH = REEL_H, onStep = () =
     const plate = makeCanvas(OW, OH);
     const ctx = plate.getContext("2d");
     if (scene.img) {
-      const result = drawStudio(ctx, { W: OW, H: OH, img: scene.img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true } });
-      if (result && result.cutout === false) busy += 1;
+      const result = drawStudio(ctx, { W: OW, H: OH, img: scene.img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true, noCutout } });
+      if (result && result.cutout === false && !noCutout) busy += 1;
     } else {
       drawStudioBackdrop(ctx, OW, OH, bgKey);
     }
@@ -366,66 +366,523 @@ async function encodeRealtime(q, totalSeconds, draw, canvas, onProgress) {
   return new Blob(parts, { type });
 }
 
-/**
- * Renders the reel. Returns { blob, seconds, busy, method }.
- */
-export async function renderReel({ style, bags, options, onProgress = () => {} }) {
-  const q = QUALITIES[options.quality] || QUALITIES.fast;
+/* ======================= NEW STYLES (2026-10-29) ======================= */
+/* Every style is a "plan": { total, busy, draw(ctx, t, scale), dispose() }.
+   Drawing always uses 1080x1920 coordinates; scale fits the output size. */
+
+const BG_ORDER = ["beige", "sage", "blush", "stone", "mocha", "noir"];
+const easeOutBack = (t) => {
+  const x = Math.min(1, Math.max(0, t));
+  const c1 = 1.5;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+const inkOf = (theme, a = 0.95) => (theme.dark ? `rgba(245,239,228,${a})` : `rgba(28,21,13,${a})`);
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+function rotateBgs(first, count) {
+  const start = Math.max(0, BG_ORDER.indexOf(first));
+  return Array.from({ length: count }, (_, index) => BG_ORDER[(start + index) % BG_ORDER.length]);
+}
+
+function brandMark(ctx, theme, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = inkOf(theme);
+  ctx.textBaseline = "alphabetic";
+  ctx.font = `600 ${Math.round(REEL_W * 0.026)}px ${SERIF}`;
+  spaced(ctx, "SHRIMOH", REEL_W / 2, 270, REEL_W * 0.017);
+  ctx.restore();
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function boldText(ctx, text, x, y, size, color, maxWidth = REEL_W * 0.86) {
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  fitSize(ctx, text, "600", size, SANS, maxWidth);
+  ctx.fillText(text, x, y);
+}
+
+/* ---- classic (New in / Kaunsa colour / Guess the price) as a plan ---- */
+async function classicPlan(style, bags, options, OW, OH, onStep) {
   const bgKey = STUDIO_BACKGROUNDS[options.bg] ? options.bg : "beige";
   const theme = STUDIO_BACKGROUNDS[bgKey];
   const scenes = buildTimeline(style, bags, options);
-  onProgress(0, "Bags taiyar ho rahe hain...");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  const { plates, busy } = await makePlates(scenes, bgKey, q.w, q.h, (p) => onProgress(p * 0.1, "Bags taiyar ho rahe hain..."));
+  const { plates, busy } = await makePlates(scenes, bgKey, OW, OH, onStep, options.noCutout);
   const starts = [];
   let total = 0;
   for (const scene of scenes) {
     starts.push(total);
     total += scene.duration;
   }
+  return {
+    total,
+    busy,
+    previewAt: scenes[0].duration * 0.9,
+    draw: (ctx, t, scale) => drawFrame(ctx, Math.min(t, total - 0.001), scenes, plates, starts, theme, scale),
+    dispose: () => new Set(plates).forEach((plate) => ((plate.width = 1), (plate.height = 1))),
+  };
+}
+
+/* ---- ⚡ FAST CUTS: quick beat-style cuts, punch zoom, colour changes ---- */
+async function fastCutsPlan(bags, options, OW, OH, onStep) {
+  const bgs = rotateBgs(options.bg || "beige", bags.length + 1);
+  const plates = [];
+  let busy = 0;
+  for (let index = 0; index < bags.length; index++) {
+    const plate = makeCanvas(OW, OH);
+    const result = drawStudio(plate.getContext("2d"), {
+      W: OW,
+      H: OH,
+      img: bags[index].img,
+      d: { studioBg: bgs[index], storyLayout: true, bare: true, reel: true, noCutout: options.noCutout },
+    });
+    if (result && result.cutout === false && !options.noCutout) busy += 1;
+    plates.push(plate);
+    onStep((index + 1) / (bags.length + 1));
+    await tick();
+  }
+  const introTheme = STUDIO_BACKGROUNDS[bgs[0]];
+  const intro = makeCanvas(OW, OH);
+  drawStudioBackdrop(intro.getContext("2d"), OW, OH, bgs[0]);
+  const outroTheme = STUDIO_BACKGROUNDS.noir;
+  const outro = makeCanvas(OW, OH);
+  drawStudioBackdrop(outro.getContext("2d"), OW, OH, "noir");
+
+  const INTRO = 1.0;
+  const CUT = 0.8;
+  const OUTRO = 1.7;
+  const total = INTRO + CUT * bags.length + OUTRO;
+  const hook = String(options.hook || "new drop").trim().toUpperCase();
+  const words = hook.split(/\s+/).filter(Boolean);
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    if (t < INTRO) {
+      ctx.drawImage(intro, 0, 0, REEL_W, REEL_H);
+      brandMark(ctx, introTheme);
+      // words pop in one after another
+      const lineH = 150;
+      const top = REEL_H * 0.47 - ((words.length - 1) * lineH) / 2;
+      words.forEach((word, index) => {
+        const local = (t - 0.12 - index * 0.16) / 0.3;
+        if (local <= 0) return;
+        const k = easeOutBack(local);
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, local * 2);
+        ctx.translate(REEL_W / 2, top + index * lineH);
+        ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k);
+        boldText(ctx, word, 0, 0, 150, inkOf(introTheme));
+        ctx.restore();
+      });
+      return;
+    }
+    const tc = t - INTRO;
+    if (tc < CUT * bags.length) {
+      const index = Math.min(bags.length - 1, Math.floor(tc / CUT));
+      const local = tc - index * CUT;
+      const theme = STUDIO_BACKGROUNDS[bgs[index]];
+      // punch-in zoom: starts big, settles fast
+      const zoom = 1.16 - 0.16 * easeOut(local / 0.32);
+      const w = REEL_W * zoom;
+      const h = REEL_H * zoom;
+      ctx.drawImage(plates[index], (REEL_W - w) / 2, REEL_H * 0.46 * (1 - zoom), w, h);
+      // white flash on the cut
+      if (local < 0.12) {
+        ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - local / 0.12)})`;
+        ctx.fillRect(0, 0, REEL_W, REEL_H);
+      }
+      brandMark(ctx, theme);
+      // progress segments
+      const segW = (REEL_W * 0.7) / bags.length;
+      for (let s2 = 0; s2 < bags.length; s2++) {
+        const fill = s2 < index ? 1 : s2 === index ? Math.min(1, local / CUT) : 0;
+        const x = REEL_W * 0.15 + s2 * segW + 4;
+        ctx.fillStyle = inkOf(theme, 0.18);
+        ctx.fillRect(x, 300, segW - 8, 5);
+        ctx.fillStyle = inkOf(theme, 0.85);
+        ctx.fillRect(x, 300, (segW - 8) * fill, 5);
+      }
+      // name slides in from the left, price pill pops
+      const e = easeOut((local - 0.05) / 0.3);
+      ctx.save();
+      ctx.globalAlpha = e;
+      ctx.translate(-70 * (1 - e), 0);
+      boldText(ctx, String(bags[index].name || "").toUpperCase(), REEL_W / 2, REEL_H * 0.2, 60, inkOf(theme));
+      ctx.restore();
+      const price = Number(bags[index].price) || 0;
+      if (options.showPrice && price > 0) {
+        const p2 = easeOutBack((local - 0.18) / 0.3);
+        if (p2 > 0) {
+          const label = rupees(price);
+          ctx.save();
+          ctx.font = `600 44px ${SANS}`;
+          const pw = ctx.measureText(label).width + 56;
+          ctx.translate(REEL_W / 2, REEL_H * 0.235);
+          ctx.scale(p2, p2);
+          ctx.fillStyle = inkOf(theme, 0.92);
+          roundRectPath(ctx, -pw / 2, -46, pw, 66, 33);
+          ctx.fill();
+          ctx.fillStyle = theme.dark ? "#1c150d" : "#f6f1e7";
+          ctx.textAlign = "center";
+          ctx.fillText(label, 0, 2);
+          ctx.restore();
+        }
+      }
+      return;
+    }
+    const to = t - INTRO - CUT * bags.length;
+    ctx.drawImage(outro, 0, 0, REEL_W, REEL_H);
+    if (to < 0.12) {
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * (1 - to / 0.12)})`;
+      ctx.fillRect(0, 0, REEL_W, REEL_H);
+    }
+    brandMark(ctx, outroTheme);
+    const a = easeOutBack(to / 0.35);
+    ctx.save();
+    ctx.translate(REEL_W / 2, REEL_H * 0.46);
+    ctx.scale(0.7 + 0.3 * a, 0.7 + 0.3 * a);
+    ctx.globalAlpha = Math.min(1, to * 4);
+    boldText(ctx, "LINK IN BIO", 0, 0, 130, inkOf(outroTheme));
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = easeOut((to - 0.35) / 0.4);
+    ctx.fillStyle = inkOf(outroTheme, 0.75);
+    ctx.font = `600 30px ${SANS}`;
+    spaced(ctx, "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE", REEL_W / 2, REEL_H * 0.51, 5);
+    ctx.restore();
+  }
+
+  return {
+    total,
+    busy,
+    previewAt: INTRO + 0.6,
+    draw,
+    dispose: () => [...plates, intro, outro].forEach((c) => ((c.width = 1), (c.height = 1))),
+  };
+}
+
+/* ---- 🖼 COLLAGE: mood-board grid, tiles pop in, then a spotlight on each ---- */
+function collageLayout(count) {
+  const left = 70;
+  const right = REEL_W - 70;
+  const top = 430;
+  const gap = 30;
+  const tileW = (right - left - gap) / 2;
+  if (count <= 2) {
+    const h = 760;
+    return [0, 1].slice(0, count).map((i) => ({ x: left + i * (tileW + gap), y: top + 80, w: tileW, h }));
+  }
+  const h = 500;
+  const boxes = [
+    { x: left, y: top, w: tileW, h },
+    { x: left + tileW + gap, y: top, w: tileW, h },
+  ];
+  if (count === 3) boxes.push({ x: (REEL_W - tileW) / 2, y: top + h + gap, w: tileW, h });
+  else boxes.push({ x: left, y: top + h + gap, w: tileW, h }, { x: left + tileW + gap, y: top + h + gap, w: tileW, h });
+  return boxes;
+}
+
+async function collagePlan(bags, options, OW, OH, onStep) {
+  const list = bags.slice(0, 4);
+  const k = OW / REEL_W;
+  const boxes = collageLayout(list.length);
+  const tileBgs = rotateBgs(options.bg || "beige", list.length + 1).slice(1);
+  const pageKey = options.bg || "beige";
+  const page = makeCanvas(OW, OH);
+  drawStudioBackdrop(page.getContext("2d"), OW, OH, pageKey);
+  const theme = STUDIO_BACKGROUNDS[pageKey] || STUDIO_BACKGROUNDS.beige;
+  const tiles = [];
+  let busy = 0;
+  for (let index = 0; index < list.length; index++) {
+    const box = boxes[index];
+    const tile = makeCanvas(Math.round(box.w * k), Math.round(box.h * k));
+    const result = drawStudio(tile.getContext("2d"), {
+      W: tile.width,
+      H: tile.height,
+      img: list[index].img,
+      d: { studioBg: tileBgs[index], bare: true, noCutout: options.noCutout },
+    });
+    if (result && result.cutout === false && !options.noCutout) busy += 1;
+    tiles.push(tile);
+    onStep((index + 1) / list.length);
+    await tick();
+  }
+  const POP = 0.3;
+  const IN_START = 0.35;
+  const inEnd = IN_START + POP * list.length + 0.45;
+  const SPOT = 0.9;
+  const OUTRO = 1.7;
+  const total = inEnd + SPOT * list.length + OUTRO;
+  const hook = String(options.hook || "which one is you?").trim();
+  const tilts = [-3, 2.5, 2, -2.5];
+
+  function drawTile(ctx, index, scaleBoost, alpha, tiltFactor) {
+    const box = boxes[index];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(box.x + box.w / 2, box.y + box.h / 2);
+    ctx.rotate(((tilts[index] || 0) * tiltFactor * Math.PI) / 180);
+    ctx.scale(scaleBoost, scaleBoost);
+    ctx.shadowColor = "rgba(0,0,0,0.22)";
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 16;
+    roundRectPath(ctx, -box.w / 2, -box.h / 2, box.w, box.h, 28);
+    ctx.fillStyle = "#fff";
+    ctx.fill();
+    ctx.shadowColor = "transparent";
+    ctx.clip();
+    ctx.drawImage(tiles[index], -box.w / 2, -box.h / 2, box.w, box.h);
+    ctx.restore();
+  }
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.drawImage(page, 0, 0, REEL_W, REEL_H);
+    brandMark(ctx, theme);
+    const outroStart = inEnd + SPOT * list.length;
+    const fadeAll = t > outroStart ? 1 - easeOut((t - outroStart) / 0.4) : 1;
+    // title
+    ctx.save();
+    ctx.globalAlpha = easeOut((t - 0.05) / 0.4) * fadeAll;
+    ctx.fillStyle = inkOf(theme);
+    ctx.textAlign = "center";
+    fitSize(ctx, hook, "italic 500", 84, SERIF, REEL_W * 0.86);
+    ctx.fillText(hook, REEL_W / 2, 390);
+    ctx.restore();
+
+    const spotIndex = t >= inEnd && t < outroStart ? Math.floor((t - inEnd) / SPOT) : -1;
+    list.forEach((_, index) => {
+      const local = (t - IN_START - index * POP) / 0.45;
+      if (local <= 0) return;
+      const pop = easeOutBack(local);
+      let boost = 0.8 + 0.2 * pop;
+      let alpha = Math.min(1, local * 1.6) * fadeAll;
+      if (spotIndex >= 0) {
+        const sl = (t - inEnd - spotIndex * SPOT) / 0.25;
+        if (index === spotIndex) boost *= 1 + 0.05 * easeOut(sl);
+        else alpha *= 1 - 0.55 * easeOut(sl);
+      }
+      if (alpha > 0) drawTile(ctx, index, boost, alpha, 1 - 0.4 * pop);
+    });
+    // spotlight label
+    if (spotIndex >= 0) {
+      const sl = easeOut((t - inEnd - spotIndex * SPOT) / 0.3);
+      const bag = list[spotIndex];
+      const y = boxes[boxes.length - 1].y + boxes[boxes.length - 1].h + 110;
+      ctx.save();
+      ctx.globalAlpha = sl;
+      ctx.translate(0, 20 * (1 - sl));
+      ctx.fillStyle = inkOf(theme);
+      ctx.textAlign = "center";
+      fitSize(ctx, bag.name || "", "italic 500", 56, SERIF, REEL_W * 0.86);
+      ctx.fillText(bag.name || "", REEL_W / 2, y);
+      if (options.showPrice && Number(bag.price) > 0) {
+        ctx.fillStyle = inkOf(theme, 0.7);
+        ctx.font = `600 32px ${SANS}`;
+        spaced(ctx, rupees(bag.price), REEL_W / 2, y + 56, 4);
+      }
+      ctx.restore();
+    }
+    if (t >= outroStart) {
+      const to = t - outroStart;
+      ctx.save();
+      ctx.globalAlpha = easeOut((to - 0.2) / 0.45);
+      ctx.fillStyle = inkOf(theme);
+      ctx.textAlign = "center";
+      fitSize(ctx, "comment your pick 👇", "italic 500", 88, SERIF, REEL_W * 0.86);
+      ctx.fillText("comment your pick 👇", REEL_W / 2, REEL_H * 0.45);
+      ctx.fillStyle = inkOf(theme, 0.7);
+      ctx.font = `600 30px ${SANS}`;
+      spaced(ctx, "SHOP VIA THE LINK IN BIO", REEL_W / 2, REEL_H * 0.5, 6);
+      ctx.restore();
+    }
+  }
+
+  return {
+    total,
+    busy,
+    previewAt: inEnd + 0.05,
+    draw,
+    dispose: () => [...tiles, page].forEach((c) => ((c.width = 1), (c.height = 1))),
+  };
+}
+
+/* ---- 📸 POLAROID: real photos drop in as polaroid prints and stack ---- */
+async function polaroidPlan(bags, options, OW, OH, onStep) {
+  const list = bags.slice(0, 5);
+  const k = OW / REEL_W;
+  const pageKey = options.bg || "beige";
+  const theme = STUDIO_BACKGROUNDS[pageKey] || STUDIO_BACKGROUNDS.beige;
+  const page = makeCanvas(OW, OH);
+  drawStudioBackdrop(page.getContext("2d"), OW, OH, pageKey);
+  const CARD_W = 620;
+  const CARD_H = 760;
+  const PAD = 34;
+  const PHOTO_H = 590;
+  const cards = [];
+  for (let index = 0; index < list.length; index++) {
+    // the card is drawn once: white paper, the real photo, a caption
+    const card = makeCanvas(Math.round(CARD_W * k), Math.round(CARD_H * k));
+    const c = card.getContext("2d");
+    c.scale(k, k);
+    c.fillStyle = "#fbfaf6";
+    c.fillRect(0, 0, CARD_W, CARD_H);
+    const img = list[index].img;
+    const boxW = CARD_W - PAD * 2;
+    const fit = Math.min(boxW / img.width, PHOTO_H / img.height);
+    const dw = img.width * fit;
+    const dh = img.height * fit;
+    c.fillStyle = "#ffffff";
+    c.fillRect(PAD, PAD, boxW, PHOTO_H);
+    c.drawImage(img, PAD + (boxW - dw) / 2, PAD + (PHOTO_H - dh) / 2, dw, dh);
+    c.strokeStyle = "rgba(0,0,0,0.06)";
+    c.strokeRect(PAD, PAD, boxW, PHOTO_H);
+    const caption = list[index].label || list[index].name || "";
+    c.fillStyle = "rgba(28,21,13,0.85)";
+    c.textAlign = "center";
+    fitSize(c, caption, "italic 500", 44, SERIF, CARD_W - PAD * 2);
+    c.fillText(caption, CARD_W / 2, PAD + PHOTO_H + 82);
+    cards.push(card);
+    onStep((index + 1) / list.length);
+    await tick();
+  }
+  const DROP = 1.0;
+  const START = 0.5;
+  const HOLD = 1.1;
+  const OUTRO = 1.8;
+  const dropsEnd = START + DROP * list.length;
+  const total = dropsEnd + HOLD + OUTRO;
+  const angles = [-6, 5, -3, 7, -4];
+  const shifts = [
+    [-30, 10],
+    [35, -20],
+    [-10, 25],
+    [25, 5],
+    [0, -10],
+  ];
+  const hook = String(options.hook || "my bag edit ✨").trim();
+
+  function draw(ctx, t, scale) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.drawImage(page, 0, 0, REEL_W, REEL_H);
+    brandMark(ctx, theme);
+    const outroStart = dropsEnd + HOLD;
+    const dim = t > outroStart ? easeOut((t - outroStart) / 0.5) : 0;
+    ctx.save();
+    ctx.globalAlpha = easeOut((t - 0.05) / 0.4) * (1 - dim);
+    ctx.fillStyle = inkOf(theme);
+    ctx.textAlign = "center";
+    fitSize(ctx, hook, "italic 500", 84, SERIF, REEL_W * 0.86);
+    ctx.fillText(hook, REEL_W / 2, 400);
+    ctx.restore();
+    list.forEach((_, index) => {
+      const local = (t - START - index * DROP) / 0.65;
+      if (local <= 0) return;
+      const e = easeOutBack(local);
+      const [sx, sy] = shifts[index % shifts.length];
+      const cx = REEL_W / 2 + sx;
+      const cy = 1040 + sy - (1 - e) * 1100;
+      const angle = ((angles[index % angles.length] + (1 - e) * 14) * Math.PI) / 180;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(angle);
+      ctx.shadowColor = "rgba(0,0,0,0.28)";
+      ctx.shadowBlur = 36;
+      ctx.shadowOffsetY = 18;
+      ctx.drawImage(cards[index], -CARD_W / 2, -CARD_H / 2, CARD_W, CARD_H);
+      ctx.restore();
+    });
+    if (dim > 0) {
+      ctx.fillStyle = `rgba(${theme.dark ? "28,24,21" : "246,241,231"},${0.82 * dim})`;
+      ctx.fillRect(0, 0, REEL_W, REEL_H);
+      ctx.save();
+      ctx.globalAlpha = easeOut((t - outroStart - 0.2) / 0.45);
+      ctx.fillStyle = inkOf(theme);
+      ctx.textAlign = "center";
+      fitSize(ctx, "which one would you carry?", "italic 500", 80, SERIF, REEL_W * 0.86);
+      ctx.fillText("which one would you carry?", REEL_W / 2, REEL_H * 0.45);
+      ctx.fillStyle = inkOf(theme, 0.7);
+      ctx.font = `600 30px ${SANS}`;
+      spaced(ctx, "SHOP VIA THE LINK IN BIO", REEL_W / 2, REEL_H * 0.5, 6);
+      ctx.restore();
+      brandMark(ctx, theme);
+    }
+  }
+
+  return {
+    total,
+    busy: 0,
+    previewAt: dropsEnd + 0.3,
+    draw,
+    dispose: () => [...cards, page].forEach((c) => ((c.width = 1), (c.height = 1))),
+  };
+}
+
+async function createPlan(style, bags, options, OW, OH, onStep = () => {}) {
+  if (style === "fastcuts") return fastCutsPlan(bags, options, OW, OH, onStep);
+  if (style === "collage") return collagePlan(bags, options, OW, OH, onStep);
+  if (style === "polaroid") return polaroidPlan(bags, options, OW, OH, onStep);
+  return classicPlan(style, bags, options, OW, OH, onStep);
+}
+
+/**
+ * Renders the reel. Returns { blob, seconds, busy, method }.
+ */
+export async function renderReel({ style, bags, options, onProgress = () => {} }) {
+  const q = QUALITIES[options.quality] || QUALITIES.fast;
+  onProgress(0, "Bags taiyar ho rahe hain...");
+  await tick();
+  const plan = await createPlan(style, bags, options, q.w, q.h, (p) => onProgress(p * 0.1, "Bags taiyar ho rahe hain..."));
+  const total = plan.total;
   const canvas = makeCanvas(q.w, q.h);
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingQuality = "medium";
   const scale = q.w / REEL_W;
-  const draw = (t) => drawFrame(ctx, Math.min(t, total - 0.001), scenes, plates, starts, theme, scale);
+  const draw = (t) => plan.draw(ctx, Math.min(t, total - 0.001), scale);
   const later = (p, text) => onProgress(0.1 + p * 0.9, text);
 
   const codec = await pickCodec(q);
   let blob;
   let method;
-  if (codec) {
-    try {
-      method = "fast";
-      blob = await encodeWebCodecs(codec, q, Math.round(total * FPS), draw, canvas, (p) => later(p, "Video ban rahi hai..."));
-    } catch {
-      blob = null; // phone's fast encoder refused - use the slower way below
+  try {
+    if (codec) {
+      try {
+        method = "fast";
+        blob = await encodeWebCodecs(codec, q, Math.round(total * FPS), draw, canvas, (p) => later(p, "Video ban rahi hai..."));
+      } catch {
+        blob = null; // phone's fast encoder refused - use the slower way below
+      }
     }
+    if (!blob) {
+      method = "realtime";
+      blob = await encodeRealtime(q, total, draw, canvas, (p) => later(p, "Video ban rahi hai (reel jitna time lagega)..."));
+    }
+  } finally {
+    // free the big canvases right away (phone memory)
+    plan.dispose();
+    canvas.width = 1;
+    canvas.height = 1;
   }
-  if (!blob) {
-    method = "realtime";
-    blob = await encodeRealtime(q, total, draw, canvas, (p) => later(p, "Video ban rahi hai (reel jitna time lagega)..."));
-  }
-  // free the big canvases right away (phone memory)
-  new Set(plates).forEach((plate) => {
-    plate.width = 1;
-    plate.height = 1;
-  });
-  canvas.width = 1;
-  canvas.height = 1;
   onProgress(1, "");
-  return { blob, seconds: total, busy, method };
+  return { blob, seconds: total, busy: plan.busy, method };
 }
 
-/* Still preview of the first frame (shown before making the video). */
-export function drawPreview(ctx, style, bags, options) {
-  const bgKey = STUDIO_BACKGROUNDS[options.bg] ? options.bg : "beige";
-  const theme = STUDIO_BACKGROUNDS[bgKey];
-  const scenes = buildTimeline(style, bags, options);
-  const plate = makeCanvas(REEL_W / 2, REEL_H / 2); // small = fast preview
-  const pctx = plate.getContext("2d");
-  if (scenes[0].img) drawStudio(pctx, { W: REEL_W / 2, H: REEL_H / 2, img: scenes[0].img, d: { studioBg: bgKey, storyLayout: true, bare: true, reel: true } });
-  else drawStudioBackdrop(pctx, REEL_W / 2, REEL_H / 2, bgKey);
-  drawFrame(ctx, scenes[0].duration * 0.9, scenes.slice(0, 1), [plate], [0], theme);
-  plate.width = 1;
-  plate.height = 1;
+/* Still preview (shown before making the video) - small and quick. */
+export async function drawPreview(ctx, style, bags, options) {
+  const plan = await createPlan(style, bags, options, REEL_W / 2, REEL_H / 2);
+  plan.draw(ctx, Math.min(plan.previewAt, plan.total - 0.01), 1);
+  plan.dispose();
 }
+
+export const STYLE_NAMES = ["newin", "colours", "guess", "fastcuts", "collage", "polaroid"];

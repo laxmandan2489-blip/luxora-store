@@ -12,9 +12,12 @@ import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } fr
  */
 
 const STYLES = {
-  newin: { label: "New in", hint: "3 se 6 bags chuno.", min: 3, max: 6, hook: "new in this week" },
-  colours: { label: "Kaunsa colour? 1-2-3", hint: "Ek bag chuno jiske 2-4 colour hon.", min: 1, max: 1, hook: "kaunsa colour lenge?" },
-  guess: { label: "Guess the price", hint: "Ek bag chuno (uski 1-3 photos use hongi).", min: 1, max: 1, hook: "guess the price 👀" },
+  newin: { label: "New in", hint: "3 se 6 alag bags chuno.", min: 3, max: 6, hook: "new in this week", kind: "bags" },
+  colours: { label: "Kaunsa colour? 1-2-3", hint: "Ek bag chuno jiske 2-4 colour hon.", min: 1, max: 1, hook: "kaunsa colour lenge?", kind: "colours" },
+  guess: { label: "Guess the price", hint: "Ek bag chuno, neeche uski 3 photos chuno.", min: 1, max: 1, hook: "guess the price 👀", kind: "guess" },
+  fastcuts: { label: "⚡ Fast cuts (trending)", hint: "3 se 6 alag bags chuno. Tez cuts, har bag alag colour par.", min: 3, max: 6, hook: "new drop", kind: "bags" },
+  collage: { label: "🖼 Collage", hint: "2 se 4 bags chuno. Mood-board jaisa grid.", min: 2, max: 4, hook: "which one is you?", kind: "bags" },
+  polaroid: { label: "📸 Polaroid", hint: "3 se 5 bags chuno. Asli photos polaroid ki tarah girti hain.", min: 3, max: 5, hook: "my bag edit ✨", kind: "bags" },
 };
 
 function captionFor(style, bags) {
@@ -27,7 +30,10 @@ function captionFor(style, bags) {
     return [`${first.name || "new bag"}`, "guess kiya? price video ke end mein 👀", "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
   }
   const names = bags.map((bag) => `— ${bag.name}`).filter((line) => line.length > 2);
-  return ["new in this week ✨", "", ...names, "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
+  if (style === "collage" || style === "polaroid") {
+    return [style === "collage" ? "which one is you? 🤍" : "my bag edit ✨", "", ...names, "", "comment your pick 👇", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
+  }
+  return [style === "fastcuts" ? "new drop ⚡" : "new in this week ✨", "", ...names, "", "free delivery on prepaid orders · cash on delivery available", "shop via the link in bio ✦", "", tags].join("\n");
 }
 
 export default function ReelMaker({ API, adminFetch, products }) {
@@ -38,6 +44,8 @@ export default function ReelMaker({ API, adminFetch, products }) {
   const [hook, setHook] = useState(STYLES.newin.hook);
   const [showPrice, setShowPrice] = useState(true);
   const [quality, setQuality] = useState("fast");
+  const [noCutout, setNoCutout] = useState(false);
+  const [picks, setPicks] = useState({}); // slot key -> chosen photo url
   const [search, setSearch] = useState("");
   const [pickedIds, setPickedIds] = useState([]);
   const [bags, setBags] = useState([]); // loaded: [{ img, name, price, mrp, label }]
@@ -96,43 +104,61 @@ export default function ReelMaker({ API, adminFetch, products }) {
     return image;
   }
 
-  // Load the photos the chosen style needs.
+  const productById = (id) => (products || []).find((product) => product.id === id);
+  const allUrls = (product) => Array.from(new Set(productVariants(API, product).flatMap((variant) => variant.urls))).filter(Boolean);
+
+  // (2026-10-29) SLOTS: one per photo in the reel. Each slot has the photos
+  // you can choose from; the chosen one is in "picks" (default = first).
+  const slots = useMemo(() => {
+    const chosen = pickedIds.map(productById).filter(Boolean);
+    if (!chosen.length) return [];
+    if (rule.kind === "colours") {
+      const product = chosen[0];
+      return productVariants(API, product)
+        .filter((variant) => variant.urls.length)
+        .slice(0, 4)
+        .map((variant) => ({ key: `${product.id}|c|${variant.key}`, product, title: variant.label, options: variant.urls, label: variant.label }));
+    }
+    if (rule.kind === "guess") {
+      const product = chosen[0];
+      const urls = allUrls(product);
+      return [0, 1, 2]
+        .filter((index) => index < Math.max(1, Math.min(3, urls.length)))
+        .map((index) => ({ key: `${product.id}|g|${index}`, product, title: `Photo ${index + 1}`, options: urls, fallback: urls[index] }));
+    }
+    return chosen.map((product) => ({ key: `${product.id}|b`, product, title: product.name, options: allUrls(product) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickedIds, style, products]);
+
+  const slotUrl = (slot) => picks[slot.key] || slot.fallback || slot.options[0];
+
+  // Load the chosen photos.
   useEffect(() => {
     let cancelled = false;
     async function run() {
-      const chosen = pickedIds.map((id) => list.find((product) => product.id === id) || (products || []).find((product) => product.id === id)).filter(Boolean);
-      if (!chosen.length) {
+      if (!slots.length) {
         setBags([]);
         return;
       }
       setLoading(true);
       setNotice("");
       try {
-        let next = [];
-        if (style === "newin") {
-          for (const product of chosen) {
-            const first = productVariants(API, product)[0];
-            const source = (first && first.urls[0]) || product.image;
-            next.push({ img: await loadPhoto(product, source), name: product.name || "", price: Number(product.price) || 0, mrp: Number(product.oldPrice) || 0 });
-          }
-        } else if (style === "colours") {
-          const product = chosen[0];
-          const variants = productVariants(API, product).filter((variant) => variant.urls[0]).slice(0, 4);
-          if (variants.length < 2) setNotice("⚠️ Is bag ka ek hi colour hai. “Kaunsa colour” ke liye 2-4 colour wala bag chuno.");
-          for (const variant of variants) {
-            next.push({ img: await loadPhoto(product, variant.urls[0]), name: product.name || "", label: variant.label, price: Number(product.price) || 0, mrp: Number(product.oldPrice) || 0 });
-          }
-        } else {
-          const product = chosen[0];
-          const urls = Array.from(new Set(productVariants(API, product).flatMap((variant) => variant.urls))).slice(0, 3);
-          for (const url of urls) {
-            next.push({ img: await loadPhoto(product, url), name: product.name || "", price: Number(product.price) || 0, mrp: Number(product.oldPrice) || 0 });
-          }
-          if (next.length && !(Number(product.price) > 0)) setNotice("⚠️ Is bag ka price khaali hai - Products mein price bharo.");
+        const next = [];
+        for (const slot of slots) {
+          const product = slot.product;
+          next.push({
+            img: await loadPhoto(product, slotUrl(slot)),
+            name: product.name || "",
+            label: slot.label || "",
+            price: Number(product.price) || 0,
+            mrp: Number(product.oldPrice) || 0,
+          });
         }
+        if (rule.kind === "colours" && next.length < 2) setNotice("⚠️ Is bag ka ek hi colour hai. “Kaunsa colour” ke liye 2-4 colour wala bag chuno.");
+        if (rule.kind === "guess" && next.length && !(next[0].price > 0)) setNotice("⚠️ Is bag ka price khaali hai - Products mein price bharo.");
         if (!cancelled) setBags(next);
         // cut the bags out now, so "Reel banao" starts straight away
-        await prepareCutouts(next.map((bag) => bag.img));
+        if (!noCutout && style !== "polaroid") await prepareCutouts(next.map((bag) => bag.img));
       } catch (error) {
         if (!cancelled) setNotice(`❌ ${error.message || "Photo load nahi hui."} Dobara try karo.`);
       } finally {
@@ -144,7 +170,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pickedIds, style]);
+  }, [slots, picks]);
 
   // Still preview of the first frame
   useEffect(() => {
@@ -157,14 +183,34 @@ export default function ReelMaker({ API, adminFetch, products }) {
       ctx.clearRect(0, 0, REEL_W, REEL_H);
       return;
     }
-    drawPreview(ctx, style, bags, { bg, hook, showPrice });
-  }, [bags, style, bg, hook, showPrice, fontsReady, video]);
+    let stale = false;
+    const off = document.createElement("canvas");
+    off.width = REEL_W;
+    off.height = REEL_H;
+    drawPreview(off.getContext("2d"), style, bags, { bg, hook, showPrice, noCutout })
+      .then(() => {
+        if (!stale) ctx.drawImage(off, 0, 0);
+      })
+      .catch(() => {})
+      .finally(() => {
+        off.width = 1;
+        off.height = 1;
+      });
+    return () => {
+      stale = true;
+    };
+  }, [bags, style, bg, hook, showPrice, noCutout, fontsReady, video]);
 
   function chooseStyle(value) {
     setStyle(value);
     setHook(STYLES[value].hook);
     setVideo(null);
     setPickedIds((ids) => ids.slice(0, STYLES[value].max));
+  }
+
+  function choosePhoto(slot, url) {
+    setVideo(null);
+    setPicks((current) => ({ ...current, [slot.key]: url }));
   }
 
   function toggleBag(product) {
@@ -177,7 +223,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
     });
   }
 
-  const enough = style === "newin" ? bags.length >= rule.min : style === "colours" ? bags.length >= 2 : bags.length >= 1;
+  const enough = rule.kind === "bags" ? bags.length >= rule.min : rule.kind === "colours" ? bags.length >= 2 : bags.length >= 1;
 
   async function make() {
     if (!enough || busy) return;
@@ -190,7 +236,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
       const result = await renderReel({
         style,
         bags,
-        options: { bg, hook, showPrice, quality },
+        options: { bg, hook, showPrice, quality, noCutout },
         onProgress: (value, text) => {
           setProgress(value);
           if (text) setStage(text);
@@ -268,9 +314,16 @@ export default function ReelMaker({ API, adminFetch, products }) {
         .rm-btn { padding: 12px 16px; border-radius: 12px; border: 1px solid #1c150d; background: #fff; color: #1c150d; font-size: 15px; cursor: pointer; }
         .rm-btn.main { background: #1c150d; color: #fff; }
         .rm-btn:disabled, .rm-chip:disabled { opacity: 0.45; cursor: default; }
-        .rm-bags { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 8px; max-height: 340px; overflow-y: auto; margin-bottom: 14px; }
-        .rm-bag { position: relative; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: #f4f1ea; cursor: pointer; aspect-ratio: 1; }
-        .rm-bag img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .rm-bags { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-height: 360px; overflow-y: auto; margin-bottom: 10px; }
+        .rm-bag { position: relative; padding: 0 0 4px; border: 2px solid #eee; border-radius: 10px; overflow: hidden; background: #fff; cursor: pointer; display: flex; flex-direction: column; }
+        .rm-bag img { width: 100%; aspect-ratio: 1; object-fit: contain; display: block; background: #fff; }
+        .rm-name { font-size: 10px; line-height: 1.2; color: #333; padding: 2px 4px 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-align: left; }
+        .rm-slot { margin-bottom: 12px; }
+        .rm-slot-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #222; }
+        .rm-photos { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+        .rm-photo { flex: 0 0 74px; height: 92px; padding: 0; border: 2px solid #e5e5e5; border-radius: 10px; overflow: hidden; background: #fff; cursor: pointer; }
+        .rm-photo img { width: 100%; height: 100%; object-fit: contain; display: block; }
+        .rm-photo.on { border-color: #1c150d; box-shadow: 0 0 0 2px #1c150d; }
         .rm-bag.on { border-color: #1c150d; }
         .rm-num { position: absolute; top: 4px; left: 4px; background: #1c150d; color: #fff; border-radius: 999px; font-size: 11px; min-width: 20px; height: 20px; line-height: 20px; text-align: center; }
         .rm-bar { height: 8px; background: #eee; border-radius: 99px; overflow: hidden; margin: 10px 0 4px; }
@@ -362,7 +415,14 @@ export default function ReelMaker({ API, adminFetch, products }) {
             <input className="form-input" value={hook} onChange={(event) => { setHook(event.target.value); setVideo(null); }} disabled={busy} />
           </div>
 
-          {style === "newin" ? (
+          {style !== "polaroid" ? (
+            <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+              <input type="checkbox" checked={!noCutout} onChange={(event) => { setNoCutout(!event.target.checked); setVideo(null); }} disabled={busy} />
+              Bag ka background hatao (Studio look). Kisi photo mein dikkat ho to tick hatao.
+            </label>
+          ) : null}
+
+          {style === "newin" || style === "fastcuts" || style === "collage" ? (
             <label className="form-label" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 14 }}>
               <input type="checkbox" checked={showPrice} onChange={(event) => { setShowPrice(event.target.checked); setVideo(null); }} disabled={busy} />
               Har bag ke saath price chhota sa dikhao
@@ -370,7 +430,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
           ) : null}
 
           <label className="form-label">
-            Bags · {rule.hint} {style === "newin" ? `(${pickedIds.length}/${rule.max})` : ""}
+            Bags · {rule.hint} {rule.max > 1 ? `(${pickedIds.length}/${rule.max})` : ""}
           </label>
           <input className="form-input" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search bags..." style={{ marginBottom: 10 }} />
           <div className="rm-bags">
@@ -386,12 +446,39 @@ export default function ReelMaker({ API, adminFetch, products }) {
                   disabled={busy}
                 >
                   <img src={absoluteUrl(API, product.image || (Array.isArray(product.images) ? product.images[0] : ""))} alt={product.name} loading="lazy" />
-                  {index >= 0 ? <span className="rm-num">{style === "newin" ? index + 1 : "✓"}</span> : null}
+                  <span className="rm-name">{product.name}</span>
+                  {index >= 0 ? <span className="rm-num">{rule.max > 1 ? index + 1 : "✓"}</span> : null}
                 </button>
               );
             })}
           </div>
           <div className="rm-small">💡 White / plain background wali photo wale bags sabse premium dikhte hain.</div>
+
+          {slots.length ? (
+            <div style={{ marginTop: 16 }}>
+              <label className="form-label">📷 Reel mein kaunsi photo aaye? (tap karke chuno)</label>
+              {slots.map((slot, slotIndex) => (
+                <div key={slot.key} className="rm-slot">
+                  <div className="rm-slot-title">
+                    {slotIndex + 1}. {slot.title}
+                  </div>
+                  <div className="rm-photos">
+                    {slot.options.map((url) => (
+                      <button
+                        type="button"
+                        key={url}
+                        className={slotUrl(slot) === url ? "rm-photo on" : "rm-photo"}
+                        onClick={() => choosePhoto(slot, url)}
+                        disabled={busy}
+                      >
+                        <img src={url} alt="" loading="lazy" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

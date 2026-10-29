@@ -216,7 +216,7 @@ function makeCutout(img) {
     const holeLike = (p, maxGrad) => {
       if (grad[p] > maxGrad) return false;
       const i = p * 4;
-      if (colorDistance(data, i, br, bg, bb) <= 16) return true;
+      if (colorDistance(data, i, br, bg, bb) <= 22) return true;
       const chroma = Math.max(data[i], data[i + 1], data[i + 2]) - Math.min(data[i], data[i + 1], data[i + 2]);
       const bgLum = br * 0.299 + bg * 0.587 + bb * 0.114;
       return chroma < 10 && lum[p] > 150 && Math.abs(lum[p] - bgLum) < 70;
@@ -225,7 +225,7 @@ function makeCutout(img) {
     const comp = new Int32Array(N);
     for (let start = 0; start < N; start++) {
       if (isBg[start] || seen[start]) continue;
-      if (!holeLike(start, 6)) continue;
+      if (!holeLike(start, 8)) continue;
       let ch = 0;
       let ct = 0;
       comp[ct++] = start;
@@ -237,12 +237,12 @@ function makeCutout(img) {
         const neighbours = [x > 0 ? p - 1 : -1, x < W - 1 ? p + 1 : -1, y > 0 ? p - W : -1, y < H - 1 ? p + W : -1];
         for (const q of neighbours) {
           if (q < 0 || seen[q] || isBg[q]) continue;
-          if (!holeLike(q, 12)) continue;
+          if (!holeLike(q, 16)) continue;
           seen[q] = 1;
           comp[ct++] = q;
         }
       }
-      if (ct > N * 0.0015) for (let k = 0; k < ct; k++) isBg[comp[k]] = 1;
+      if (ct > N * 0.0008) for (let k = 0; k < ct; k++) isBg[comp[k]] = 1;
     }
 
     // 4b. Thin grey fuzz left from the old shadow: peel at most 4 pixels
@@ -361,6 +361,24 @@ function makeCutout(img) {
     octx.globalCompositeOperation = "destination-in";
     octx.drawImage(maskCanvas, 0, 0, OW, OH);
     octx.globalCompositeOperation = "source-over";
+
+    // 7b. (2026-10-29) Remove the white "pasted" fringe: on the soft edge,
+    //     take the old background colour back out of each pixel.
+    try {
+      const edge = octx.getImageData(0, 0, OW, OH);
+      const px = edge.data;
+      for (let i = 0; i < px.length; i += 4) {
+        const a = px[i + 3];
+        if (a === 0 || a >= 250) continue;
+        const f = a / 255;
+        px[i] = Math.max(0, Math.min(255, (px[i] - br * (1 - f)) / f));
+        px[i + 1] = Math.max(0, Math.min(255, (px[i + 1] - bg * (1 - f)) / f));
+        px[i + 2] = Math.max(0, Math.min(255, (px[i + 2] - bb * (1 - f)) / f));
+      }
+      octx.putImageData(edge, 0, 0);
+    } catch {
+      // keep the plain version
+    }
 
     const k = OW / W;
     const box = {
@@ -482,7 +500,7 @@ export function drawStudio(ctx, { W, H, img, d }) {
   const textSpace = storyLayout ? 0 : lineText || d.showName ? H * 0.17 : H * 0.08;
   const bottomLimit = H - textSpace;
   const maxW = W * (reel ? 0.8 : isSquare ? 0.62 : 0.7);
-  const result = cutoutBag(img);
+  const result = d.noCutout ? { ok: false } : cutoutBag(img);
 
   if (result.ok) {
     const { canvas, box } = result;
