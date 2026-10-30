@@ -2667,6 +2667,177 @@ app.post("/api/admin/social/publish", requireAdmin, async function (req, res) {
 });
 
 /*
+ * AUTO POST (2026-10-29)
+ * -----------------------
+ * Admin makes ready posts (all slides + captions) and puts them in a
+ * line. cron-job.org calls /api/cron/social-post a few times a day; each
+ * call puts the NEXT post live on Instagram + Facebook.
+ *  - the line is a small JSON file in the existing Supabase storage
+ *    bucket (social/auto-queue.json) - no new database table needed
+ *  - after a post is live, its photos are deleted from storage (Instagram
+ *    keeps its own copy), so storage does not fill up
+ *  - two posts are never put live closer than 60 minutes apart
+ *  - needs CRON_SECRET on Render (the cron link must carry ?key=<it>)
+ */
+const AUTO_QUEUE_PATH = "social/auto-queue.json";
+const AUTO_MIN_GAP_MS = 60 * 60 * 1000;
+
+async function readAutoQueue() {
+  try {
+    const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(AUTO_QUEUE_PATH);
+    if (error || !data) return { items: [], history: [], lastPostAt: 0, posted: {} };
+    const parsed = JSON.parse(await data.text());
+    return {
+      items: Array.isArray(parsed.items) ? parsed.items : [],
+      history: Array.isArray(parsed.history) ? parsed.history : [],
+      lastPostAt: Number(parsed.lastPostAt) || 0,
+      lastBg: parsed.lastBg || "",
+      posted: parsed.posted && typeof parsed.posted === "object" ? parsed.posted : {},
+    };
+  } catch {
+    return { items: [], history: [], lastPostAt: 0, posted: {} };
+  }
+}
+
+async function writeAutoQueue(queue) {
+  const body = Buffer.from(JSON.stringify({ ...queue, history: (queue.history || []).slice(0, 30) }));
+  const { error } = await supabase.storage
+    .from(STORAGE_BUCKET)
+    .upload(AUTO_QUEUE_PATH, body, { contentType: "application/json", upsert: true, cacheControl: "0" });
+  if (error) throw new Error(`Line save nahi hui: ${error.message}`);
+}
+
+async function publishAutoItem(queue, item) {
+  const ids = await getMetaIds();
+  const targets = (item.targets || ["instagram", "facebook"]).filter((t) => t === "instagram" || t === "facebook");
+  const results = {};
+  await Promise.all(
+    targets.map(async (target) => {
+      try {
+        const result =
+          target === "instagram"
+            ? await publishInstagram(ids, "post", item.imageUrls, String(item.captions?.instagram || "").slice(0, 2200))
+            : await publishFacebook(ids, "post", item.imageUrls, String(item.captions?.facebook || ""));
+        results[target] = { ok: true, ...result };
+      } catch (error) {
+        console.error(`AUTO POST ${target.toUpperCase()} ERROR:`, error.message);
+        results[target] = { ok: false, message: error.message };
+      }
+    })
+  );
+  const failed = targets.filter((t) => !results[t]?.ok);
+  const okAny = failed.length < targets.length;
+  if (okAny) {
+    queue.lastPostAt = Date.now();
+    // remember when each bag was last posted, so Admin can pick the
+    // bags that waited longest next time
+    if (item.productId != null) queue.posted = { ...(queue.posted || {}), [String(item.productId)]: Date.now() };
+  }
+  if (!failed.length || (item.tries || 0) >= 2) {
+    queue.items = queue.items.filter((entry) => entry.id !== item.id);
+    queue.history.unshift({ label: item.label, productId: item.productId ?? null, thumb: item.imageUrls[0], at: Date.now(), results });
+    // Instagram / Facebook keep their own copy - free our storage
+    if (!failed.length) deleteStorageImages(item.imageUrls).catch(() => {});
+  } else {
+    // keep only the failed platform(s) for the next try - never double post
+    queue.items = queue.items.map((entry) => (entry.id === item.id ? { ...entry, targets: failed, tries: (entry.tries || 0) + 1 } : entry));
+  }
+  await writeAutoQueue(queue);
+  return results;
+}
+
+app.get("/api/admin/social/auto", requireAdmin, async function (req, res) {
+  const queue = await readAutoQueue();
+  return res.json({ success: true, ...queue, cronReady: Boolean(process.env.CRON_SECRET) });
+});
+
+app.post("/api/admin/social/auto", requireAdmin, async function (req, res) {
+  try {
+    const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+    const clean = incoming
+      .map((item) => ({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        label: String(item.label || "Post").slice(0, 120),
+        productId: item.productId ?? null,
+        bg: String(item.bg || ""),
+        imageUrls: (Array.isArray(item.imageUrls) ? item.imageUrls : []).filter((url) => /^https:\/\//.test(String(url))).slice(0, 10),
+        captions: { instagram: String(item.captions?.instagram || ""), facebook: String(item.captions?.facebook || "") },
+        targets: (Array.isArray(item.targets) ? item.targets : ["instagram", "facebook"]).filter((t) => t === "instagram" || t === "facebook"),
+        addedAt: Date.now(),
+      }))
+      .filter((item) => item.imageUrls.length && item.targets.length);
+    if (!clean.length) return res.status(400).json({ success: false, message: "Koi post nahi mili." });
+    const queue = await readAutoQueue();
+    queue.items.push(...clean);
+    if (clean[clean.length - 1].bg) queue.lastBg = clean[clean.length - 1].bg;
+    await writeAutoQueue(queue);
+    return res.json({ success: true, added: clean.length, ...queue });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.delete("/api/admin/social/auto/:id", requireAdmin, async function (req, res) {
+  try {
+    const queue = await readAutoQueue();
+    const item = queue.items.find((entry) => entry.id === req.params.id);
+    queue.items = queue.items.filter((entry) => entry.id !== req.params.id);
+    await writeAutoQueue(queue);
+    if (item) deleteStorageImages(item.imageUrls).catch(() => {});
+    return res.json({ success: true, ...queue });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post("/api/admin/social/auto/:id/move", requireAdmin, async function (req, res) {
+  try {
+    const queue = await readAutoQueue();
+    const index = queue.items.findIndex((entry) => entry.id === req.params.id);
+    const target = index + (Number(req.body?.step) || 0);
+    if (index >= 0 && target >= 0 && target < queue.items.length) {
+      const [item] = queue.items.splice(index, 1);
+      queue.items.splice(target, 0, item);
+      await writeAutoQueue(queue);
+    }
+    return res.json({ success: true, ...queue });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post("/api/admin/social/auto/:id/now", requireAdmin, async function (req, res) {
+  try {
+    const queue = await readAutoQueue();
+    const item = queue.items.find((entry) => entry.id === req.params.id);
+    if (!item) return res.status(404).json({ success: false, message: "Ye post line mein nahi mili." });
+    const results = await publishAutoItem(queue, item);
+    return res.json({ success: true, results, ...(await readAutoQueue()) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// cron-job.org calls this (GET) at the posting times
+app.get("/api/cron/social-post", async function (req, res) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || String(req.query.key || "") !== secret) return res.status(401).json({ success: false, message: "Wrong key" });
+  try {
+    const queue = await readAutoQueue();
+    if (!queue.items.length) return res.json({ success: true, posted: false, message: "Line khaali hai" });
+    if (Date.now() - (queue.lastPostAt || 0) < AUTO_MIN_GAP_MS) {
+      return res.json({ success: true, posted: false, message: "Pichhli post abhi-abhi gayi thi - agli baar" });
+    }
+    const item = queue.items[0];
+    const results = await publishAutoItem(queue, item);
+    return res.json({ success: true, posted: true, label: item.label, results });
+  } catch (error) {
+    console.error("AUTO POST CRON ERROR:", error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/*
  * Move an imported (or any) product between draft / review /
  * published. Setting "published" also flips active=true so it
  * shows on the live site immediately - moving it out of
