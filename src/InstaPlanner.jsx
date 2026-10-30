@@ -34,14 +34,9 @@ const SINGLE = [
 // (v5) Post looks rotate so two posts in a row never look the same.
 // kind: studio = Ad Maker "✨ Studio"; clean = "Clean · text below".
 const POST_LOOKS = [
-  { kind: "studio", bg: "Beige", line: "the everyday bag", short: "Studio · Beige" },
-  { kind: "clean", bg: "Black", short: "Clean · Black" },
-  { kind: "studio", bg: "Sage green", line: "office se dinner tak", short: "Studio · Sage green" },
+  // (v6) Studio removed - simple Clean design, Cream and Black take turns
   { kind: "clean", bg: "Cream", short: "Clean · Cream" },
-  { kind: "studio", bg: "Stone grey", line: "your new favourite", short: "Studio · Stone grey" },
-  { kind: "studio", bg: "Blush", line: "simple. classy. yours.", short: "Studio · Blush" },
-  { kind: "clean", bg: "Beige", short: "Clean · Beige" },
-  { kind: "studio", bg: "Mocha", line: "one bag, every outfit", short: "Studio · Mocha" },
+  { kind: "clean", bg: "Black", short: "Clean · Black" },
 ];
 const LIFE_LOOKS = [
   { design: "On photo", short: "Model photo · On photo" },
@@ -65,9 +60,9 @@ const MULTI = [
 function load() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(KEY) || "{}");
-    return { done: saved.done || {}, later: saved.later || [], life: saved.life || {}, scanned: saved.scanned || {} };
+    return { done: saved.done || {}, later: saved.later || [], life: saved.life || {}, scanned: saved.scanned || {}, reelsOnly: saved.reelsOnly !== false };
   } catch {
-    return { done: {}, later: [], life: {}, scanned: {} };
+    return { done: {}, later: [], life: {}, scanned: {}, reelsOnly: true };
   }
 }
 
@@ -196,7 +191,9 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bags, state.life, state.done]);
 
-  const nextIndex = plan.findIndex((job) => !state.done[job.key]);
+  // (v7) Posts go out by themselves (Auto Post tab) -> planner only gives reels
+  const skip = (job) => state.reelsOnly && (job.type === "post" || job.type === "life");
+  const nextIndex = plan.findIndex((job) => !state.done[job.key] && !skip(job));
   const next = nextIndex >= 0 ? plan[nextIndex] : null;
   const doneJobs = plan.filter((job) => state.done[job.key]);
 
@@ -270,14 +267,14 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         ? [
             "Ad Maker → is bag ko search karo → Photo mein neeche wali MODEL photo chuno",
             `Design: “${look.design}” → Size: Feed 4:5 → Post mein jodo`,
-            "Slide 2: wahi bag, white background wali photo, “Clean · text below” (price) → jodo",
+            "Slide 2: wahi bag, white background wali photo, “Clean · text below” (naam + price) → jodo",
             "Post karo. Caption mein ise apna photoshoot mat batana",
             "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
           ]
         : look.kind === "clean"
           ? [
               "Ad Maker → is bag ko search karo → Size: Feed 4:5",
-              `Slide 1: Design “Clean · text below” → Background: ${look.bg} → Post mein jodo`,
+              `Slide 1: Design “Clean · text below” (naam + price ke saath) → Background: ${look.bg} → Post mein jodo`,
               `Slide 2-3: dusre colours → Design “No text · only bag” → Background: ${look.bg} → jodo`,
               "Post karo (caption apne-aap aata hai)",
               "Phir: post ko Story mein share + 📋 link sticker → ⭐ NEW IN highlight",
@@ -308,7 +305,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         lines: [
           `Reel Maker → 👜 Ek bag → “${job.template[1]}”`,
           "Is bag ko chuno → 2-4 achhi photos chuno → 🎬 Reel banao → Save",
-          "Instagram: + → Reel → gaana → cover = is bag ki Studio photo",
+          "Instagram: + → Reel → gaana → cover = is bag ki post wali pehli photo",
           "Story mein share kar sakte ho (highlight mein NAHI)",
         ],
         photos: [],
@@ -323,7 +320,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
       lines: [
         `Reel Maker → 🛍 Kai bags → “${job.template[1]}”`,
         `Neeche dikhe ${job.bags.length} bags isi kram mein chuno (pehla = jiski abhi post/reel hui) → 🎬 Reel banao → Save`,
-        "Instagram: + → Reel → gaana → cover = pehle bag ki Studio photo",
+        "Instagram: + → Reel → gaana → cover = pehle bag ki post wali photo",
         "Story mein share kar sakte ho (highlight mein NAHI)",
       ],
       photos: [],
@@ -369,6 +366,11 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
       <div className="panel-header">
         <h2 className="panel-title">Insta Planner</h2>
       </div>
+
+      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, marginBottom: 12, padding: "10px 12px", background: "#f6f3ea", borderRadius: 12 }}>
+        <input type="checkbox" checked={state.reelsOnly} onChange={(e) => setState((current) => ({ ...current, reelsOnly: e.target.checked }))} />
+        📮 Posts “Auto Post” se apne-aap lag rahi hain – mujhe sirf REELS batao
+      </label>
 
       <div className="ip-stats">
         <div className="ip-stat"><b>{doneJobs.filter((j) => j.type === "post" || j.type === "life").length}</b>posts</div>
@@ -449,7 +451,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
 
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>📅 Agle kaam (ek din mein ek)</div>
       <div style={{ marginBottom: 16 }}>
-        {plan.slice(nextIndex >= 0 ? nextIndex : plan.length, (nextIndex >= 0 ? nextIndex : plan.length) + 6).map((job, i) => {
+        {plan.slice(nextIndex >= 0 ? nextIndex : plan.length).filter((job) => !skip(job) && !state.done[job.key]).slice(0, 6).map((job, i) => {
           const what =
             job.type === "post" ? `📷 Post · ${job.look ? job.look.short : ""}` : job.type === "life" ? `👩 Model photo post` : job.type === "reel" ? `🎬 Reel (${job.template[1]})` : `🎞 Kai bags reel (${job.template[1]})`;
           return (
@@ -507,7 +509,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
           <br />
           <b>Highlight:</b> sirf POST wali stories (NEW IN). Reel wali story highlight mein nahi.
           <br />
-          <b>Reel cover:</b> hamesha bag ki Studio photo, taaki grid saaf dikhe.
+          <b>Reel cover:</b> hamesha us bag ki post wali pehli photo (Clean design), taaki grid saaf dikhe.
           <br />
           <b>Model photo:</b> ise apna photoshoot mat batana.
           <br />

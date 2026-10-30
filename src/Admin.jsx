@@ -5,6 +5,7 @@ import AdMaker from "./AdMaker";
 import StoryMaker from "./StoryMaker";
 import ReelMaker from "./ReelMaker";
 import InstaPlanner from "./InstaPlanner";
+import AutoPoster from "./AutoPoster";
 import PhotoPicker from "./PhotoPicker";
 import Analytics from "./Analytics";
 import { removeGeminiMarkFromImage } from "./geminiMark";
@@ -5070,6 +5071,17 @@ function Admin() {
           >
             Insta Planner
           </button>
+          <button
+            type="button"
+            className={
+              activeTab === "autopost"
+                ? "tab-button active"
+                : "tab-button"
+            }
+            onClick={() => setActiveTab("autopost")}
+          >
+            Auto Post
+          </button>
         </div>
 
         {activeTab === "stories" && (
@@ -5078,6 +5090,10 @@ function Admin() {
 
         {activeTab === "reels" && (
           <ReelMaker API={API} adminFetch={adminFetch} products={products} />
+        )}
+
+        {activeTab === "autopost" && (
+          <AutoPoster API={API} adminFetch={adminFetch} products={products} />
         )}
 
         {activeTab === "planner" && (

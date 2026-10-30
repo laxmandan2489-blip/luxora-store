@@ -23,7 +23,8 @@ const SIZES = {
 };
 
 const TEMPLATES = {
-  studio: "✨ Studio", // (2026-10-29) premium backdrop - studioDesign.js
+  // (2026-10-29) "✨ Studio" removed from the list - it left small white
+  // patches around some bags. Its code stays in studioDesign.js (unused here).
   below: "Clean · text below",
   above: "Clean · text above",
   only: "No text · only bag",
@@ -416,7 +417,7 @@ function drawClean(ctx, { W, H, img, template, fit }, d) {
   drawTinyLine(ctx, W, W / 2, bottom, soft);
 }
 
-function drawAd(ctx, { W, H, img, template, fit, d }) {
+export function drawAd(ctx, { W, H, img, template, fit, d }) {
   if (template === "studio") {
     return drawStudio(ctx, { W, H, img, d: { studioBg: d.studioBg, line: d.studioLine, showName: d.studioName, name: d.name } });
   }
