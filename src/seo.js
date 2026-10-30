@@ -233,6 +233,8 @@ export function websiteJsonLd() {
     "@type": "WebSite",
     "@id": `${SITE_URL}/#website`,
     name: BRAND,
+    // Google uses this for the site name shown above results (not "Vercel")
+    alternateName: ["Shrimoh", "SHRIMOH Handbags"],
     url: `${SITE_URL}/`,
     inLanguage: "en-IN",
     publisher: { "@id": `${SITE_URL}/#organization` },

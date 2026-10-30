@@ -690,7 +690,7 @@ export default function AdMaker({ API, adminFetch, products }) {
   const [price, setPrice] = useState("");
   const [mrp, setMrp] = useState("");
   const [slogan, setSlogan] = useState(SLOGANS[0]);
-  const [footer, setFooter] = useState("Free delivery across India  •  shrimoh.vercel.app");
+  const [footer, setFooter] = useState("Free delivery (prepaid)  •  shrimoh.vercel.app");
   const [showBadge, setShowBadge] = useState(true);
   const [cleanBg, setCleanBg] = useState("auto");
   const [studioBg, setStudioBg] = useState("beige");
