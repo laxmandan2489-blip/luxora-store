@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { absoluteUrl, productVariants } from "./AdMaker";
+import { absoluteUrl, loadFonts, productVariants } from "./AdMaker";
+import { renderReel } from "./reelEngine";
 
 /*
  * ADMIN > INSTA PLANNER (2026-10-29 v2)
@@ -60,9 +61,9 @@ const MULTI = [
 function load() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(KEY) || "{}");
-    return { done: saved.done || {}, later: saved.later || [], life: saved.life || {}, scanned: saved.scanned || {}, reelsOnly: saved.reelsOnly !== false };
+    return { done: saved.done || {}, later: saved.later || [], life: saved.life || {}, scanned: saved.scanned || {}, reelsOnly: saved.reelsOnly !== false, perDay: Number(saved.perDay) || 3 };
   } catch {
-    return { done: {}, later: [], life: {}, scanned: {}, reelsOnly: true };
+    return { done: {}, later: [], life: {}, scanned: {}, reelsOnly: true, perDay: 3 };
   }
 }
 
@@ -111,6 +112,14 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
   const [state, setState] = useState(load);
   const [scan, setScan] = useState(null); // { done, total } while scanning
   const [showRules, setShowRules] = useState(false);
+  // (v8) one-tap reel: { key, url, blob, caption } for the current job
+  const [reel, setReel] = useState(null);
+  const [reelBusy, setReelBusy] = useState("");
+  const [copied, setCopied] = useState(false);
+  // (v9) today's two reels (one bag + many bags): { [jobKey]: { url, blob, caption } }
+  const [today2, setToday2] = useState({});
+  const [today2Busy, setToday2Busy] = useState("");
+  const [copiedKey, setCopiedKey] = useState("");
 
   useEffect(() => {
     try {
@@ -141,8 +150,18 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
     let lifes = 0;
     const nextLook = () => POST_LOOKS[posts++ % POST_LOOKS.length];
     const nextLife = () => LIFE_LOOKS[lifes++ % LIFE_LOOKS.length];
-    const nextSingle = () => SINGLE[single++ % SINGLE.length];
-    const nextMulti = () => MULTI[multi++ % MULTI.length];
+    const nextSingle = () => {
+      const pick = SINGLE[single++ % SINGLE.length];
+      lastSingleBase = pick[0].replace(/1$/, "");
+      return pick;
+    };
+    let lastSingleBase = "";
+    const nextMulti = () => {
+      // never the same style as the one-bag reel just before it
+      let pick = MULTI[multi++ % MULTI.length];
+      if (pick[0] === lastSingleBase) pick = MULTI[multi++ % MULTI.length];
+      return pick;
+    };
     // (v4) many-bag reel = the bag just done + the next bags in line
     // (as many as the template takes), so it always includes that bag
     const group = (order, anchor, size) => {
@@ -257,6 +276,233 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
   const thumb = (bag) => absoluteUrl(API, bag.image || (Array.isArray(bag.images) ? bag.images[0] : ""));
   const lifeCount = bags.filter((bag) => lifeOf(bag).length).length;
   const scannedCount = bags.filter((bag) => state.scanned[String(bag.id)]).length;
+
+  async function loadImage(url) {
+    let blob;
+    try {
+      const direct = await fetch(url, { mode: "cors" });
+      if (!direct.ok) throw new Error("direct");
+      blob = await direct.blob();
+    } catch {
+      const response = await adminFetch(`${API}/api/admin/photo-original?url=${encodeURIComponent(url)}`);
+      if (!response.ok) throw new Error("Photo load nahi hui");
+      blob = await response.blob();
+    }
+    const objectUrl = URL.createObjectURL(blob);
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = objectUrl;
+    });
+  }
+
+  function reelCaption(job) {
+    const first = job.bags[0] || {};
+    const end = ["Free delivery (prepaid) · COD available", "Link in bio 🛍", "", "#handbags #bagsforwomen #handbagsindia #newin #shrimoh #bagsofinstagram"];
+    if (job.type === "multi") {
+      const hook = /collage|split/.test(job.template[0]) ? "Which one is you? Comment karo 👇" : job.template[0] === "toplist" ? "This week's top picks 🏆" : "New in this week ✨";
+      return [hook, `${job.bags.length} new bags · swipe the reel`, ...end].join("\n");
+    }
+    const price = Number(first.price) > 0 ? `₹${Number(first.price).toLocaleString("en-IN")}` : "";
+    const line = job.template[0] === "guess" ? "Guess kiya? Price end mein 👀" : price;
+    return [`${first.name || "New bag"} 🤍`, line, ...end].filter((x, i) => x !== "" || i === 4).join("\n");
+  }
+
+  async function buildReel(job, onProgress) {
+    await loadFonts();
+    let items = [];
+    if (job.type === "multi") {
+      for (const bag of job.bags) {
+        const first = productVariants(API, bag).find((v) => v.urls.length);
+        if (!first) continue;
+        items.push({ img: await loadImage(first.urls[0]), name: bag.name || "", price: Number(bag.price) || 0, mrp: Number(bag.oldPrice) || 0, label: "" });
+      }
+    } else {
+      const bag = job.bags[0];
+      const urls = Array.from(new Set(productVariants(API, bag).flatMap((v) => v.urls))).slice(0, job.template[0] === "guess" ? 3 : 4);
+      for (const url of urls) items.push({ img: await loadImage(url), name: bag.name || "", price: Number(bag.price) || 0, mrp: Number(bag.oldPrice) || 0, label: "" });
+    }
+    if (!items.length) throw new Error("Is bag ki photo nahi mili");
+    const { blob } = await renderReel({ style: job.template[0], bags: items, options: { hook: "", showPrice: true, quality: "fast" }, onProgress });
+    return { url: URL.createObjectURL(blob), blob, caption: reelCaption(job) };
+  }
+
+  // today's pair: the next one-bag reel + the next many-bag reel
+  // (v11) Fixed daily plan that fits the 2 auto posts (11 am + 7 pm):
+  //   1 pm one-bag reel · 4 pm many-bag reel · 9 pm one-bag reel
+  // -> grid reads: post, reel, reel, post, reel (like the big brand pages)
+  const REEL_TIMES = ["Dopahar 1 baje", "Shaam 4 baje", "Raat 9 baje"];
+  const todayJobs = useMemo(() => {
+    const open = plan.filter((job) => !state.done[job.key] && (job.type === "reel" || job.type === "multi"));
+    const singles = open.filter((job) => job.type === "reel");
+    const multis = open.filter((job) => job.type === "multi");
+    const out = [];
+    const used = new Set();
+    const take = (list) => {
+      const job = list.find((entry) => !out.includes(entry) && !used.has(entry.template[0].replace(/1$/, "")));
+      if (job) {
+        used.add(job.template[0].replace(/1$/, ""));
+        out.push(job);
+      }
+    };
+    take(singles);
+    take(multis);
+    take(singles);
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, state.done]);
+
+  async function saveAll() {
+    const files = todayJobs
+      .map((job, i) => today2[job.key] && new File([today2[job.key].blob], `shrimoh-reel-${i + 1}.mp4`, { type: today2[job.key].blob.type || "video/mp4" }))
+      .filter(Boolean);
+    if (!files.length) return;
+    try {
+      if (navigator.canShare && navigator.canShare({ files })) {
+        await navigator.share({ files });
+        return;
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
+    for (const job of todayJobs) if (today2[job.key]) await saveFile(today2[job.key]);
+  }
+
+  async function makeToday() {
+    if (today2Busy) return;
+    const made = {};
+    try {
+      for (let i = 0; i < todayJobs.length; i++) {
+        const job = todayJobs[i];
+        if (today2[job.key]) {
+          made[job.key] = today2[job.key];
+          continue;
+        }
+        setToday2Busy(`Reel ${i + 1}/${todayJobs.length} ban rahi hai...`);
+        made[job.key] = await buildReel(job, (p) => setToday2Busy(`Reel ${i + 1}/${todayJobs.length} ban rahi hai ${Math.round(p * 100)}%...`));
+        setToday2((current) => ({ ...current, [job.key]: made[job.key] }));
+      }
+    } catch (error) {
+      window.alert(`Reel nahi bani: ${error?.message || "dobara try karo"}`);
+    }
+    setToday2Busy("");
+  }
+
+  async function saveFile(item) {
+    const type = item.blob.type || "video/mp4";
+    const file = new File([item.blob], `shrimoh-reel.${type.includes("webm") ? "webm" : "mp4"}`, { type });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return;
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
+    const link = document.createElement("a");
+    link.href = item.url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function copyText(text, key) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        // ignore
+      }
+      area.remove();
+    }
+    setCopiedKey(key);
+    window.setTimeout(() => setCopiedKey(""), 1500);
+  }
+
+  // (v8) Make the planned reel by itself: photos picked automatically
+  async function makeReel() {
+    const job = next;
+    if (!job || reelBusy) return;
+    setReel(null);
+    setCopied(false);
+    try {
+      setReelBusy("Photos aa rahi hain...");
+      await loadFonts();
+      let items = [];
+      if (job.type === "multi") {
+        for (const bag of job.bags) {
+          const first = productVariants(API, bag).find((v) => v.urls.length);
+          if (!first) continue;
+          items.push({ img: await loadImage(first.urls[0]), name: bag.name || "", price: Number(bag.price) || 0, mrp: Number(bag.oldPrice) || 0, label: "" });
+        }
+      } else {
+        const bag = job.bags[0];
+        const urls = Array.from(new Set(productVariants(API, bag).flatMap((v) => v.urls))).slice(0, job.template[0] === "guess" ? 3 : 4);
+        for (const url of urls) items.push({ img: await loadImage(url), name: bag.name || "", price: Number(bag.price) || 0, mrp: Number(bag.oldPrice) || 0, label: "" });
+      }
+      if (!items.length) throw new Error("Is bag ki photo nahi mili");
+      const { blob } = await renderReel({
+        style: job.template[0],
+        bags: items,
+        options: { hook: "", showPrice: true, quality: "fast" },
+        onProgress: (p) => setReelBusy(`Reel ban rahi hai ${Math.round(p * 100)}%...`),
+      });
+      setReel({ key: job.key, url: URL.createObjectURL(blob), blob, caption: reelCaption(job) });
+    } catch (error) {
+      setReelBusy("");
+      window.alert(`Reel nahi bani: ${error?.message || "dobara try karo"}`);
+      return;
+    }
+    setReelBusy("");
+  }
+
+  async function saveReel() {
+    if (!reel) return;
+    const type = reel.blob.type || "video/mp4";
+    const file = new File([reel.blob], `shrimoh-reel.${type.includes("webm") ? "webm" : "mp4"}`, { type });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        return;
+      }
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+    }
+    const link = document.createElement("a");
+    link.href = reel.url;
+    link.download = file.name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  }
+
+  async function copyCaption() {
+    if (!reel) return;
+    try {
+      await navigator.clipboard.writeText(reel.caption);
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = reel.caption;
+      document.body.appendChild(area);
+      area.select();
+      try {
+        document.execCommand("copy");
+      } catch {
+        // ignore
+      }
+      area.remove();
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  }
 
   function card(job) {
     const bag = job.bags[0];
@@ -378,7 +624,61 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
         <div className="ip-stat"><b>{doneJobs.length}</b>kaam ho gaye · round {next ? next.cycle + 1 : 1}</div>
       </div>
 
-      {next && c ? (
+      {state.reelsOnly && todayJobs.length ? (
+        <div className="ip-card">
+          <h3>🎬 Aaj ki reels ({todayJobs.length})</h3>
+          <div className="ip-small" style={{ marginBottom: 8 }}>
+            Roz 3 reels (2 posts apne-aap lagti hain, unke beech ye 3). Ek tap: Admin khud bags, photos aur alag style chunkar teeno bana dega. Aapko bas save, caption copy aur diye time par post karna hai.
+          </div>
+
+          {todayJobs.some((job) => !today2[job.key]) ? (
+            <button type="button" className="ip-btn main" onClick={makeToday} disabled={Boolean(today2Busy)}>
+              {today2Busy || `🎬 Aaj ki ${todayJobs.length} reels bana do`}
+            </button>
+          ) : null}
+          {todayJobs.every((job) => today2[job.key]) ? (
+            <button type="button" className="ip-btn main" onClick={saveAll}>
+              ⬇ Saari {todayJobs.length} videos ek saath save karo
+            </button>
+          ) : null}
+          {todayJobs.map((job, i) => {
+            const made = today2[job.key];
+            return (
+              <div key={job.key} style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #eee5d6" }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 6 }}>
+                  ⏰ {REEL_TIMES[i] || ""} · {job.type === "multi" ? `🎞 Kai bags · ${job.template[1]}` : `🎬 ${job.bags[0].name} · ${job.template[1]}`}
+                </div>
+                <div className="ip-bags">
+                  {job.bags.map((bag) => (
+                    <div className="ip-b" key={bag.id}>
+                      <img src={thumb(bag)} alt="" />
+                    </div>
+                  ))}
+                </div>
+                {made ? (
+                  <>
+                    <video src={made.url} controls playsInline muted loop style={{ width: "100%", maxWidth: 220, borderRadius: 12, display: "block", margin: "0 auto 10px" }} />
+                    <div className="ip-row">
+                      <button type="button" className="ip-btn main" onClick={() => saveFile(made)}>⬇ Video save</button>
+                      <button type="button" className="ip-btn" onClick={() => copyText(made.caption, job.key)}>
+                        {copiedKey === job.key ? "✓ Copy ho gaya" : "📋 Caption copy"}
+                      </button>
+                      <button type="button" className="ip-btn" onClick={() => markDone(job)}>✓ Ye reel daal di</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="ip-small">{today2Busy ? "Ban rahi hai..." : "Upar wala button dabao."}</div>
+                )}
+              </div>
+            );
+          })}
+          <div className="ip-small" style={{ marginTop: 12 }}>
+            Instagram: + → Reel → video → 🎵 Saved gaana → caption paste → Share. Har reel uske likhe time par daalo. Teeno daal kar ✓ dabao, kal yahan 3 nayi reels (naye bags, naye style) ek tap mein ban jayengi.
+          </div>
+        </div>
+      ) : null}
+
+      {!state.reelsOnly && next && c ? (
         <div className="ip-card">
           <h3>
             👉 Aaj ka kaam: {c.icon} {c.title}
@@ -419,6 +719,36 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
               <li key={line}>{line}</li>
             ))}
           </ol>
+          {next.type === "reel" || next.type === "multi" ? (
+            <div style={{ margin: "4px 0 12px", padding: 12, borderRadius: 12, background: "#f6f3ea" }}>
+              {reel && reel.key === next.key ? (
+                <>
+                  <video src={reel.url} controls playsInline muted loop autoPlay style={{ width: "100%", maxWidth: 240, borderRadius: 12, display: "block", margin: "0 auto 10px" }} />
+                  <div className="ip-row" style={{ justifyContent: "center" }}>
+                    <button type="button" className="ip-btn main" onClick={saveReel}>
+                      ⬇ 1. Video save karo
+                    </button>
+                    <button type="button" className="ip-btn" onClick={copyCaption}>
+                      {copied ? "✓ Copy ho gaya" : "📋 2. Caption copy karo"}
+                    </button>
+                  </div>
+                  <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "#444", background: "#fff", borderRadius: 10, padding: 10, marginTop: 10, fontFamily: "inherit" }}>
+                    {reel.caption}
+                  </pre>
+                  <div className="ip-small">3. Instagram: + → Reel → video → 🎵 Saved gaana → caption paste → Share. Phir neeche ✓ dabao.</div>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="ip-btn main" onClick={makeReel} disabled={Boolean(reelBusy)}>
+                    {reelBusy || "🎬 Reel khud bana do (caption ke saath)"}
+                  </button>
+                  <div className="ip-small" style={{ marginTop: 6 }}>
+                    Admin khud photos chunkar “{next.template[1]}” reel bana dega. Screen on rakho.
+                  </div>
+                </>
+              )}
+            </div>
+          ) : null}
           <div className="ip-row">
             {onOpen ? (
               <button type="button" className="ip-btn" onClick={() => onOpen(c.tool)}>
@@ -442,7 +772,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
             ) : null}
           </div>
         </div>
-      ) : (
+      ) : state.reelsOnly ? null : (
         <div className="ip-card">
           <h3>🎉 Plan pura ho gaya!</h3>
           <div style={{ fontSize: 14 }}>Naye bags add karo, planner unka plan apne-aap bana dega.</div>
