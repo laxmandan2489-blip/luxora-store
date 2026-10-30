@@ -13,6 +13,17 @@
       "permanent": true
     },
     {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "shrimoh-store-phi.vercel.app"
+        }
+      ],
+      "destination": "https://shrimoh.vercel.app/:path*",
+      "permanent": true
+    },
+    {
       "source": "/category/all",
       "destination": "/shop",
       "permanent": true
