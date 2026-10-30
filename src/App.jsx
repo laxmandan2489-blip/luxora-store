@@ -473,6 +473,9 @@ const API = "https://luxora-store-mkva.onrender.com";
  */
 const SUPPORT_EMAIL = "infoshrimoh@gmail.com";
 const WHATSAPP_NUMBER = "919461515979"; // 91 = India country code + WhatsApp business number
+// (2026-10-30) Social pages shown in the footer
+const INSTAGRAM_URL = "https://www.instagram.com/shrimoh.in/";
+const FACEBOOK_URL = "https://www.facebook.com/1296661276874176";
 
 /*
  * NEW CUSTOMER WELCOME POPUP
@@ -5554,6 +5557,25 @@ function App() {
             </div>
             <p>THE LUXURY STORE</p>
             <span>Timeless pieces for modern distinction.</span>
+            <div className="lux-footer-social">
+              <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="SHRIMOH on Instagram">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="5" />
+                  <circle cx="12" cy="12" r="4.2" />
+                  <circle cx="17.4" cy="6.6" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </a>
+              <a href={FACEBOOK_URL} target="_blank" rel="noreferrer" aria-label="SHRIMOH on Facebook">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                  <path d="M13.5 21v-7.5h2.6l.4-3h-3V8.6c0-.9.3-1.5 1.5-1.5h1.6V4.4c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.3H8v3h2.5V21h3z" />
+                </svg>
+              </a>
+              <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" aria-label="SHRIMOH on WhatsApp">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true">
+                  <path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3zm0 16.4a7.4 7.4 0 0 1-3.8-1l-.3-.2-2.7.7.7-2.6-.2-.3A7.4 7.4 0 1 1 12 19.4zm4.1-5.5c-.2-.1-1.3-.7-1.5-.7s-.4-.1-.5.1-.6.7-.7.9-.3.2-.5.1a6 6 0 0 1-3-2.6c-.2-.4.2-.4.6-1.2.1-.1 0-.3 0-.4l-.7-1.6c-.2-.4-.4-.4-.5-.4h-.4a.8.8 0 0 0-.6.3 2.5 2.5 0 0 0-.8 1.9 4.4 4.4 0 0 0 .9 2.3 10 10 0 0 0 3.8 3.4c1.4.6 2 .7 2.7.6.4-.1 1.3-.5 1.5-1.1s.2-1 .1-1.1-.2-.1-.4-.2z" />
+                </svg>
+              </a>
+            </div>
           </div>
 
           <div className="lux-footer-links">
@@ -5601,6 +5623,12 @@ function App() {
               </button>
               <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer">
                 WhatsApp
+              </a>
+              <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer">
+                Instagram
+              </a>
+              <a href={FACEBOOK_URL} target="_blank" rel="noreferrer">
+                Facebook
               </a>
             </div>
 

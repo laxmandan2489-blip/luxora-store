@@ -2518,6 +2518,24 @@ a {
   line-height: 1.8;
 }
 
+.lux-footer-social {
+  display: flex;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.lux-footer-social a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(138, 122, 92, 0.45);
+  border-radius: 50%;
+  color: #8a7a5c;
+  text-decoration: none;
+}
+
 .lux-footer-links {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

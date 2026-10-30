@@ -217,6 +217,8 @@ export function organizationJsonLd() {
     logo: LOGO_URL,
     email: SUPPORT_EMAIL,
     alternateName: ["Shrimoh", "Shreemo", "Shrimo", "श्रीमो"],
+    // official social pages - helps Google link them to the store
+    sameAs: ["https://www.instagram.com/shrimoh.in/", "https://www.facebook.com/1296661276874176"],
     address: {
       "@type": "PostalAddress",
       streetAddress: "Shrimoh Craft, Kudi Bhagtasni, Sector 4",
