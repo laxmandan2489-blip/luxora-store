@@ -633,7 +633,7 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
 
           {todayJobs.some((job) => !today2[job.key]) ? (
             <button type="button" className="ip-btn main" onClick={makeToday} disabled={Boolean(today2Busy)}>
-              {today2Busy || `🎬 Aaj ki ${todayJobs.length} reels bana do`}
+              {today2Busy || (Object.keys(today2).length ? "🎬 Baaki videos phir se bana do" : `🎬 Aaj ki ${todayJobs.length} reels bana do`)}
             </button>
           ) : null}
           {todayJobs.every((job) => today2[job.key]) ? (
@@ -656,19 +656,25 @@ export default function InstaPlanner({ API, adminFetch, products, onOpen }) {
                   ))}
                 </div>
                 {made ? (
-                  <>
-                    <video src={made.url} controls playsInline muted loop style={{ width: "100%", maxWidth: 220, borderRadius: 12, display: "block", margin: "0 auto 10px" }} />
-                    <div className="ip-row">
-                      <button type="button" className="ip-btn main" onClick={() => saveFile(made)}>⬇ Video save</button>
-                      <button type="button" className="ip-btn" onClick={() => copyText(made.caption, job.key)}>
-                        {copiedKey === job.key ? "✓ Copy ho gaya" : "📋 Caption copy"}
-                      </button>
-                      <button type="button" className="ip-btn" onClick={() => markDone(job)}>✓ Ye reel daal di</button>
-                    </div>
-                  </>
+                  <video src={made.url} controls playsInline muted loop style={{ width: "100%", maxWidth: 220, borderRadius: 12, display: "block", margin: "0 auto 10px" }} />
                 ) : (
-                  <div className="ip-small">{today2Busy ? "Ban rahi hai..." : "Upar wala button dabao."}</div>
+                  <div className="ip-small" style={{ marginBottom: 6 }}>
+                    {today2Busy ? "Video ban rahi hai..." : "Video pehle save kar li hai? To bas neeche se caption copy karo."}
+                  </div>
                 )}
+                {/* (v12) caption ALWAYS shown - even after coming back from Instagram */}
+                <pre style={{ whiteSpace: "pre-wrap", fontSize: 12, color: "#444", background: "#fff", borderRadius: 10, padding: 10, margin: "0 0 8px", fontFamily: "inherit", border: "1px solid #eee" }}>
+                  {reelCaption(job)}
+                </pre>
+                <div className="ip-row">
+                  {made ? (
+                    <button type="button" className="ip-btn" onClick={() => saveFile(made)}>⬇ Video save</button>
+                  ) : null}
+                  <button type="button" className="ip-btn main" onClick={() => copyText(reelCaption(job), job.key)}>
+                    {copiedKey === job.key ? "✓ Copy ho gaya" : "📋 Caption copy"}
+                  </button>
+                  <button type="button" className="ip-btn" onClick={() => markDone(job)}>✓ Ye reel daal di</button>
+                </div>
               </div>
             );
           })}
