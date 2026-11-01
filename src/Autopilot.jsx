@@ -582,10 +582,20 @@ function DailyPanel({ d, busy, act }) {
           ))}
         </div>
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600 }}>🎵 Gaane ({d.music.length})</div>
-        <div className="apl-small">Pixabay Music ya YouTube Audio Library se free gaane download karke yahan daalo. Bot baari-baari lagayega.</div>
+        <div className="apl-small">Pixabay Music se free instrumental gaane daalo. Bot har gaana sun ke dekhta hai: shaant gaane ek bag / model reels par, tez gaane kai bags wali reels par. Jo na jache wo nahi lagega.</div>
         {d.music.map((m) => (
           <div key={m.url} className="apl-row" style={{ marginTop: 4 }}>
-            <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>♪ {m.name}</span>
+            <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
+              ♪ {m.name}
+              {m.check ? (
+                <span style={{ display: "block", color: m.check.use ? "#2e7d32" : "#b23b1e" }}>
+                  {m.check.use
+                    ? `✅ ${m.check.mood === "upbeat" ? "Tez - kai bags wali reels" : "Shaant - ek bag / model reels"} · ${m.check.fit}/10`
+                    : `❌ Reels mein nahi lagega - ${m.check.vocals ? "isme bol (singing) hain" : `jachta nahi (${m.check.fit}/10)`}`}
+                  {m.check.note ? ` · ${m.check.note}` : ""}
+                </span>
+              ) : null}
+            </span>
             <button type="button" className="apl-mini" disabled={lock} onClick={() => window.confirm("Ye gaana hata dun?") && act("/api/admin/autopilot/music/delete", { url: m.url })}>✕</button>
           </div>
         ))}
