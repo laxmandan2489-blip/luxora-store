@@ -608,7 +608,7 @@ function DailyPanel({ d, busy, act }) {
         {d.music.map((m) => (
           <div key={m.url} className="apl-row" style={{ marginTop: 4 }}>
             <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
-              ♪ {m.name}
+              ♪ {songName(m.name)}
               {m.kb ? <span style={{ color: "#888" }}> · {m.kb} KB{m.originalKb && m.originalKb > m.kb ? ` (pehle ${(m.originalKb / 1024).toFixed(1)} MB)` : ""}</span> : null}
               {m.check ? (
                 <span style={{ display: "block", color: m.check.use ? "#2e7d32" : "#b23b1e" }}>
@@ -793,6 +793,26 @@ function ProPanel({ p, busy, act }) {
  * (v12) TOP CARD - "is the bot working?" in one look: right now, today's
  * counts, timer, and a simple feed of everything it did.
  */
+// cron times: 10, 13, 17, 20 (India time)
+function nextTimer() {
+  const now = new Date(Date.now() + 5.5 * 3600 * 1000);
+  const hour = now.getUTCHours() + now.getUTCMinutes() / 60;
+  const next = [10, 13, 17, 20].find((h) => h > hour);
+  const label = (h) => `${h > 12 ? h - 12 : h} baje`;
+  return next ? `aaj ${label(next)}` : `kal ${label(10)}`;
+}
+
+// "sub_clair-fashion-instrumental-619983" -> "Clair Fashion Instrumental"
+function songName(name) {
+  return String(name || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\d{3,}\b/g, "")
+    .replace(/^\s*sub\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function ActivityCard({ API, adminFetch }) {
   const [a, setA] = useState(null);
   const [error, setError] = useState("");
@@ -826,21 +846,27 @@ function ActivityCard({ API, adminFetch }) {
   if (error && !a) return <div className="apl-box apl-small" style={{ color: "#b23b1e" }}>Bot ki jaankari nahi aayi: {error}</div>;
   if (!a) return <div className="apl-box apl-small">Bot ki jaankari aa rahi hai...</div>;
 
-  const tickOk = a.lastTickAt && Date.now() - a.lastTickAt < 6 * 3600 * 1000;
+  const tickOk = a.lastTickAt && Date.now() - a.lastTickAt < 26 * 3600 * 1000;
+  const workOk = a.lastWorkAt && Date.now() - a.lastWorkAt < 20 * 60 * 1000;
   const status = !a.enabled
     ? { color: "#b23b1e", text: "⏸ Bot band hai - neeche switch ON karo" }
     : a.now
       ? { color: "#1c150d", text: `⚙️ Abhi kaam kar raha hai: ${a.now}` }
-      : tickOk
-        ? { color: "#2e7d32", text: "🟢 Bot chalu hai - agle timer par phir kaam karega" }
-        : { color: "#b23b1e", text: "🔴 Timer 6 ghante se nahi chala - cron-job.org check karo" };
+      : tickOk || !a.lastTickAt
+        ? { color: "#2e7d32", text: "🟢 Bot chalu hai - har timer par apna kaam karta hai" }
+        : { color: "#b23b1e", text: "🔴 Post wala timer 1 din se nahi chala - cron-job.org check karo" };
   const list = more ? a.events : a.events.slice(0, 8);
 
   return (
     <div className="apl-box" style={{ borderColor: "#1c150d" }}>
       <div style={{ fontWeight: 700, fontSize: 16, color: status.color }}>{status.text}</div>
+      <div className="apl-small" style={{ marginTop: 6, color: workOk ? "#2e7d32" : "#b23b1e" }}>
+        🔧 Kaam wala timer (server ke andar, har 5 min - sudhaar + jawab):{" "}
+        {a.lastWorkAt ? `${when(a.lastWorkAt)}${workOk ? " ✅" : " - server so gaya tha, jagane wala timer check karo"}` : "server restart ke 1 minute baad shuru hoga"}
+      </div>
       <div className="apl-small" style={{ marginTop: 4 }}>
-        {a.lastTickAt ? `Timer aakhri baar chala: ${when(a.lastTickAt)}` : "Timer abhi tak nahi chala"}
+        📮 Post wala timer (aapke fix time par post / reel / story):{" "}
+        {a.lastTickAt ? when(a.lastTickAt) : "naye update ke baad abhi nahi chala"}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginTop: 10, textAlign: "center" }}>
         {[
@@ -861,7 +887,7 @@ function ActivityCard({ API, adminFetch }) {
       {!a.events.length ? <div className="apl-small">Abhi tak kuch nahi. Pehla kaam agle timer par hoga.</div> : null}
       {list.map((e, i) => (
         <div key={`${e.at}-${i}`} className="apl-small" style={{ padding: "6px 0", borderBottom: "1px solid #f0ebe0", color: e.ok ? "#333" : "#b23b1e", overflowWrap: "anywhere" }}>
-          <span style={{ color: "#999" }}>{when(e.at)}</span> {e.icon} {e.text}
+          <span style={{ color: "#999" }}>{when(e.at)}</span> {e.icon} {e.text.replace(/\(♪ ([^)]+)\)/, (m, x) => `(♪ ${songName(x)})`)}
           {e.link ? (
             <>
               {" "}
