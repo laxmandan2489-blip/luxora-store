@@ -1055,12 +1055,12 @@ module.exports = function setupDaily(app, deps, ap) {
     const state = await readDaily();
     stage("Reel ke frames ban rahe hain");
     const built = await buildReelFrames(state);
-    const music = (state.music || [])[(Number(state.musicIdx) || 0) % Math.max(1, (state.music || []).length)] || null;
+    const music = pickSong(state, built.kind);
     stage(`Video ban rahi hai${music ? ` (gaana: ${music.name})` : " (bina gaane)"} - 1-3 minute`);
     const video = await renderReel(built.frames, music ? music.url : null);
     const videoUrl = await saveFile(video, "social/autopilot", "mp4", "video/mp4");
     const coverUrl = await saveFile(built.frames[0].image, "social/autopilot", "jpg", "image/jpeg");
-    const prepared = { at: Date.now(), kind: built.kind, label: built.kind === "one" ? `Reel · ${built.used[0]?.name}` : `Reel · ${built.used.length} bags`, videoUrl, coverUrl, caption: built.caption, music: music ? music.name : "", bags: built.used.map((b) => b.id) };
+    const prepared = { at: Date.now(), kind: built.kind, label: built.kind === "one" ? `Reel · ${built.used[0]?.name}` : `Reel · ${built.used.length} bags`, videoUrl, coverUrl, caption: built.caption, music: music ? music.name : "", musicUrl: music ? music.url : "", bags: built.used.map((b) => b.id) };
     if (dryRun) {
       await updateDaily((s) => {
         if (s.reelPreview) deleteStorageImages([s.reelPreview.videoUrl, s.reelPreview.coverUrl]).catch(() => {});
@@ -1081,7 +1081,10 @@ module.exports = function setupDaily(app, deps, ap) {
       if (ok) {
         s.lastReelAt = Date.now();
         s.reelStep = (Number(s.reelStep) || 0) + 1;
-        if (prepared.music) s.musicIdx = (Number(s.musicIdx) || 0) + 1;
+        if (prepared.music) {
+          s.musicIdx = (Number(s.musicIdx) || 0) + 1;
+          s.lastSongUrl = prepared.musicUrl || "";
+        }
         for (const id of prepared.bags || []) s.reelAt = { ...(s.reelAt || {}), [id]: Date.now() };
       }
       s.reelLog = [{ at: Date.now(), label: prepared.label, music: prepared.music, ok, results }, ...(s.reelLog || [])];
@@ -1267,14 +1270,68 @@ module.exports = function setupDaily(app, deps, ap) {
     return ok(res);
   });
 
+  /*
+   * SONG CHECK (v8) - AI listens to the first 30 seconds: does it have
+   * singing, is it calm or upbeat, does it fit a premium handbag reel?
+   * calm songs go on one-bag / model reels, upbeat on many-bag reels;
+   * a song that does not fit is kept but never used.
+   */
+  async function checkSong(buffer, ext) {
+    if (!GEMINI_API_KEY || !ffmpegPath) return null;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "song-"));
+    try {
+      const input = path.join(dir, `in.${ext}`);
+      const clip = path.join(dir, "clip.mp3");
+      fs.writeFileSync(input, buffer);
+      await runFfmpeg(["-y", "-loglevel", "error", "-i", input, "-t", "30", "-ac", "1", "-ar", "22050", "-b:a", "64k", clip]);
+      const data = await ap.geminiCall(ap.TEXT_MODEL, {
+        contents: [
+          {
+            parts: [
+              {
+                text:
+                  "Listen to this music clip. It may be used as background music for short Instagram reels of a women's handbag brand that wants to look premium, calm and classy (like Miraggio or Charles & Keith). " +
+                  'Return ONLY JSON: {"vocals":true/false (any singing or spoken words),"mood":"calm" or "upbeat","fit":0-10 (how well it suits premium handbag reels),"strong_start":true/false (sounds good from the very first second),"note":"short Hinglish reason"}',
+              },
+              { inline_data: { mime_type: "audio/mp3", data: fs.readFileSync(clip).toString("base64") } },
+            ],
+          },
+        ],
+        generationConfig: { responseMimeType: "application/json", temperature: 0 },
+      });
+      const text = (data?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+      const r = JSON.parse(text.replace(/```json|```/g, "").trim());
+      const fit = Math.max(0, Math.min(10, Number(r.fit) || 0));
+      return { vocals: r.vocals === true, mood: r.mood === "upbeat" ? "upbeat" : "calm", fit, note: String(r.note || "").slice(0, 120), use: fit >= 6 && r.vocals !== true };
+    } catch (error) {
+      console.error("SONG CHECK ERROR:", error.message);
+      return null;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  // calm songs for one-bag / model reels, upbeat for many-bag reels
+  function pickSong(state, kind) {
+    const usable = (state.music || []).filter((m) => !m.check || m.check.use);
+    if (!usable.length) return null;
+    const want = kind === "many" ? "upbeat" : "calm";
+    const matching = usable.filter((m) => (m.check?.mood || "calm") === want);
+    const list = matching.length ? matching : usable;
+    const last = state.lastSongUrl || "";
+    const options = list.length > 1 ? list.filter((m) => m.url !== last) : list;
+    return options[(Number(state.musicIdx) || 0) % options.length];
+  }
+
   app.post("/api/admin/autopilot/music", requireAdmin, audioUpload.single("song"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: "Gaana nahi mila." });
       const ext = (path.extname(req.file.originalname || "") || ".mp3").replace(".", "").toLowerCase();
+      const check = await checkSong(req.file.buffer, ext);
       const url = await saveFile(req.file.buffer, "music", ext, req.file.mimetype || "audio/mpeg");
       const name = path.basename(req.file.originalname || "song", path.extname(req.file.originalname || "")).slice(0, 60);
       await updateDaily((s) => {
-        s.music = [...(s.music || []), { url, name, at: Date.now() }].slice(-15);
+        s.music = [...(s.music || []), { url, name, at: Date.now(), check }].slice(-15);
       });
       return ok(res);
     } catch (error) {
