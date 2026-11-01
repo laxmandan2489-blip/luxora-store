@@ -14,6 +14,7 @@ const NEXT_LABEL = {
   "bag-cream": "Bag post (Cream)",
   "bag-black": "Bag post (Black)",
   model: "Model photo post",
+  trust: "Bharosa card (COD / return / order)",
 };
 
 function friendly(error) {
