@@ -259,7 +259,7 @@ function emailShell({ eyebrow, heading, bodyHtml }) {
       <div style="padding:36px 40px 24px;text-align:center;border-bottom:1px solid ${EMAIL_BRAND.line};">
         <img src="https://shrimoh.vercel.app/icon-192.png" alt="SHRIMOH" width="64" height="64" style="width:64px;height:64px;display:block;margin:0 auto 10px;border:0;" />
         <div style="font-size:22px;letter-spacing:6px;color:${EMAIL_BRAND.ink};font-weight:bold;">SHRIMOH</div>
-        <div style="font-size:9px;letter-spacing:2px;color:${EMAIL_BRAND.gold};margin-top:6px;">THE LUXURY STORE</div>
+        <div style="font-size:9px;letter-spacing:2px;color:${EMAIL_BRAND.gold};margin-top:6px;">HANDBAGS FOR WOMEN</div>
       </div>
       <div style="padding:36px 40px;font-family:Arial,Helvetica,sans-serif;color:${EMAIL_BRAND.text};">
         ${
@@ -275,7 +275,7 @@ function emailShell({ eyebrow, heading, bodyHtml }) {
         ${bodyHtml}
       </div>
       <div style="padding:22px 40px;background:${EMAIL_BRAND.soft};text-align:center;">
-        <div style="font-size:10px;letter-spacing:1.5px;color:${EMAIL_BRAND.gold};">SHRIMOH &middot; THE LUXURY STORE</div>
+        <div style="font-size:10px;letter-spacing:1.5px;color:${EMAIL_BRAND.gold};">SHRIMOH &middot; HANDBAGS FOR WOMEN</div>
         <div style="font-size:11px;color:${EMAIL_BRAND.muted};margin-top:6px;">Thank you for shopping with us.</div>
       </div>
     </div>
@@ -2822,9 +2822,15 @@ app.post("/api/admin/social/auto/:id/now", requireAdmin, async function (req, re
 app.get("/api/cron/social-post", async function (req, res) {
   const secret = process.env.CRON_SECRET;
   if (!secret || String(req.query.key || "") !== secret) return res.status(401).json({ success: false, message: "Wrong key" });
+  // (2026-11-01 v2) replies / daily check / story / reel run in the background (only when Autopilot is ON)
+  autopilotDaily.tick();
   try {
     const queue = await readAutoQueue();
-    if (!queue.items.length) return res.json({ success: true, posted: false, message: "Line khaali hai" });
+    if (!queue.items.length) {
+      // (2026-11-01) empty line -> Autopilot makes + posts the next post itself (if it is ON)
+      const auto = await autopilot.maybeRunFromCron(queue).catch((error) => ({ posted: false, message: `Autopilot: ${error.message}` }));
+      return res.json({ success: true, ...auto });
+    }
     if (Date.now() - (queue.lastPostAt || 0) < AUTO_MIN_GAP_MS) {
       return res.json({ success: true, posted: false, message: "Pichhli post abhi-abhi gayi thi - agli baar" });
     }
@@ -2836,6 +2842,46 @@ app.get("/api/cron/social-post", async function (req, res) {
     return res.status(500).json({ success: false, message: error.message });
   }
 });
+
+/*
+ * AUTOPILOT (2026-11-01) - see server/autopilot.js. Uses the same Meta,
+ * Gemini, storage and email helpers as above; only adds new routes.
+ */
+const autopilot = require("./autopilot")(app, {
+  supabase,
+  STORAGE_BUCKET,
+  requireAdmin,
+  formatProduct,
+  readAutoQueue,
+  writeAutoQueue,
+  publishAutoItem,
+  getMetaIds,
+  publishInstagram,
+  publishFacebook,
+  deleteStorageImages,
+  sendTransactionalEmail,
+  GEMINI_API_KEY,
+  GEMINI_MODEL,
+  GEMINI_IMAGE_MODEL
+});
+
+// (2026-11-01 v2) roz ka kaam: comment replies, daily check, story, reels
+const autopilotDaily = require("./autopilotDaily")(
+  app,
+  {
+    supabase,
+    STORAGE_BUCKET,
+    requireAdmin,
+    metaCall,
+    getMetaIds,
+    publishInstagram,
+    publishFacebook,
+    deleteStorageImages,
+    sendTransactionalEmail,
+    GEMINI_API_KEY
+  },
+  autopilot
+);
 
 /*
  * Move an imported (or any) product between draft / review /
