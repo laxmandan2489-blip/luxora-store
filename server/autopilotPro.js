@@ -119,7 +119,7 @@ module.exports = function setupPro(app, deps, ap) {
       const r = await timedFetch(p.images[0], "HEAD");
       if (r.size > 900 * 1024) heavy += 1;
     }
-    if (heavy) add("website", "mid", `${heavy} bags ki pehli photo bahut bhaari hai (1 MB se zyada) - website dheemi khulti hai`);
+    if (heavy) add("website", "mid", `${heavy} bags ki pehli photo bahut bhaari hai (1 MB se zyada) - bot roz ke check mein inhe khud halka kar dega`);
     add("trust", "high", "Website par ek bhi customer review nahi - pehle orders ke baad photo reviews maangne hain (agla update)");
     return findings;
   }
@@ -280,23 +280,6 @@ module.exports = function setupPro(app, deps, ap) {
       return [];
     });
 
-    let thinking = null;
-    if (GEMINI_API_KEY) {
-      stage("Manager ki tarah soch raha hai");
-      try {
-        thinking = await geminiJson(
-          "You are an experienced e-commerce web developer AND Instagram social media manager hired by SHRIMOH, a small Indian women's handbag store (₹600-1,500 bags, resold from partner sellers, COD available, 5-day returns). " +
-            "Goal of the owner: make the Instagram, Facebook and website look premium and trustworthy BEFORE spending on ads. " +
-            "Below are this week's findings and facts. Think like a pro: what is hurting trust and sales most? " +
-            "Reply in simple Hinglish (Roman script). Return ONLY JSON: " +
-            '{"scores":{"website":0-10,"products":0-10,"instagram":0-10,"trust":0-10},"summary":"2 sentences","actions":[{"text":"specific action","who":"bot|one_tap|you","why":"short","minutes":5}],"ads_ready":true/false,"ads_note":"1 sentence"} ' +
-            "with 6-10 actions, most important first. 'bot' = the bot already does it automatically, 'one_tap' = owner taps apply in Admin, 'you' = owner must do by hand.\n" +
-            JSON.stringify({ findings, instagram: ig.facts, products: products.length, products_with_problems: prod.perProduct.length, suggestions_ready: suggestions.length })
-        );
-      } catch (error) {
-        thinking = { error: error.message };
-      }
-    }
     // (v6) auto mode: apply the safe fixes right away, keep "before" for undo
     const autoApplied = [];
     if (pro.autoApply !== false) {
@@ -313,6 +296,43 @@ module.exports = function setupPro(app, deps, ap) {
         } catch (error) {
           console.error("PRO AUTO APPLY ERROR:", error.message);
         }
+      }
+    }
+    // show what is ALREADY fixed, so the owner is not asked to do it
+    if (autoApplied.length) {
+      const fixed = new Set(autoApplied.map((a) => `${a.productId}:${a.field}`));
+      for (const x of prod.perProduct) {
+        const nameFix = autoApplied.find((a) => String(a.productId) === String(x.productId) && a.field === "name");
+        x.problems = x.problems.filter((q) => !((q.field === "name" || q.field === "description") && fixed.has(`${x.productId}:${q.field}`)));
+        if (nameFix) {
+          x.problems.unshift({ field: "done", text: `✅ Naam bot ne badla: "${nameFix.before}" → "${nameFix.after}"` });
+        }
+        if (fixed.has(`${x.productId}:description`)) x.problems.push({ field: "done", text: "✅ Description bot ne theek ki" });
+      }
+      const names = autoApplied.filter((a) => a.field === "name").length;
+      const descs = autoApplied.filter((a) => a.field === "description").length;
+      for (let i = findings.length - 1; i >= 0; i--) {
+        if (/naam theek karne hain|description theek karni hai/.test(findings[i].text)) findings.splice(i, 1);
+      }
+      findings.unshift({ area: "products", level: "done", text: `✅ Bot ne ${names} naam aur ${descs} description khud theek kiye (website par live)` });
+    }
+    let thinking = null;
+    if (GEMINI_API_KEY) {
+      stage("Manager ki tarah soch raha hai");
+      try {
+        thinking = await geminiJson(
+          "You are an experienced e-commerce web developer AND Instagram social media manager hired by SHRIMOH, a small Indian women's handbag store (₹600-1,500 bags, resold from partner sellers, COD available, 5-day returns). " +
+            "Goal of the owner: make the Instagram, Facebook and website look premium and trustworthy BEFORE spending on ads. " +
+            "Below are this week's findings and facts. Think like a pro: what is hurting trust and sales most? " +
+            "Reply in simple Hinglish (Roman script). Return ONLY JSON: " +
+            '{"scores":{"website":0-10,"products":0-10,"instagram":0-10,"trust":0-10},"summary":"2 sentences","actions":[{"text":"specific action","who":"bot|one_tap|you","why":"short","minutes":5}],"ads_ready":true/false,"ads_note":"1 sentence"} ' +
+            "with 5-8 actions, most important first. who: 'bot' = the bot does it by itself (it ALREADY auto-fixes product names and descriptions, shrinks heavy photos, fixes front photos, adds lifestyle photos, posts, reels, stories, comment replies); 'you' = only a human can do it (shooting real photos, Instagram highlights / bio / archive, Meesho orders, refunds, filling a size or material nobody wrote down). Never use any other value. " +
+            "Do not list things the bot already does as tasks for the owner - mention them as 'bot' only if useful. " +
+            "NEVER suggest buying, arranging or asking for fake likes, followers or reviews, never suggest fake urgency or false claims. Real reviews only from real customers.\n" +
+            JSON.stringify({ findings, instagram: ig.facts, products: products.length, products_with_problems: prod.perProduct.length, auto_fixed_names_descriptions: autoApplied.length, still_waiting_for_owner: suggestions.filter((x) => x.status === "open").length })
+        );
+      } catch (error) {
+        thinking = { error: error.message };
       }
     }
     const audit = { at: Date.now(), findings, perProduct: prod.perProduct.slice(0, 60), facts: ig.facts, thinking, autoApplied: autoApplied.length };

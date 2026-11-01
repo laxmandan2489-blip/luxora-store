@@ -477,7 +477,8 @@ module.exports = function setupDaily(app, deps, ap) {
     const currentList = (Array.isArray(current) ? current : [current]).filter(Boolean);
     if (listSignature(currentList) !== listSignature(expectedBefore)) throw new Error("Photos beech mein badal gayi - chhod diya");
     if (mode === "reorder" && [...after].sort().join("|") !== [...currentList].sort().join("|")) throw new Error("Photo list match nahi hui");
-    if (mode !== "reorder" && Math.abs(after.length - currentList.length) !== 1) throw new Error("Photo list match nahi hui");
+    if (mode === "add" && Math.abs(after.length - currentList.length) !== 1) throw new Error("Photo list match nahi hui");
+    if (mode === "replace" && (after.length !== currentList.length || after.filter((u, i) => u !== currentList[i]).length !== 1)) throw new Error("Photo list match nahi hui");
     const update = { updated_at: new Date().toISOString() };
     if (field === "images") update.images = after;
     else update.color_images = { ...colorImages, [field.slice(6)]: after };
@@ -523,6 +524,42 @@ module.exports = function setupDaily(app, deps, ap) {
       }
     }
     return added;
+  }
+
+  /*
+   * HEAVY PHOTOS (v6) - a first photo over ~900 KB makes the shop list slow
+   * on phones. The bot makes a lighter copy (same look, max 1600 px) and
+   * swaps it in; the old file stays in storage, so ↩️ can bring it back.
+   */
+  async function lightenHeavyPhotos(products, budget) {
+    const done = [];
+    for (const p of products) {
+      if (done.length >= budget) break;
+      const url = p.images[0];
+      if (!url || ap.isLifestyleUrl(url)) continue;
+      let size = 0;
+      try {
+        const head = await fetch(url, { method: "HEAD" });
+        size = Number(head.headers.get("content-length")) || 0;
+      } catch {
+        continue;
+      }
+      if (size <= 900 * 1024) continue;
+      stage(`Bhaari photo halki kar raha hai: ${p.name}`);
+      try {
+        const original = await ap.fetchBuffer(url);
+        const light = await sharp(original).rotate().resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true }).flatten({ background: "#ffffff" }).jpeg({ quality: 84, mozjpeg: true }).toBuffer();
+        if (light.length > size * 0.8) continue;
+        const newUrl = await saveFile(light, "products", "jpg", "image/jpeg");
+        const after = [newUrl, ...p.images.slice(1)];
+        await writeProductList(p.id, "images", after, p.images, "replace");
+        done.push({ at: Date.now(), productId: p.id, name: p.name, field: "images", colour: "", before: p.images, after, kind: "compress", reason: `Photo ${Math.round(size / 1024)} KB se ${Math.round(light.length / 1024)} KB ki (wahi photo, site tez)` });
+        p.images = after;
+      } catch (error) {
+        console.error("LIGHTEN PHOTO ERROR:", error.message);
+      }
+    }
+    return done;
   }
 
   async function websiteCheck(state) {
@@ -571,6 +608,7 @@ module.exports = function setupDaily(app, deps, ap) {
       fixes = await fixFrontPhotos(state, products, state.frontBudget || 15);
       state.frontBudget = 15;
       fixes.push(...(await addLifestyleToGalleries(products, 2)));
+      fixes.push(...(await lightenHeavyPhotos(products, 10)));
       for (const fix of fixes) {
         if (!fix.needsPhoto) continue;
         issues.push({ productId: fix.productId, name: fix.name, problem: fix.kind === "lifestyle" ? fix.reason : `${fix.colour ? `${fix.colour}: ` : ""}koi bhi photo poore bag ki saaf front photo nahi - nayi photo daalo` });
@@ -695,7 +733,7 @@ module.exports = function setupDaily(app, deps, ap) {
           ${review.next_post ? `<p><b>Agli post:</b> ${escapeHtml(review.next_post)}</p>` : ""}
           <p><b>Followers:</b> ${report.followersNow ?? "-"}${report.followersWeekAgo != null ? ` (hafte pehle ${report.followersWeekAgo})` : ""} · <b>Comments ke jawab (24 ghante):</b> ${report.replies24h || 0}</p>
           ${report.best?.length ? `<p><b>Sabse achhi posts:</b> ${report.best.map((b) => `<a href="${escapeHtml(b.link)}">reach ${b.reach || 0}, saves ${b.saved || 0}</a>`).join(" · ")}</p>` : ""}
-          ${(report.website?.fixes || []).length ? `<h3>🔧 Bot ne theek kiya</h3><ul>${report.website.fixes.map((f) => `<li><b>${escapeHtml(f.name)}</b>${f.colour ? ` (${escapeHtml(f.colour)})` : ""}: ${f.kind === "lifestyle" ? "lifestyle photo 2nd number par lagayi" : `sahi front photo aage lagayi - ${escapeHtml(f.reason)}`}</li>`).join("")}</ul><p style="font-size:13px;color:#555">Pasand na aaye to Admin &gt; 🤖 Autopilot mein "Wapas karo".</p>` : ""}
+          ${(report.website?.fixes || []).length ? `<h3>🔧 Bot ne theek kiya</h3><ul>${report.website.fixes.map((f) => `<li><b>${escapeHtml(f.name)}</b>${f.colour ? ` (${escapeHtml(f.colour)})` : ""}: ${f.kind === "lifestyle" ? "lifestyle photo 2nd number par lagayi" : f.kind === "compress" ? escapeHtml(f.reason) : `sahi front photo aage lagayi - ${escapeHtml(f.reason)}`}</li>`).join("")}</ul><p style="font-size:13px;color:#555">Pasand na aaye to Admin &gt; 🤖 Autopilot mein "Wapas karo".</p>` : ""}
           <h3>🌐 Website (${issues.length} dikkatein)</h3>
           ${issues.length ? `<ul>${issues.slice(0, 25).map((i) => `<li><b>${escapeHtml(i.name)}</b>: ${escapeHtml(i.problem)}</li>`).join("")}</ul>${issues.length > 25 ? `<p>...aur ${issues.length - 25}, Admin mein dekho.</p>` : ""}` : "<p>Sab theek ✅</p>"}
           ${report.gridError ? `<p style="color:#b23b1e">Grid check nahi hua: ${escapeHtml(report.gridError)}</p>` : ""}
@@ -1200,7 +1238,7 @@ module.exports = function setupDaily(app, deps, ap) {
       const state = await readDaily();
       const fix = (state.fixLog || []).find((f) => f.at === at && String(f.productId) === String(productId));
       if (!fix || fix.undone) return res.status(404).json({ success: false, message: "Ye badlav nahi mila." });
-      await writeProductList(fix.productId, fix.field, fix.before, fix.after, fix.kind === "lifestyle" ? "add" : "reorder");
+      await writeProductList(fix.productId, fix.field, fix.before, fix.after, fix.kind === "lifestyle" ? "add" : fix.kind === "compress" ? "replace" : "reorder");
       await updateDaily((s) => {
         for (const f of s.fixLog || []) if (f.at === at && String(f.productId) === String(productId)) f.undone = true;
         // remember the owner's order so the bot does not move it again
