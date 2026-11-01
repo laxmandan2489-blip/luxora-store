@@ -2707,6 +2707,26 @@ async function writeAutoQueue(queue) {
   if (error) throw new Error(`Line save nahi hui: ${error.message}`);
 }
 
+// (2026-11-01 v18) Instagram sometimes puts a post live but still answers
+// with an error (slow photo processing). Before trying again, look at the
+// latest Instagram posts: if this caption is already there, it went live -
+// never post it twice.
+async function alreadyOnInstagram(ids, item) {
+  try {
+    if (!ids.igId) return null;
+    const head = String(item.captions?.instagram || "").trim().slice(0, 60);
+    if (!head) return null;
+    const recent = await metaCall(`${ids.igId}/media`, { params: { fields: "id,caption,permalink,timestamp", limit: 8 } });
+    const since = Number(item.addedAt || 0) - 5 * 60 * 1000;
+    const hit = (recent.data || []).find(
+      (m) => String(m.caption || "").trim().slice(0, 60) === head && new Date(m.timestamp).getTime() >= since
+    );
+    return hit ? { id: hit.id, link: hit.permalink || null } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function publishAutoItem(queue, item) {
   const ids = await getMetaIds();
   const targets = (item.targets || ["instagram", "facebook"]).filter((t) => t === "instagram" || t === "facebook");
@@ -2714,6 +2734,13 @@ async function publishAutoItem(queue, item) {
   await Promise.all(
     targets.map(async (target) => {
       try {
+        if (target === "instagram" && (item.tries || 0) > 0) {
+          const found = await alreadyOnInstagram(ids, item);
+          if (found) {
+            results[target] = { ok: true, ...found, note: "pehle hi live thi" };
+            return;
+          }
+        }
         const result =
           target === "instagram"
             ? await publishInstagram(ids, "post", item.imageUrls, String(item.captions?.instagram || "").slice(0, 2200))
@@ -2721,7 +2748,8 @@ async function publishAutoItem(queue, item) {
         results[target] = { ok: true, ...result };
       } catch (error) {
         console.error(`AUTO POST ${target.toUpperCase()} ERROR:`, error.message);
-        results[target] = { ok: false, message: error.message };
+        const found = target === "instagram" ? await alreadyOnInstagram(ids, item) : null;
+        results[target] = found ? { ok: true, ...found, note: "error aaya par post live ho gayi" } : { ok: false, message: error.message };
       }
     })
   );

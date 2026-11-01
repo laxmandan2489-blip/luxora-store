@@ -9,9 +9,9 @@
  *   Bag post   = one bag, its colours in one carousel. Per colour:
  *                slide "Clean · text below" (name + price), then 1-2
  *                "No text · only bag" slides. One background per post.
- *   Model post = slide 1 AI lifestyle photo of the SAME bag, slide 2 the
- *                bag's real photo with name + price. Background: Cream for
- *                a dark bag, Black for a light bag.
+ *   Model post = ONE photo: a woman model with the SAME bag (the owner's
+ *                own lifestyle photo first, else a checked AI one). It goes
+ *                in the grid between the bag posts.
  *
  * Lifestyle photos: Gemini makes 3 (hand / shoulder / cafe table) from the
  * bag's real first photo. Gemini then compares each one with the real
@@ -45,18 +45,20 @@ const TINY_LINE = "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE";
 // order of posts: 0 bag cream, 1 model, 2 bag black, 3 model
 const PATTERN = ["bag-cream", "model", "bag-black", "model"];
 
+// (v20) every scene has a woman model with the bag - the owner wants model
+// photos between the bag photos so the grid looks premium
 const SCENES = [
   {
     key: "hand",
-    text: "a stylish young Indian woman holding this exact bag by its handle at her side, framed from shoulders to knees, wearing a simple elegant outfit in soft neutral tones, standing in a bright, minimal, modern interior with soft daylight",
+    text: "an elegant young Indian woman model holding this exact bag by its handle at her side, standing in a bright, minimal, modern interior with soft daylight, wearing a simple chic outfit in soft neutral tones (cream, beige, white), framed from shoulders to knees, natural relaxed pose, fashion catalogue look",
   },
   {
     key: "shoulder",
-    text: "a stylish young Indian woman carrying this exact bag on her shoulder while walking on a clean, softly blurred city street in warm golden-hour light, framed from the waist up, face turned slightly away from the camera",
+    text: "an elegant young Indian woman model carrying this exact bag on her shoulder while walking on a clean, softly blurred city street in warm golden-hour light, framed from head to hips, face turned slightly to the side, wearing a classy neutral-toned outfit, premium fashion brand campaign look",
   },
   {
-    key: "table",
-    text: "this exact bag standing on a light marble cafe table next to a cup of coffee and a pair of sunglasses, a woman's hand with neat nude nails resting lightly on the table beside it, soft natural window light, shallow depth of field",
+    key: "lifestyle",
+    text: "an elegant young Indian woman model sitting at a bright cafe by a window with this exact bag held on her lap / beside her hand in clear view, soft natural window light, warm neutral tones, candid but polished fashion editorial look, framed from head to knees",
   },
 ];
 
@@ -533,12 +535,103 @@ module.exports = function setupAutopilot(app, deps) {
       const now = Date.now();
       const ok = pool.filter((p) => !(Number(state.skipModel?.[p.id]) > now));
       if (ok.length) pool = ok;
-      // bags that already have a checked lifestyle photo go first (no Gemini cost)
-      const ready = pool.filter((p) => (state.lifestyle?.[p.id] || []).some((item) => !item.usedAt));
+      // bags that already have a lifestyle photo go first (owner's own, or a checked AI one)
+      const ready = pool.filter((p) => (state.ownLife?.[p.id] || []).length || (state.lifestyle?.[p.id] || []).some((item) => !item.usedAt));
       if (ready.length) pool = ready;
     }
     pool.sort((a, b) => lastPosted(a.id) - lastPosted(b.id) || Math.random() - 0.5);
     return pool[0] || null;
+  }
+
+  /*
+   * OWN LIFESTYLE PHOTOS (v19) - lifestyle / model photos the owner already
+   * made and added to a bag's gallery (anything that is not a plain studio
+   * photo). The bot uses these FIRST - for model posts, stories, reels and
+   * the website - and only makes new ones with Gemini when a bag has none.
+   * Same test as Insta Planner: a plain photo has a light, smooth border.
+   */
+  async function photoIsPlain(url) {
+    const buffer = await fetchBuffer(url);
+    const { data, info } = await sharp(buffer).rotate().resize(96, null, { fit: "inside" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const W = info.width;
+    const H = info.height;
+    const ch = info.channels;
+    let rough = 0;
+    let light = 0;
+    let n = 0;
+    let prev = -1;
+    const visit = (x, y) => {
+      const i = (y * W + x) * ch;
+      if (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114 > 205) light++;
+      if (prev >= 0 && Math.abs(data[i] - data[prev]) + Math.abs(data[i + 1] - data[prev + 1]) + Math.abs(data[i + 2] - data[prev + 2]) > 30) rough++;
+      prev = i;
+      n++;
+    };
+    for (let x = 0; x < W; x++) visit(x, 0);
+    for (let y = 0; y < H; y++) visit(W - 1, y);
+    for (let x = W - 1; x >= 0; x--) visit(x, H - 1);
+    for (let y = H - 1; y >= 0; y--) visit(0, y);
+    return rough / n < 0.12 && light / n > 0.8;
+  }
+
+  function galleryList(p) {
+    const list = [...(p.images || []).slice(1)];
+    for (const urls of Object.values(p.colorImages || {})) list.push(...urls.slice(1));
+    return [...new Set(list)].filter((url) => url && !isLifestyleUrl(url) && url !== (p.images || [])[0]);
+  }
+
+  // checks the photos it has not seen yet (budget per call), remembers the answers
+  async function scanOwnLifestyle(products, state, budget = 60) {
+    state.ownLife = state.ownLife || {};
+    state.plainCache = state.plainCache || {};
+    let checks = 0;
+    for (const p of products) {
+      const urls = galleryList(p);
+      const found = [];
+      let complete = true;
+      for (const url of urls) {
+        if (!(url in state.plainCache)) {
+          if (checks >= budget) {
+            complete = false;
+            continue;
+          }
+          checks += 1;
+          try {
+            state.plainCache[url] = await photoIsPlain(url);
+          } catch {
+            complete = false;
+            continue;
+          }
+        }
+        if (state.plainCache[url] === false) found.push(url);
+      }
+      if (found.length) state.ownLife[p.id] = found;
+      else if (complete) delete state.ownLife[p.id];
+    }
+    // keep the cache small
+    const keys = Object.keys(state.plainCache);
+    if (keys.length > 1500) for (const key of keys.slice(0, keys.length - 1500)) delete state.plainCache[key];
+    return checks;
+  }
+
+  async function scanAndSave(products, budget) {
+    const state = await readState();
+    const checks = await scanOwnLifestyle(products, state, budget);
+    if (checks) {
+      const latest = await readState();
+      latest.ownLife = state.ownLife;
+      latest.plainCache = state.plainCache;
+      await writeState(latest);
+      return latest;
+    }
+    return state;
+  }
+
+  // every lifestyle photo a bag has: the owner's own first, then checked AI ones
+  function lifestylePhotos(state, productId) {
+    const own = (state.ownLife?.[productId] || []).map((url) => ({ url, own: true }));
+    const made = (state.lifestyle?.[productId] || []).map((item) => ({ url: item.url, own: false, usedAt: item.usedAt }));
+    return [...own, ...made];
   }
 
   /* ---------------- captions (short, honest - like Caption Maker) ---------------- */
@@ -559,7 +652,7 @@ module.exports = function setupAutopilot(app, deps) {
         lines.push(`${rupees(product.price)}${colours.length >= 2 ? ` · ${colours.length} colours` : ""}`);
       }
       lines.push("Free delivery (prepaid) · COD available");
-      if (kind === "model") lines.push("Photo 1: styled look (AI) · Photo 2: real product photo");
+      if (kind === "model") lines.push("Styled look (AI) · real photos of this bag on the website");
       lines.push(platform === "facebook" ? `Shop: ${link}` : "Link in bio 🛍");
       lines.push("", hashtags(product));
       return lines.join("\n");
@@ -624,8 +717,8 @@ module.exports = function setupAutopilot(app, deps) {
       "Score 0-10: same_bag (overall the same product), colour (same colour and shade), shape (same silhouette and proportions), " +
       "hardware (same buckles, zips, chain, clasp, metal colour), strap (same handle/strap type and length), bag_visible (bag is clearly visible and in focus), " +
       "premium_look (would look premium on a fashion brand's Instagram). Also: extra_text (true if any text, logo, letters or watermark appear anywhere in Image 2), " +
-      "body_ok (true only if hands, fingers, face and body look natural with no extra or missing fingers or deformities). " +
-      'Reply ONLY with JSON: {"same_bag":0,"colour":0,"shape":0,"hardware":0,"strap":0,"bag_visible":0,"premium_look":0,"extra_text":false,"body_ok":true,"problems":"short"}';
+      "body_ok (true only if hands, fingers, face and body look natural with no extra or missing fingers or deformities), woman (true if a woman model is clearly visible with the bag). " +
+      'Reply ONLY with JSON: {"same_bag":0,"colour":0,"shape":0,"hardware":0,"strap":0,"bag_visible":0,"premium_look":0,"extra_text":false,"body_ok":true,"woman":true,"problems":"short"}';
     const small = await sharp(madeJpeg).resize(900, 900, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer();
     const data = await geminiCall(TEXT_MODEL, {
       contents: [
@@ -648,7 +741,8 @@ module.exports = function setupAutopilot(app, deps) {
       scores.bag_visible >= 7 &&
       scores.premium_look >= 6 &&
       r.extra_text !== true &&
-      r.body_ok === true;
+      r.body_ok === true &&
+      r.woman !== false;
     const total = Object.values(scores).reduce((a, b) => a + b, 0);
     return { pass, total, scores, problems: String(r.problems || "").slice(0, 160) };
   }
@@ -668,16 +762,19 @@ module.exports = function setupAutopilot(app, deps) {
     const refJpeg = await sharp(await fetchBuffer(refUrl)).rotate().resize(1024, 1024, { fit: "inside" }).flatten({ background: "#ffffff" }).jpeg({ quality: 90 }).toBuffer();
 
     setStage(`Lifestyle photos ban rahi hain: ${product.name}`);
+    let lastMakeError = "";
     const made = await Promise.all(
       SCENES.map(async (scene) => {
         try {
           return { scene: scene.key, buffer: await makeLifestyle(refJpeg, product, scene) };
         } catch (error) {
           console.error("AUTOPILOT LIFESTYLE ERROR:", scene.key, error.message);
+          lastMakeError = error.message;
           return null;
         }
       })
     );
+    if (!made.some(Boolean)) throw new Error(lastMakeError || "Gemini ne ek bhi photo nahi banayi");
     setStage("Photos asli bag se mila ke check ho rahi hain");
     const checked = [];
     for (const item of made.filter(Boolean)) {
@@ -710,6 +807,10 @@ module.exports = function setupAutopilot(app, deps) {
     const products = await loadProducts();
     if (!products.length) throw new Error("Koi active bag nahi mila");
     const kind = wantKind === "model" ? "model" : "bag";
+    if (kind === "model") {
+      setStage("Pehle se bani lifestyle photos dhoondh raha hai");
+      await scanOwnLifestyle(products, state, 80).catch(() => 0);
+    }
     const product = pickProduct(products, state, queue, kind);
     if (!product) throw new Error("Post ke liye bag nahi mila");
     const hookIndex = Math.floor(Math.random() * HOOKS.length);
@@ -719,22 +820,39 @@ module.exports = function setupAutopilot(app, deps) {
       const variant = variants[0];
       const refUrl = variant.photos[0];
       let result = null;
-      try {
-        result = await lifestyleFor(product, refUrl, state, variant.colour);
-      } catch (error) {
-        notes.push(`Lifestyle nahi bani: ${error.message}`);
+      const own = (state.ownLife?.[product.id] || []).filter((url) => !(variant.photos || []).slice(0, 1).includes(url));
+      if (own.length) {
+        // owner's own lifestyle photo: least used first
+        state.ownUsed = state.ownUsed || {};
+        const url = [...own].sort((a, b) => (Number(state.ownUsed[a]) || 0) - (Number(state.ownUsed[b]) || 0))[0];
+        try {
+          result = { url, buffer: await fetchBuffer(url), own: true };
+          state.ownUsed[url] = Date.now();
+          notes.push("Aapki pehle se bani lifestyle photo use ki");
+        } catch {
+          result = null;
+        }
+      }
+      if (!result) {
+        try {
+          result = await lifestyleFor(product, refUrl, state, variant.colour);
+        } catch (error) {
+          notes.push(`Lifestyle nahi bani: ${error.message}`);
+          state.lastLifestyleError = { at: Date.now(), message: error.message };
+        }
       }
       if (result && result.report) notes.push(...result.report.map((r) => `${r.scene}: ${r.pass ? "✅ paas" : "❌ fail"} (${r.total}/70)${r.problems ? ` - ${r.problems}` : ""}`));
       if (result && result.url) {
         setStage("Model post ki slides ban rahi hain");
         const realPhoto = await fetchBuffer(refUrl);
         const bg = (await bagIsLight(realPhoto)) ? "black" : "cream";
+        // (v21) model post = ONE photo of the girl with the bag, nothing else -
+        // it sits in the grid between the bag posts to make it look premium
         const slide1 = await renderModelSlide(result.buffer);
-        const slide2 = await renderSlide(realPhoto, { kind: "below", bg, name: variant.name, price: product.price, mrp: product.oldPrice });
         const story = state.story ? await renderSlide(realPhoto, { kind: "story", bg, name: variant.name, price: product.price, mrp: product.oldPrice }) : null;
         const entry = (state.lifestyle[product.id] || []).find((item) => item.url === result.url);
         if (entry) entry.usedAt = Date.now();
-        return { kind: "model", product, bg, slides: [slide1, slide2], story, captions: captions(product, variant.name, "model", hookIndex), thumb: result.url, label: `Model · ${variant.name}` };
+        return { kind: "model", product, bg, slides: [slide1], story, captions: captions(product, variant.name, "model", hookIndex), thumb: result.url, label: `Model · ${variant.name}` };
       }
       // nothing passed -> never post a wrong bag; skip this bag's model post for 14 days
       state.skipModel = { ...(state.skipModel || {}), [product.id]: Date.now() + 14 * 24 * 3600 * 1000 };
@@ -752,7 +870,8 @@ module.exports = function setupAutopilot(app, deps) {
     let firstName = product.name;
     for (const variant of variantsOf(product).slice(0, 4)) {
       if (slides.length >= 10) break;
-      const photos = variant.photos.slice(0, Math.min(3, 10 - slides.length));
+      const ownSet = new Set(state.ownLife?.[product.id] || []);
+      const photos = variant.photos.filter((url, i) => i === 0 || !ownSet.has(url)).slice(0, Math.min(3, 10 - slides.length));
       for (let i = 0; i < photos.length; i++) {
         let buffer;
         try {
@@ -874,7 +993,7 @@ module.exports = function setupAutopilot(app, deps) {
           createdAt: Date.now(),
         };
         entry = { ...entry, kind: post.kind, label: post.label, productId: post.product.id, thumb: post.thumb };
-        state = { ...(await readState()), lifestyle: state.lifestyle, skipModel: state.skipModel };
+        state = { ...(await readState()), lifestyle: state.lifestyle, skipModel: state.skipModel, ownLife: state.ownLife, plainCache: state.plainCache, ownUsed: state.ownUsed, lastLifestyleError: state.lastLifestyleError };
         if (dryRun) {
           if (state.preview) deleteStorageImages([...(state.preview.slideUrls || []), state.preview.storyUrl].filter(Boolean)).catch(() => {});
           state.preview = prepared;
@@ -887,7 +1006,7 @@ module.exports = function setupAutopilot(app, deps) {
       } catch (error) {
         console.error("AUTOPILOT ERROR:", error.message);
         entry.message = error.message;
-        state = { ...(await readState()), lifestyle: state.lifestyle, skipModel: state.skipModel };
+        state = { ...(await readState()), lifestyle: state.lifestyle, skipModel: state.skipModel, ownLife: state.ownLife, plainCache: state.plainCache, lastLifestyleError: state.lastLifestyleError };
       }
       state.log = [entry, ...(state.log || [])];
       try {
@@ -945,6 +1064,9 @@ module.exports = function setupAutopilot(app, deps) {
       library: library.sort((a, b) => (b.at || 0) - (a.at || 0)).slice(0, 40),
       running,
       geminiReady: Boolean(GEMINI_API_KEY),
+      ownLifestyleCount: Object.values(state.ownLife || {}).reduce((n, list) => n + list.length, 0),
+      ownLifestyleBags: Object.keys(state.ownLife || {}).length,
+      lastLifestyleError: state.lastLifestyleError || null,
       cronReady: Boolean(process.env.CRON_SECRET),
     };
   }
@@ -1061,6 +1183,8 @@ module.exports = function setupAutopilot(app, deps) {
     loadProductsAll,
     ensureLifestyle,
     isLifestyleUrl,
+    scanAndSave,
+    lifestylePhotos,
     fetchBuffer,
     saveJpeg,
     geminiCall,

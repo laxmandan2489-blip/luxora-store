@@ -518,23 +518,26 @@ module.exports = function setupDaily(app, deps, ap) {
    * website shows a small "Styled image" label on it. Up to `makeBudget`
    * new photos are made per run (Gemini cost); saved ones are reused.
    */
+  let pauseMakingUntil = 0;
   async function addLifestyleToGalleries(products, makeBudget) {
     const added = [];
     let made = 0;
-    let apState = await ap.readState();
+    let apState = await ap.scanAndSave(products, 40).catch(() => ap.readState());
     for (const p of products) {
       if (!p.images || !p.images.length) continue;
       if (p.images.some((url) => ap.isLifestyleUrl(url))) continue;
+      if ((apState.ownLife?.[p.id] || []).length) continue; // owner's own lifestyle photo already there
       if (Number(apState.skipModel?.[p.id]) > Date.now()) continue;
       const saved = (apState.lifestyle?.[p.id] || []).filter((item) => item.url);
       let pick = saved.find((item) => !p.images.includes(item.url));
       if (!pick) {
-        if (made >= makeBudget || ap.isRunning()) continue;
+        if (made >= makeBudget || ap.isRunning() || Number(pauseMakingUntil) > Date.now()) continue;
         made += 1;
         stage(`Lifestyle photo ban rahi hai: ${p.name}`);
         const result = await ap.ensureLifestyle(p).catch((error) => ({ url: null, error: error.message }));
+        if (result && result.error) pauseMakingUntil = Date.now() + 2 * 3600 * 1000; // Gemini trouble: try again in 2 hours
         if (!result || !result.url) {
-          added.push({ at: Date.now(), productId: p.id, name: p.name, needsPhoto: true, kind: "lifestyle", reason: "AI lifestyle photo check paas nahi hui (14 din baad phir try)" });
+          added.push({ at: Date.now(), productId: p.id, name: p.name, needsPhoto: true, kind: "lifestyle", reason: result?.error ? `AI lifestyle photo nahi bani: ${result.error}` : "AI lifestyle photo check paas nahi hui (14 din baad phir try)" });
           continue;
         }
         pick = { url: result.url };
@@ -850,10 +853,10 @@ module.exports = function setupDaily(app, deps, ap) {
     let bags = pickBags(products, state, 2);
     let lifestyle = null;
     if (kind === "styled") {
-      const withPhoto = products.filter((p) => (apState.lifestyle?.[p.id] || []).length);
+      const withPhoto = products.filter((p) => ap.lifestylePhotos(apState, p.id).length);
       if (withPhoto.length) {
         const bag = pickBags(withPhoto, state, 1)[0];
-        const items = apState.lifestyle[bag.id];
+        const items = ap.lifestylePhotos(apState, bag.id);
         lifestyle = items[Math.floor(Math.random() * items.length)];
         bags = [bag];
       } else kind = "newin";
@@ -954,11 +957,11 @@ module.exports = function setupDaily(app, deps, ap) {
     const frames = [];
     const used = [];
     if (kind === "one") {
-      const bag = byReel.find((p) => (apState.lifestyle?.[p.id] || []).length) || byReel[0];
+      const bag = byReel.find((p) => ap.lifestylePhotos(apState, p.id).length) || byReel[0];
       used.push(bag);
       const realPhoto = await ap.fetchBuffer(bag.images[0]);
       const bg = (await ap.bagIsLight(realPhoto)) ? "black" : "cream";
-      const life = (apState.lifestyle?.[bag.id] || [])[0];
+      const life = ap.lifestylePhotos(apState, bag.id)[0];
       if (life) frames.push({ image: await renderStyled(await ap.fetchBuffer(life.url), bag), seconds: 2.6 });
       const variants = ap.variantsOf(bag).slice(0, 4);
       for (const variant of variants) {
