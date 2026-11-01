@@ -104,6 +104,11 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// calendar day in India (posts / reels / stories are counted per day)
+function istDay() {
+  return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 // AI lifestyle photos that were added to a product's website gallery
 function isLifestyleUrl(url) {
   return String(url || "").includes("/autopilot/lifestyle/");
@@ -135,7 +140,8 @@ module.exports = function setupAutopilot(app, deps) {
   function emptyState() {
     return {
       enabled: false,
-      perWeek: 4,
+      perWeek: 14,
+      v11: true,
       story: true,
       step: 0,
       lastAutoAt: 0,
@@ -152,7 +158,13 @@ module.exports = function setupAutopilot(app, deps) {
     try {
       const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(STATE_PATH);
       if (error || !data) return emptyState();
-      return { ...emptyState(), ...JSON.parse(await data.text()) };
+      const saved = { ...emptyState(), ...JSON.parse(await data.text()) };
+      // (v11) owner asked for more: 2 posts a day by default (can be lowered in Admin)
+      if (!saved.v11) {
+        saved.perWeek = 14;
+        saved.v11 = true;
+      }
+      return saved;
     } catch {
       return emptyState();
     }
@@ -797,6 +809,9 @@ module.exports = function setupAutopilot(app, deps) {
     }
     const okAny = Object.values(results).some((r) => r && r.ok);
     if (okAny) {
+      const today = istDay();
+      state.dayPosts = state.dayKey === today ? (Number(state.dayPosts) || 0) + 1 : 1;
+      state.dayKey = today;
       if (prepared.kind === "bag") state.lastBagBg = prepared.bg;
       // a model post that fell back to a bag post keeps "model" as the next turn
       if (!prepared.fallback) state.step = ((Number(state.step) || 0) + 1) % PATTERN.length;
@@ -888,12 +903,21 @@ module.exports = function setupAutopilot(app, deps) {
     const state = await readState();
     if (!state.enabled) return { posted: false, message: "Line khaali hai (Autopilot band hai)" };
     if (running) return { posted: false, message: "Autopilot abhi kaam kar raha hai" };
-    const perWeek = Math.min(14, Math.max(1, Number(state.perWeek) || 4));
-    const gap = (7 * 24 * 3600 * 1000) / perWeek;
+    const perWeek = Math.min(21, Math.max(1, Number(state.perWeek) || 14));
     const since = Date.now() - Math.max(Number(state.lastAutoAt) || 0, Number(queue?.lastPostAt) || 0);
-    if (since < gap * 0.85) {
-      const hours = Math.ceil((gap * 0.85 - since) / 3600000);
-      return { posted: false, message: `Autopilot: agli post lagbhag ${hours} ghante baad` };
+    if (perWeek >= 7) {
+      // (v11) daily quota: e.g. 14 a week = 2 a day, at least 3 hours apart
+      const today = istDay();
+      const doneToday = state.dayKey === today ? Number(state.dayPosts) || 0 : 0;
+      const perDay = Math.round(perWeek / 7);
+      if (doneToday >= perDay) return { posted: false, message: `Autopilot: aaj ki ${perDay} posts ho gayi` };
+      if (since < 3 * 3600 * 1000) return { posted: false, message: "Autopilot: pichhli post ko 3 ghante nahi hue" };
+    } else {
+      const gap = (7 * 24 * 3600 * 1000) / perWeek;
+      if (since < gap * 0.85) {
+        const hours = Math.ceil((gap * 0.85 - since) / 3600000);
+        return { posted: false, message: `Autopilot: agli post lagbhag ${hours} ghante baad` };
+      }
     }
     await runOnce({ dryRun: false });
     return { posted: true, message: "Autopilot ne agli post banana shuru kiya" };
@@ -905,7 +929,7 @@ module.exports = function setupAutopilot(app, deps) {
     const library = Object.entries(state.lifestyle || {}).flatMap(([productId, items]) => (items || []).map((item) => ({ productId, ...item })));
     return {
       enabled: Boolean(state.enabled),
-      perWeek: Number(state.perWeek) || 4,
+      perWeek: Number(state.perWeek) || 14,
       story: state.story !== false,
       next,
       lastAutoAt: state.lastAutoAt || 0,
@@ -927,7 +951,7 @@ module.exports = function setupAutopilot(app, deps) {
       const body = req.body || {};
       const state = await readState();
       if (typeof body.enabled === "boolean") state.enabled = body.enabled;
-      if (body.perWeek != null) state.perWeek = Math.min(14, Math.max(1, Math.round(Number(body.perWeek) || 4)));
+      if (body.perWeek != null) state.perWeek = Math.min(21, Math.max(1, Math.round(Number(body.perWeek) || 14)));
       if (typeof body.story === "boolean") state.story = body.story;
       if (body.next && PATTERN.includes(body.next)) state.step = PATTERN.indexOf(body.next);
       await writeState(state);
@@ -1013,6 +1037,7 @@ module.exports = function setupAutopilot(app, deps) {
   return {
     maybeRunFromCron,
     isRunning: () => Boolean(running),
+    istDay,
     readState,
     renderSlide,
     renderModelSlide,

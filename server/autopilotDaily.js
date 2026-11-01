@@ -71,11 +71,14 @@ module.exports = function setupDaily(app, deps, ap) {
       repliesOn: true,
       storyDaily: true,
       reelsPerWeek: 2,
+      storiesPerDay: 3,
+      reelsPerDay: 2,
       repliedIds: [],
       replyLog: [],
       replyError: "",
       lastDailyAt: 0,
       lastStoryAt: 0,
+      v11: true,
       storyStep: 0,
       storyAt: {},
       lastReelAt: 0,
@@ -96,10 +99,32 @@ module.exports = function setupDaily(app, deps, ap) {
     try {
       const { data, error } = await supabase.storage.from(STORAGE_BUCKET).download(STATE_PATH);
       if (error || !data) return emptyState();
-      return { ...emptyState(), ...JSON.parse(await data.text()) };
+      const saved = { ...emptyState(), ...JSON.parse(await data.text()) };
+      if (!saved.v11) {
+        // (v11) owner asked for more: 2 reels + 3 stories a day by default
+        saved.reelsPerDay = 2;
+        saved.storiesPerDay = 3;
+        saved.v11 = true;
+      }
+      return saved;
     } catch {
       return emptyState();
     }
+  }
+
+  // how many of a kind went out today (India date)
+  function countToday(state, kind) {
+    const today = ap.istDay();
+    return state.dayKey === today ? Number(state[`day_${kind}`]) || 0 : 0;
+  }
+  function bumpToday(s, kind) {
+    const today = ap.istDay();
+    if (s.dayKey !== today) {
+      s.dayKey = today;
+      s.day_story = 0;
+      s.day_reel = 0;
+    }
+    s[`day_${kind}`] = (Number(s[`day_${kind}`]) || 0) + 1;
   }
 
   async function writeDaily(state) {
@@ -607,7 +632,7 @@ module.exports = function setupDaily(app, deps, ap) {
     if (GEMINI_API_KEY) {
       fixes = await fixFrontPhotos(state, products, state.frontBudget || 15);
       state.frontBudget = 15;
-      fixes.push(...(await addLifestyleToGalleries(products, 2)));
+      fixes.push(...(await addLifestyleToGalleries(products, 4)));
       fixes.push(...(await lightenHeavyPhotos(products, 10)));
       for (const fix of fixes) {
         if (!fix.needsPhoto) continue;
@@ -867,7 +892,10 @@ module.exports = function setupDaily(app, deps, ap) {
     const ok = Object.values(results).some((r) => r.ok);
     await updateDaily((s) => {
       s.lastStoryAt = Date.now();
-      if (ok) s.storyStep = ((Number(s.storyStep) || 0) + 1) % STORY_KINDS.length;
+      if (ok) {
+        s.storyStep = ((Number(s.storyStep) || 0) + 1) % STORY_KINDS.length;
+        bumpToday(s, "story");
+      }
       for (const bag of story.bags) s.storyAt = { ...(s.storyAt || {}), [bag.id]: Date.now() };
       s.storyLog = [{ at: Date.now(), kind: story.kind, highlight: STORY_HIGHLIGHT[story.kind], bags: story.bags.map((b) => b.name), thumb: thumbUrl, results, manual }, ...(s.storyLog || [])];
     });
@@ -1079,6 +1107,7 @@ module.exports = function setupDaily(app, deps, ap) {
     await updateDaily((s) => {
       if (fromPreview) s.reelPreview = null;
       if (ok) {
+        bumpToday(s, "reel");
         s.lastReelAt = Date.now();
         s.reelStep = (Number(s.reelStep) || 0) + 1;
         if (prepared.music) {
@@ -1124,29 +1153,30 @@ module.exports = function setupDaily(app, deps, ap) {
   function tick() {
     setTimeout(async () => {
       try {
+        // (v11) remember every timer call, so Admin can show "timer last ran at ..."
+        await updateDaily((s) => {
+          s.lastTickAt = Date.now();
+        }).catch(() => {});
         const apState = await ap.readState();
         if (!apState.enabled || working) return;
         start("tick", async () => {
           await shrinkOldSongs();
-          const state = await readDaily();
           await runReplies();
-          if (Date.now() - (Number(state.lastDailyAt) || 0) > 20 * 3600 * 1000) {
-            await runDailyCheck();
-            return; // one heavy job per timer call
-          }
-          if (ap.isRunning()) return;
-          if (weekly && !weekly.isWorking() && (await weekly.weeklyDue())) {
+          let state = await readDaily();
+          if (Date.now() - (Number(state.lastDailyAt) || 0) > 20 * 3600 * 1000) await runDailyCheck();
+          if (weekly && !weekly.isWorking() && !ap.isRunning() && (await weekly.weeklyDue())) {
             stage("Hafte ka pro audit");
             await weekly.runAudit();
-            return;
           }
-          if (state.storyDaily && Date.now() - (Number(state.lastStoryAt) || 0) > 20 * 3600 * 1000) {
-            await postStory();
-            return;
-          }
-          const perWeek = Number(state.reelsPerWeek) || 0;
-          const sincePost = Date.now() - (Number(apState.lastAutoAt) || 0);
-          if (perWeek > 0 && sincePost > 2 * 3600 * 1000 && Date.now() - (Number(state.lastReelAt) || 0) > ((7 * DAY) / perWeek) * 0.85) {
+          // (v11) daily quotas, 2 hours apart, several jobs per timer call
+          const gapOk = (at) => Date.now() - (Number(at) || 0) > 2 * 3600 * 1000;
+          state = await readDaily();
+          const storiesPerDay = state.storyDaily === false ? 0 : Number(state.storiesPerDay ?? 1);
+          if (countToday(state, "story") < storiesPerDay && gapOk(state.lastStoryAt)) await postStory();
+          state = await readDaily();
+          const reelsPerDay = Number(state.reelsPerDay ?? 0);
+          const apNow = await ap.readState();
+          if (reelsPerDay > 0 && !ap.isRunning() && countToday(state, "reel") < reelsPerDay && gapOk(state.lastReelAt) && Date.now() - (Number(apNow.lastAutoAt) || 0) > 45 * 60 * 1000) {
             await makeReel(false);
           }
         });
@@ -1165,6 +1195,11 @@ module.exports = function setupDaily(app, deps, ap) {
       repliesOn: s.repliesOn !== false,
       storyDaily: s.storyDaily !== false,
       reelsPerWeek: Number(s.reelsPerWeek) || 0,
+      reelsPerDay: Number(s.reelsPerDay ?? 2),
+      storiesPerDay: s.storyDaily === false ? 0 : Number(s.storiesPerDay ?? 3),
+      todayReels: countToday(s, "reel"),
+      lastTickAt: s.lastTickAt || 0,
+      todayStories: countToday(s, "story"),
       replyLog: (s.replyLog || []).slice(0, 25),
       replyError: s.replyError || "",
       report: s.report,
@@ -1193,6 +1228,8 @@ module.exports = function setupDaily(app, deps, ap) {
         if (typeof body.repliesOn === "boolean") s.repliesOn = body.repliesOn;
         if (typeof body.storyDaily === "boolean") s.storyDaily = body.storyDaily;
         if (body.reelsPerWeek != null) s.reelsPerWeek = Math.max(0, Math.min(7, Math.round(Number(body.reelsPerWeek) || 0)));
+        if (body.reelsPerDay != null) s.reelsPerDay = Math.max(0, Math.min(4, Math.round(Number(body.reelsPerDay) || 0)));
+        if (body.storiesPerDay != null) s.storiesPerDay = Math.max(0, Math.min(5, Math.round(Number(body.storiesPerDay) || 0)));
       });
       return ok(res);
     } catch (error) {
@@ -1339,26 +1376,44 @@ module.exports = function setupDaily(app, deps, ap) {
     }
   }
 
-  // songs uploaded before v9: make them small once, delete the big file
+  // songs uploaded earlier: make them small and let the AI listen to them (once)
   async function shrinkOldSongs() {
     const state = await readDaily();
-    const big = (state.music || []).filter((m) => !m.small);
-    for (const song of big) {
+    const todo = (state.music || []).filter((m) => !m.small || !m.check).slice(0, 4);
+    for (const song of todo) {
       try {
         const original = await ap.fetchBuffer(song.url);
         const ext = (song.url.split("?")[0].split(".").pop() || "mp3").toLowerCase();
-        const small = await shrinkSong(original, ext);
-        if (!small) continue;
-        const url = await saveFile(small, "music", "mp3", "audio/mpeg");
+        let url = song.url;
+        let buffer = original;
+        let kb = song.kb;
+        if (!song.small) {
+          const small = await shrinkSong(original, ext);
+          if (small) {
+            buffer = small;
+            url = await saveFile(small, "music", "mp3", "audio/mpeg");
+            kb = Math.round(small.length / 1024);
+          }
+        }
+        const check = song.check || (await checkSong(buffer, url === song.url ? ext : "mp3"));
         await updateDaily((s) => {
-          s.music = (s.music || []).map((m) => (m.url === song.url ? { ...m, url, small: true, kb: Math.round(small.length / 1024) } : m));
+          s.music = (s.music || []).map((m) =>
+            m.url === song.url ? { ...m, url, small: url !== song.url || m.small, kb, originalKb: m.originalKb || Math.round(original.length / 1024), check: check || m.check } : m
+          );
         });
-        deleteStorageImages([song.url]).catch(() => {});
+        if (url !== song.url) deleteStorageImages([song.url]).catch(() => {});
       } catch (error) {
-        console.error("OLD SONG SHRINK ERROR:", error.message);
+        console.error("OLD SONG FIX ERROR:", error.message);
       }
     }
   }
+
+  // "Gaane theek karo" button in Admin runs the same thing right away
+  app.post("/api/admin/autopilot/music/fix", requireAdmin, async (req, res) => {
+    const started = start("songs", () => shrinkOldSongs());
+    if (!started) return res.status(409).json({ success: false, message: "Bot abhi doosra kaam kar raha hai, 1-2 minute baad." });
+    return res.json({ success: true, started: true, ...(await publicDaily()) });
+  });
 
   // calm songs for one-bag / model reels, upbeat for many-bag reels
   function pickSong(state, kind) {
