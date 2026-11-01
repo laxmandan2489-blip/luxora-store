@@ -33,6 +33,8 @@ export default function Autopilot({ API, adminFetch }) {
   const [notice, setNotice] = useState("");
   const [openLog, setOpenLog] = useState(null);
   const [daily, setDaily] = useState(null);
+  const [pro, setPro] = useState(null);
+  const proTimer = useRef(null);
   const timer = useRef(null);
   const dailyTimer = useRef(null);
 
@@ -58,6 +60,26 @@ export default function Autopilot({ API, adminFetch }) {
     if (!response.ok || !data.success) throw new Error(data.message || `Server error ${response.status}`);
     setDaily(data);
     return data;
+  }
+
+  async function proCall(path, options) {
+    const response = await adminFetch(`${API}${path}`, options);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.success) throw new Error(data.message || `Server error ${response.status}`);
+    setPro(data);
+    return data;
+  }
+
+  async function proAct(path, body) {
+    setBusy(true);
+    setNotice("");
+    try {
+      await proCall(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    } catch (error) {
+      setNotice(`❌ ${friendly(error)}`);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function refreshDaily() {
@@ -88,12 +110,20 @@ export default function Autopilot({ API, adminFetch }) {
   useEffect(() => {
     refresh();
     refreshDaily();
+    proCall("/api/admin/autopilot/pro").catch(() => {});
     return () => {
+      clearTimeout(proTimer.current);
       clearTimeout(timer.current);
       clearTimeout(dailyTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    clearTimeout(proTimer.current);
+    if (pro?.working) proTimer.current = setTimeout(() => proCall("/api/admin/autopilot/pro").catch(() => {}), 4000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pro]);
 
   useEffect(() => {
     clearTimeout(dailyTimer.current);
@@ -241,6 +271,16 @@ export default function Autopilot({ API, adminFetch }) {
             ) : null}
           </div>
 
+          <details className="apl-box">
+            <summary style={{ fontWeight: 700, cursor: "pointer" }}>📋 Switch ON hone par bot kya-kya karta hai</summary>
+            <div className="apl-small" style={{ color: "#333", marginTop: 8 }}>
+              <b>Din mein 4 baar:</b> naye comments ka jawab (shikayat ho to aapko email) · line khaali ho to agli post.<br />
+              <b>Roz:</b> grid + posts ke numbers + website check, email report · 1 story · front photos theek · 2 bags par website lifestyle photo.<br />
+              <b>Hafte mein:</b> 4 posts (bag / model) · 2 reels gaane ke saath · pro audit (website, products, Instagram, Facebook) + naam / description ke sujhav.<br />
+              <b>Aapke haath:</b> story sticker / link, highlight mein daalna, archive, bio badalna, ✅ dabana.
+            </div>
+          </details>
+
           <div className="apl-box">
             <div style={{ fontWeight: 700, marginBottom: 4 }}>🧪 Pehle dekhna hai?</div>
             <div className="apl-small">Bot agli post bana ke yahan dikhayega, Instagram par nahi daalega. Pasand aaye to ek tap mein daal do.</div>
@@ -328,6 +368,8 @@ export default function Autopilot({ API, adminFetch }) {
               );
             })}
           </div>
+
+          {pro ? <ProPanel p={pro} busy={busy} act={proAct} /> : null}
 
           {daily ? <DailyPanel d={daily} busy={busy} act={dailyAct} /> : null}
 
@@ -588,6 +630,121 @@ function DailyPanel({ d, busy, act }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+const WHO = { bot: "🤖 bot", one_tap: "👆 1 tap", you: "🙋 aap" };
+const AREA = { website: "Website", products: "Products", instagram: "Instagram", facebook: "Facebook", trust: "Bharosa" };
+
+function ProPanel({ p, busy, act }) {
+  const [showAll, setShowAll] = useState(false);
+  const audit = p.audit;
+  const t = audit?.thinking || {};
+  const lock = busy || Boolean(p.working);
+  return (
+    <>
+      <div className="apl-box">
+        <div style={{ fontWeight: 700, marginBottom: 4 }}>🧠 Pro audit (hafte mein ek baar)</div>
+        <div className="apl-small">Web developer + social media manager ki checklist: website, products, Instagram, Facebook. Phir sochta hai sabse pehle kya theek karna hai.</div>
+        <div className="apl-switch" style={{ marginTop: 10 }}>
+          <div className="apl-small" style={{ color: "#333" }}>
+            <b>Naam / description bot khud theek kare</b>
+            <br />
+            Sirf bag ki saved jaankari se, bina jhooth ke. Har badlav ↩️ se wapas ho sakta hai.
+          </div>
+          <button type="button" aria-label="Auto fix on / off" className={p.autoApply ? "apl-toggle on" : "apl-toggle"} disabled={lock} onClick={() => act("/api/admin/autopilot/pro/settings", { autoApply: !p.autoApply })} />
+        </div>
+        {p.working ? (
+          <div className="apl-working">
+            <span className="apl-dot" />
+            <span>{p.working.stage || "Audit chal raha hai"}... (2-4 minute)</span>
+          </div>
+        ) : null}
+        {audit ? (
+          <div style={{ marginTop: 10 }}>
+            <div className="apl-small" style={{ color: "#333" }}>
+              {when(audit.at)}
+              {t.scores
+                ? Object.entries(t.scores).map(([k, v]) => (
+                    <span key={k}> · {AREA[k] || k} <b>{v}/10</b></span>
+                  ))
+                : null}
+            </div>
+            {t.summary ? <div style={{ fontSize: 14, marginTop: 6 }}>{t.summary}</div> : null}
+            {(t.actions || []).length ? (
+              <div className="apl-caption" style={{ marginTop: 8 }}>
+                <b>Is hafte ke kaam</b>
+                {t.actions.map((a, i) => (
+                  <div key={`${a.text}-${i}`} style={{ marginTop: 4 }}>
+                    {i + 1}. {a.text} <span style={{ color: "#8a7650" }}>({WHO[a.who] || a.who}{a.minutes ? `, ~${a.minutes} min` : ""})</span>
+                  </div>
+                ))}
+                {t.ads_note ? <div style={{ marginTop: 6 }}>Ads: {t.ads_ready ? "✅ tayyar" : "⏳ abhi nahi"} - {t.ads_note}</div> : null}
+              </div>
+            ) : null}
+            <button type="button" className="apl-mini" style={{ marginTop: 8 }} onClick={() => setShowAll((v) => !v)}>
+              {showAll ? "▲ poori checklist band karo" : `▼ poori checklist (${audit.findings.length} baatein)`}
+            </button>
+            {showAll ? (
+              <div className="apl-small" style={{ marginTop: 6, color: "#333" }}>
+                {audit.findings.map((f, i) => (
+                  <div key={i}>{f.level === "high" ? "🔴" : f.level === "mid" ? "🟡" : "⚪"} <b>{AREA[f.area] || f.area}:</b> {f.text}</div>
+                ))}
+                {(audit.perProduct || []).length ? <div style={{ marginTop: 8, fontWeight: 600 }}>Har bag:</div> : null}
+                {(audit.perProduct || []).map((x) => (
+                  <div key={x.productId}>• <b>{x.name}</b>: {x.problems.map((q) => q.text).join(" · ")}</div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="apl-small" style={{ marginTop: 6 }}>Pehla audit abhi nahi hua.</div>
+        )}
+        <div className="apl-row">
+          <button type="button" className="apl-btn" disabled={lock} onClick={() => act("/api/admin/autopilot/pro/audit")}>Pura audit abhi karo</button>
+        </div>
+      </div>
+
+      {p.suggestions.length || p.applied.length ? (
+        <div className="apl-box">
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>✍️ Naam / description ({p.suggestions.length} baaki)</div>
+          <div className="apl-small">Bot ne sirf bag ki saved jaankari se sach-sach naam / description likhe hain. ✅ dabane par hi website par badlega.</div>
+          {p.suggestions.map((s) => (
+            <div key={s.id} style={{ padding: "10px 0", borderBottom: "1px solid #f0ebe0" }}>
+              <div className="apl-small" style={{ color: "#8a7650" }}>{s.field === "name" ? "Naam" : "Description"} · {s.why}</div>
+              <div className="apl-small" style={{ textDecoration: "line-through" }}>{s.before || "(khaali)"}</div>
+              <div style={{ fontSize: 14, color: "#1c150d", marginTop: 2 }}>{s.after}</div>
+              <div className="apl-row">
+                <button type="button" className="apl-mini on" disabled={lock} onClick={() => act("/api/admin/autopilot/pro/suggestion", { id: s.id, action: "apply" })}>✅ Lagao</button>
+                <button
+                  type="button"
+                  className="apl-mini"
+                  disabled={lock}
+                  onClick={() => {
+                    const text = window.prompt("Apne hisaab se badlo:", s.after);
+                    if (text && text.trim()) act("/api/admin/autopilot/pro/suggestion", { id: s.id, action: "apply", text });
+                  }}
+                >
+                  ✏️ Badal ke lagao
+                </button>
+                <button type="button" className="apl-mini" disabled={lock} onClick={() => act("/api/admin/autopilot/pro/suggestion", { id: s.id, action: "dismiss" })}>✕ Nahi</button>
+              </div>
+            </div>
+          ))}
+          {p.applied.length ? <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600 }}>Lag chuke</div> : null}
+          {p.applied.map((a) => (
+            <div key={`${a.id}-${a.appliedAt}`} className="apl-row" style={{ marginTop: 4 }}>
+              <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
+                {a.auto ? "🤖 " : ""}{a.field === "name" ? "Naam" : "Description"}: {a.after.slice(0, 70)}{a.undone ? " (wapas kiya)" : ""}
+              </span>
+              {!a.undone ? (
+                <button type="button" className="apl-mini" disabled={lock} onClick={() => act("/api/admin/autopilot/pro/undo", { id: a.id })}>↩️</button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </>
   );
 }
