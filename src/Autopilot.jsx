@@ -202,6 +202,8 @@ export default function Autopilot({ API, adminFetch }) {
 
       {s ? (
         <>
+          <ActivityCard API={API} adminFetch={adminFetch} />
+
           <div className="apl-box">
             <div className="apl-switch">
               <div>
@@ -784,5 +786,95 @@ function ProPanel({ p, busy, act }) {
         </div>
       ) : null}
     </>
+  );
+}
+
+/*
+ * (v12) TOP CARD - "is the bot working?" in one look: right now, today's
+ * counts, timer, and a simple feed of everything it did.
+ */
+function ActivityCard({ API, adminFetch }) {
+  const [a, setA] = useState(null);
+  const [error, setError] = useState("");
+  const [more, setMore] = useState(false);
+
+  useEffect(() => {
+    let stop = false;
+    let timer = null;
+    async function load() {
+      try {
+        const response = await adminFetch(`${API}/api/admin/autopilot/activity`);
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.message || `Server error ${response.status}`);
+        if (!stop) {
+          setA(data);
+          setError("");
+        }
+      } catch (err) {
+        if (!stop) setError(friendly(err));
+      }
+      if (!stop) timer = setTimeout(load, 20000);
+    }
+    load();
+    return () => {
+      stop = true;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (error && !a) return <div className="apl-box apl-small" style={{ color: "#b23b1e" }}>Bot ki jaankari nahi aayi: {error}</div>;
+  if (!a) return <div className="apl-box apl-small">Bot ki jaankari aa rahi hai...</div>;
+
+  const tickOk = a.lastTickAt && Date.now() - a.lastTickAt < 6 * 3600 * 1000;
+  const status = !a.enabled
+    ? { color: "#b23b1e", text: "⏸ Bot band hai - neeche switch ON karo" }
+    : a.now
+      ? { color: "#1c150d", text: `⚙️ Abhi kaam kar raha hai: ${a.now}` }
+      : tickOk
+        ? { color: "#2e7d32", text: "🟢 Bot chalu hai - agle timer par phir kaam karega" }
+        : { color: "#b23b1e", text: "🔴 Timer 6 ghante se nahi chala - cron-job.org check karo" };
+  const list = more ? a.events : a.events.slice(0, 8);
+
+  return (
+    <div className="apl-box" style={{ borderColor: "#1c150d" }}>
+      <div style={{ fontWeight: 700, fontSize: 16, color: status.color }}>{status.text}</div>
+      <div className="apl-small" style={{ marginTop: 4 }}>
+        {a.lastTickAt ? `Timer aakhri baar chala: ${when(a.lastTickAt)}` : "Timer abhi tak nahi chala"}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6, marginTop: 10, textAlign: "center" }}>
+        {[
+          ["Posts", a.today.posts],
+          ["Reels", a.today.reels],
+          ["Stories", a.today.stories],
+          ["Jawab", a.today.replies],
+          ["Sudhaar", a.today.fixes],
+        ].map(([label, n]) => (
+          <div key={label} style={{ background: "#f6f3ee", borderRadius: 10, padding: "8px 2px" }}>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#1c150d" }}>{n}</div>
+            <div style={{ fontSize: 10, color: "#666" }}>{label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="apl-small" style={{ marginTop: 4, textAlign: "center" }}>aaj</div>
+      <div style={{ marginTop: 10, fontWeight: 600, fontSize: 14 }}>Bot ne kya kiya</div>
+      {!a.events.length ? <div className="apl-small">Abhi tak kuch nahi. Pehla kaam agle timer par hoga.</div> : null}
+      {list.map((e, i) => (
+        <div key={`${e.at}-${i}`} className="apl-small" style={{ padding: "6px 0", borderBottom: "1px solid #f0ebe0", color: e.ok ? "#333" : "#b23b1e", overflowWrap: "anywhere" }}>
+          <span style={{ color: "#999" }}>{when(e.at)}</span> {e.icon} {e.text}
+          {e.link ? (
+            <>
+              {" "}
+              <a href={e.link} target="_blank" rel="noreferrer">dekho</a>
+            </>
+          ) : null}
+        </div>
+      ))}
+      {a.events.length > 8 ? (
+        <button type="button" className="apl-mini" style={{ marginTop: 8 }} onClick={() => setMore((v) => !v)}>
+          {more ? "▲ kam dikhao" : `▼ sab dikhao (${a.events.length})`}
+        </button>
+      ) : null}
+    </div>
   );
 }
