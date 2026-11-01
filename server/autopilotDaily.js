@@ -63,6 +63,7 @@ module.exports = function setupDaily(app, deps, ap) {
   });
 
   let working = null; // { task, stage, startedAt }
+  let weekly = null; // pro audit (autopilotPro.js), set from server.js
 
   /* ---------------- state ---------------- */
   function emptyState() {
@@ -1092,6 +1093,11 @@ module.exports = function setupDaily(app, deps, ap) {
             return; // one heavy job per timer call
           }
           if (ap.isRunning()) return;
+          if (weekly && !weekly.isWorking() && (await weekly.weeklyDue())) {
+            stage("Hafte ka pro audit");
+            await weekly.runAudit();
+            return;
+          }
           if (state.storyDaily && Date.now() - (Number(state.lastStoryAt) || 0) > 20 * 3600 * 1000) {
             await postStory();
             return;
@@ -1247,5 +1253,5 @@ module.exports = function setupDaily(app, deps, ap) {
     return ok(res);
   });
 
-  return { tick, renderReel, buildReelFrames, makeStory, renderThisOrThat, renderStyled, textFrame };
+  return { tick, setWeekly: (pro) => { weekly = pro; }, renderReel, buildReelFrames, makeStory, renderThisOrThat, renderStyled, textFrame };
 };

@@ -2882,6 +2882,13 @@ const autopilotDaily = require("./autopilotDaily")(
   },
   autopilot
 );
+// (2026-11-01 v5) weekly pro audit + one-tap product name / description fixes
+const autopilotPro = require("./autopilotPro")(
+  app,
+  { supabase, STORAGE_BUCKET, requireAdmin, metaCall, getMetaIds, sendTransactionalEmail, GEMINI_API_KEY },
+  autopilot
+);
+autopilotDaily.setWeekly(autopilotPro);
 
 /*
  * Move an imported (or any) product between draft / review /
