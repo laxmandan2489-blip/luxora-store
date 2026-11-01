@@ -109,6 +109,12 @@ function istDay() {
   return new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// (v14) nothing goes live at night: posts / reels / stories only 9 am - 10 pm India time
+function isDaytime() {
+  const hour = new Date(Date.now() + 5.5 * 3600 * 1000).getUTCHours();
+  return hour >= 9 && hour < 22;
+}
+
 // AI lifestyle photos that were added to a product's website gallery
 function isLifestyleUrl(url) {
   return String(url || "").includes("/autopilot/lifestyle/");
@@ -903,6 +909,7 @@ module.exports = function setupAutopilot(app, deps) {
     const state = await readState();
     if (!state.enabled) return { posted: false, message: "Line khaali hai (Autopilot band hai)" };
     if (running) return { posted: false, message: "Autopilot abhi kaam kar raha hai" };
+    if (!isDaytime()) return { posted: false, message: "Raat hai - posts subah 9 baje se" };
     const perWeek = Math.min(21, Math.max(1, Number(state.perWeek) || 14));
     const since = Date.now() - Math.max(Number(state.lastAutoAt) || 0, Number(queue?.lastPostAt) || 0);
     if (perWeek >= 7) {
@@ -1038,6 +1045,7 @@ module.exports = function setupAutopilot(app, deps) {
     maybeRunFromCron,
     isRunning: () => Boolean(running),
     istDay,
+    isDaytime,
     readState,
     renderSlide,
     renderModelSlide,

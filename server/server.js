@@ -2831,6 +2831,10 @@ app.get("/api/cron/social-post", async function (req, res) {
       const auto = await autopilot.maybeRunFromCron(queue).catch((error) => ({ posted: false, message: `Autopilot: ${error.message}` }));
       return res.json({ success: true, ...auto });
     }
+    const istHourNow = new Date(Date.now() + 5.5 * 3600 * 1000).getUTCHours();
+    if (istHourNow < 9 || istHourNow >= 22) {
+      return res.json({ success: true, posted: false, message: "Raat hai - line ki post subah 9 baje se" });
+    }
     if (Date.now() - (queue.lastPostAt || 0) < AUTO_MIN_GAP_MS) {
       return res.json({ success: true, posted: false, message: "Pichhli post abhi-abhi gayi thi - agli baar" });
     }

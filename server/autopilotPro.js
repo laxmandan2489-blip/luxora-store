@@ -405,7 +405,10 @@ module.exports = function setupPro(app, deps, ap) {
   }
   const ok = async (res) => res.json({ success: true, ...(await publicPro()) });
 
-  app.get("/api/admin/autopilot/pro", requireAdmin, async (req, res) => ok(res));
+  app.get("/api/admin/autopilot/pro", requireAdmin, async (req, res) => {
+    if (!working) await applyOpen().catch(() => 0);
+    return ok(res);
+  });
   app.post("/api/admin/autopilot/pro/audit", requireAdmin, async (req, res) => {
     if (!start("audit", runAudit)) return res.status(409).json({ success: false, message: "Audit pehle se chal raha hai." });
     return ok(res);
@@ -448,6 +451,7 @@ module.exports = function setupPro(app, deps, ap) {
       await updatePro((s) => {
         if (typeof req.body?.autoApply === "boolean") s.autoApply = req.body.autoApply;
       });
+      if (req.body?.autoApply === true) await applyOpen();
       return ok(res);
     } catch (error) {
       return res.status(500).json({ success: false, message: error.message });
@@ -468,11 +472,45 @@ module.exports = function setupPro(app, deps, ap) {
     }
   });
 
+  // (v13) suggestions made before auto mode existed: put them live too
+  async function applyOpen() {
+    const state = await readPro();
+    if (state.autoApply === false) return 0;
+    const open = (state.suggestions || []).filter((x) => x.status === "open");
+    let done = 0;
+    for (const s of open) {
+      try {
+        const { data: row } = await supabase.from("products").select("id,name,description").eq("id", s.productId).single();
+        if (!row) {
+          s.status = "dismissed";
+          continue;
+        }
+        const beforeValue = String(row[s.field] || "");
+        if (beforeValue !== String(s.before || "")) {
+          s.status = "dismissed"; // owner changed it meanwhile - leave it
+          continue;
+        }
+        if (BIG_WORDS.test(s.after) || (s.field === "name" && LEATHER_CLAIM.test(s.after))) {
+          s.status = "dismissed";
+          continue;
+        }
+        await setProductField(s.productId, s.field, s.after);
+        s.status = "applied";
+        state.applied = [{ ...s, before: beforeValue, appliedAt: Date.now(), auto: true }, ...(state.applied || [])];
+        done += 1;
+      } catch (error) {
+        console.error("PRO APPLY OPEN ERROR:", error.message);
+      }
+    }
+    if (open.length) await writePro(state);
+    return done;
+  }
+
   // for the Admin "bot ne kya kiya" feed
   async function recent() {
     const s = await readPro();
     return { applied: (s.applied || []).slice(0, 40), lastAuditAt: s.lastAuditAt || 0, stage: working ? working.stage : "" };
   }
 
-  return { runAudit, weeklyDue, isWorking: () => Boolean(working), start, recent };
+  return { runAudit, weeklyDue, isWorking: () => Boolean(working), start, recent, applyOpen };
 };

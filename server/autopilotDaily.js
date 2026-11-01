@@ -123,6 +123,7 @@ module.exports = function setupDaily(app, deps, ap) {
       s.dayKey = today;
       s.day_story = 0;
       s.day_reel = 0;
+      s.day_lifestyle = 0;
     }
     s[`day_${kind}`] = (Number(s[`day_${kind}`]) || 0) + 1;
   }
@@ -520,10 +521,10 @@ module.exports = function setupDaily(app, deps, ap) {
   async function addLifestyleToGalleries(products, makeBudget) {
     const added = [];
     let made = 0;
+    let apState = await ap.readState();
     for (const p of products) {
       if (!p.images || !p.images.length) continue;
       if (p.images.some((url) => ap.isLifestyleUrl(url))) continue;
-      const apState = await ap.readState();
       if (Number(apState.skipModel?.[p.id]) > Date.now()) continue;
       const saved = (apState.lifestyle?.[p.id] || []).filter((item) => item.url);
       let pick = saved.find((item) => !p.images.includes(item.url));
@@ -537,6 +538,7 @@ module.exports = function setupDaily(app, deps, ap) {
           continue;
         }
         pick = { url: result.url };
+        apState = await ap.readState();
       }
       const before = p.images;
       const after = [before[0], pick.url, ...before.slice(1)];
@@ -556,12 +558,13 @@ module.exports = function setupDaily(app, deps, ap) {
    * on phones. The bot makes a lighter copy (same look, max 1600 px) and
    * swaps it in; the old file stays in storage, so ↩️ can bring it back.
    */
-  async function lightenHeavyPhotos(products, budget) {
+  async function lightenHeavyPhotos(products, budget, state) {
     const done = [];
+    const checked = (state && state.lightOk) || {};
     for (const p of products) {
       if (done.length >= budget) break;
       const url = p.images[0];
-      if (!url || ap.isLifestyleUrl(url)) continue;
+      if (!url || ap.isLifestyleUrl(url) || checked[url]) continue;
       let size = 0;
       try {
         const head = await fetch(url, { method: "HEAD" });
@@ -569,7 +572,10 @@ module.exports = function setupDaily(app, deps, ap) {
       } catch {
         continue;
       }
-      if (size <= 900 * 1024) continue;
+      if (size <= 900 * 1024) {
+        checked[url] = 1;
+        continue;
+      }
       stage(`Bhaari photo halki kar raha hai: ${p.name}`);
       try {
         const original = await ap.fetchBuffer(url);
@@ -580,10 +586,12 @@ module.exports = function setupDaily(app, deps, ap) {
         await writeProductList(p.id, "images", after, p.images, "replace");
         done.push({ at: Date.now(), productId: p.id, name: p.name, field: "images", colour: "", before: p.images, after, kind: "compress", reason: `Photo ${Math.round(size / 1024)} KB se ${Math.round(light.length / 1024)} KB ki (wahi photo, site tez)` });
         p.images = after;
+        checked[newUrl] = 1;
       } catch (error) {
         console.error("LIGHTEN PHOTO ERROR:", error.message);
       }
     }
+    if (state) state.lightOk = checked;
     return done;
   }
 
@@ -633,7 +641,7 @@ module.exports = function setupDaily(app, deps, ap) {
       fixes = await fixFrontPhotos(state, products, state.frontBudget || 15);
       state.frontBudget = 15;
       fixes.push(...(await addLifestyleToGalleries(products, 4)));
-      fixes.push(...(await lightenHeavyPhotos(products, 10)));
+      fixes.push(...(await lightenHeavyPhotos(products, 10, state)));
       for (const fix of fixes) {
         if (!fix.needsPhoto) continue;
         issues.push({ productId: fix.productId, name: fix.name, problem: fix.kind === "lifestyle" ? fix.reason : `${fix.colour ? `${fix.colour}: ` : ""}koi bhi photo poore bag ki saaf front photo nahi - nayi photo daalo` });
@@ -732,6 +740,7 @@ module.exports = function setupDaily(app, deps, ap) {
       s.lastDailyAt = Date.now();
       s.photoChecks = state.photoChecks || s.photoChecks;
       s.frontChecks = state.frontChecks || s.frontChecks;
+      s.lightOk = state.lightOk || s.lightOk;
       s.frontBudget = state.frontBudget || 15;
       s.fixLog = [...(report.website?.fixes || []), ...(s.fixLog || [])].slice(0, 60);
       s.followers = state.followers;
@@ -1150,34 +1159,104 @@ module.exports = function setupDaily(app, deps, ap) {
 
   // Called on every cron call (4x a day). Waits a little so a post that
   // the same call started gets the server first.
+  /*
+   * TWO TIMERS (v16)
+   *  - "Kaam wala timer"  /api/cron/autopilot-work  (every 5 minutes):
+   *    fixing + checking, little by little - waiting name fixes, comment
+   *    replies, songs, front photos, heavy photos, lifestyle photos on the
+   *    website, the daily check, the weekly audit. Never posts anything.
+   *  - "Post wala timer"  /api/cron/social-post  (fixed times you choose):
+   *    post + story + reel go live at those times only (9 am - 10 pm).
+   * If the work timer is not set up (or stops), the post timer also does
+   * the fixing part, so nothing is ever left undone.
+   */
+  async function maintenance(full) {
+    await shrinkOldSongs();
+    if (weekly) await weekly.applyOpen().catch(() => 0);
+    const before = await readDaily();
+    if (Date.now() - (Number(before.lastRepliesAt) || 0) > 14 * 60 * 1000) {
+      await updateDaily((x) => {
+        x.lastRepliesAt = Date.now();
+      });
+      await runReplies();
+    }
+    const istHour = new Date(Date.now() + 5.5 * 3600 * 1000).getUTCHours();
+    let state = await readDaily();
+    if (istHour >= 8 && Date.now() - (Number(state.lastDailyAt) || 0) > 20 * 3600 * 1000) {
+      await runDailyCheck();
+      return;
+    }
+    if (weekly && !weekly.isWorking() && !ap.isRunning() && (await weekly.weeklyDue())) {
+      stage("Hafte ka pro audit");
+      await weekly.runAudit();
+      return;
+    }
+    if (!full || !GEMINI_API_KEY || ap.isRunning()) return;
+    // small website fixes, a few at a time
+    state = await readDaily();
+    const products = await ap.loadProductsAll().catch(() => []);
+    if (!products.length) return;
+    const fixes = [];
+    fixes.push(...(await fixFrontPhotos(state, products, 2)));
+    fixes.push(...(await lightenHeavyPhotos(products, 1, state)));
+    if (countToday(state, "lifestyle") < 4) {
+      const added = await addLifestyleToGalleries(products, 1);
+      fixes.push(...added);
+    }
+    const real = fixes.filter((f) => !f.needsPhoto);
+    await updateDaily((s) => {
+      s.frontChecks = state.frontChecks || s.frontChecks;
+      s.lightOk = state.lightOk || s.lightOk;
+      if (real.length) s.fixLog = [...real, ...(s.fixLog || [])].slice(0, 60);
+      for (const f of real) if (f.kind === "lifestyle") bumpToday(s, "lifestyle");
+    });
+  }
+
+  // kaam wala timer (every 5 minutes)
+  function workTick() {
+    setTimeout(async () => {
+      try {
+        await updateDaily((s) => {
+          s.lastWorkAt = Date.now();
+        }).catch(() => {});
+        const apState = await ap.readState();
+        if (!apState.enabled || working) return;
+        start("work", () => maintenance(true));
+      } catch (error) {
+        console.error("AUTOPILOT WORK ERROR:", error.message);
+      }
+    }, 200);
+  }
+
+  // post wala timer (fixed times)
   function tick() {
     setTimeout(async () => {
       try {
-        // (v11) remember every timer call, so Admin can show "timer last ran at ..."
         await updateDaily((s) => {
           s.lastTickAt = Date.now();
         }).catch(() => {});
         const apState = await ap.readState();
-        if (!apState.enabled || working) return;
+        if (!apState.enabled) return;
+        // wait (up to 3 min) if the work timer is busy, posting comes first at its time
+        for (let i = 0; i < 36 && working; i++) await sleep(5000);
+        if (working) return;
         start("tick", async () => {
-          await shrinkOldSongs();
-          await runReplies();
           let state = await readDaily();
-          if (Date.now() - (Number(state.lastDailyAt) || 0) > 20 * 3600 * 1000) await runDailyCheck();
-          if (weekly && !weekly.isWorking() && !ap.isRunning() && (await weekly.weeklyDue())) {
-            stage("Hafte ka pro audit");
-            await weekly.runAudit();
-          }
-          // (v11) daily quotas, 2 hours apart, several jobs per timer call
+          const workAlive = Date.now() - (Number(state.lastWorkAt) || 0) < 2 * 3600 * 1000;
+          if (!workAlive) await maintenance(false);
+          if (!ap.isDaytime()) return;
           const gapOk = (at) => Date.now() - (Number(at) || 0) > 2 * 3600 * 1000;
           state = await readDaily();
           const storiesPerDay = state.storyDaily === false ? 0 : Number(state.storiesPerDay ?? 1);
           if (countToday(state, "story") < storiesPerDay && gapOk(state.lastStoryAt)) await postStory();
           state = await readDaily();
           const reelsPerDay = Number(state.reelsPerDay ?? 0);
-          const apNow = await ap.readState();
-          if (reelsPerDay > 0 && !ap.isRunning() && countToday(state, "reel") < reelsPerDay && gapOk(state.lastReelAt) && Date.now() - (Number(apNow.lastAutoAt) || 0) > 45 * 60 * 1000) {
-            await makeReel(false);
+          if (reelsPerDay > 0 && countToday(state, "reel") < reelsPerDay && gapOk(state.lastReelAt)) {
+            for (let i = 0; i < 72 && ap.isRunning(); i++) {
+              stage("Post poori hone ka intezaar, phir reel");
+              await sleep(5000);
+            }
+            if (!ap.isRunning()) await makeReel(false);
           }
         });
       } catch (error) {
@@ -1185,6 +1264,21 @@ module.exports = function setupDaily(app, deps, ap) {
       }
     }, 5000);
   }
+
+  // (v17) the work timer also runs INSIDE the server every 5 minutes, so no
+  // extra cron job is needed - the existing wake-up timer keeps the server
+  // awake, and while it is awake this keeps the bot working.
+  setTimeout(() => {
+    workTick();
+    setInterval(workTick, 5 * 60 * 1000);
+  }, 60 * 1000);
+
+  app.get("/api/cron/autopilot-work", (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (!secret || String(req.query.key || "") !== secret) return res.status(401).json({ success: false, message: "Wrong key" });
+    workTick();
+    return res.json({ success: true, message: working ? `Bot kaam kar raha hai: ${working.stage || working.task}` : "Bot ko kaam diya" });
+  });
 
   /* ================================================================
    * Admin routes
@@ -1199,6 +1293,7 @@ module.exports = function setupDaily(app, deps, ap) {
       storiesPerDay: s.storyDaily === false ? 0 : Number(s.storiesPerDay ?? 3),
       todayReels: countToday(s, "reel"),
       lastTickAt: s.lastTickAt || 0,
+      lastWorkAt: s.lastWorkAt || 0,
       todayStories: countToday(s, "story"),
       replyLog: (s.replyLog || []).slice(0, 25),
       replyError: s.replyError || "",
@@ -1254,6 +1349,7 @@ module.exports = function setupDaily(app, deps, ap) {
         enabled: Boolean(a.enabled),
         now,
         lastTickAt: d.lastTickAt || 0,
+        lastWorkAt: d.lastWorkAt || 0,
         today: {
           posts: count("👜") + count("🖼"),
           reels: count("🎬"),
