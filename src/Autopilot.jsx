@@ -259,13 +259,6 @@ export default function Autopilot({ API, adminFetch }) {
               ))}
             </div>
 
-            {daily ? (
-              <div className="apl-small" style={{ marginTop: 8, color: daily.lastTickAt && Date.now() - daily.lastTickAt < 6 * 3600 * 1000 ? "#2e7d32" : "#b23b1e" }}>
-                {daily.lastTickAt
-                  ? `⏱ Timer aakhri baar chala: ${when(daily.lastTickAt)}${Date.now() - daily.lastTickAt > 6 * 3600 * 1000 ? " - 6 ghante se zyada ho gaye, cron-job.org check karo" : " ✅"}`
-                  : "⏱ Timer abhi tak ek baar bhi nahi chala - cron-job.org par social-post wala job check karo"}
-              </div>
-            ) : null}
             {!s.cronReady ? (
               <div className="apl-small" style={{ marginTop: 10, color: "#b23b1e" }}>
                 ⚠️ Timer (CRON_SECRET) set nahi hai - Auto Post tab mein “Setup kaise karein” dekho. Uske bina autopilot apne-aap nahi chalega.
@@ -389,6 +382,14 @@ export default function Autopilot({ API, adminFetch }) {
 
           <div className="apl-box">
             <div style={{ fontWeight: 700, marginBottom: 4 }}>🖼 Model photos ({s.library.length})</div>
+            <div className="apl-small" style={{ color: "#333", marginBottom: 6 }}>
+              Aapki pehle se bani lifestyle photos: <b>{s.ownLifestyleCount || 0}</b> ({s.ownLifestyleBags || 0} bags) - bot inhe pehle use karta hai, nayi tabhi banata hai jab kisi bag ki ek bhi na ho.
+            </div>
+            {s.lastLifestyleError && Date.now() - s.lastLifestyleError.at < 3 * 24 * 3600 * 1000 ? (
+              <div className="apl-small" style={{ color: "#b23b1e", marginBottom: 6 }}>
+                ⚠️ Nayi AI photo nahi bani ({when(s.lastLifestyleError.at)}): {s.lastLifestyleError.message}
+              </div>
+            ) : null}
             <div className="apl-small" style={{ marginBottom: 8 }}>
               Ye sab check paas karke bani hain. Koi photo galat lage to ✕ dabao, bot use kabhi nahi lagayega.
             </div>
@@ -533,7 +534,7 @@ function DailyPanel({ d, busy, act }) {
           <button type="button" className="apl-btn" disabled={lock} onClick={() => act("/api/admin/autopilot/daily/front-photos")}>Saari front photos abhi check karo</button>
           <button type="button" className="apl-btn" disabled={lock} onClick={() => window.confirm("8 bags tak ki lifestyle photo bana ke website gallery mein 2nd number par laga dun? (Gemini ka thoda kharcha)") && act("/api/admin/autopilot/daily/lifestyle-gallery")}>Website pe lifestyle photos lagao</button>
         </div>
-        <div className="apl-small" style={{ marginTop: 6 }}>Lifestyle photo par website mein chhota “Styled image” likha aata hai. Roz 2 naye bags apne-aap.</div>
+        <div className="apl-small" style={{ marginTop: 6 }}>Lifestyle photo par website mein chhota “Styled image” likha aata hai. Roz 4 naye bags apne-aap.</div>
       </div>
 
       <div className="apl-box">
