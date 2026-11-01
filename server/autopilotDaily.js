@@ -1127,6 +1127,7 @@ module.exports = function setupDaily(app, deps, ap) {
         const apState = await ap.readState();
         if (!apState.enabled || working) return;
         start("tick", async () => {
+          await shrinkOldSongs();
           const state = await readDaily();
           await runReplies();
           if (Date.now() - (Number(state.lastDailyAt) || 0) > 20 * 3600 * 1000) {
@@ -1311,6 +1312,54 @@ module.exports = function setupDaily(app, deps, ap) {
     }
   }
 
+  /*
+   * SMALL SONGS (v9) - a reel uses 10-20 seconds, so only the first 60
+   * seconds are kept (silence at the start removed, soft fade at the end),
+   * as a light 96 kbps MP3: a 4-5 MB song becomes ~0.7 MB.
+   */
+  async function shrinkSong(buffer, ext) {
+    if (!ffmpegPath) return null;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "shrink-"));
+    try {
+      const input = path.join(dir, `in.${ext || "mp3"}`);
+      const out = path.join(dir, "out.mp3");
+      fs.writeFileSync(input, buffer);
+      await runFfmpeg([
+        "-y", "-loglevel", "error", "-i", input, "-vn",
+        "-af", "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.1,atrim=0:60,afade=t=out:st=58:d=2",
+        "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "96k", out,
+      ]);
+      const small = fs.readFileSync(out);
+      return small.length > 20000 ? small : null;
+    } catch (error) {
+      console.error("SONG SHRINK ERROR:", error.message);
+      return null;
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  // songs uploaded before v9: make them small once, delete the big file
+  async function shrinkOldSongs() {
+    const state = await readDaily();
+    const big = (state.music || []).filter((m) => !m.small);
+    for (const song of big) {
+      try {
+        const original = await ap.fetchBuffer(song.url);
+        const ext = (song.url.split("?")[0].split(".").pop() || "mp3").toLowerCase();
+        const small = await shrinkSong(original, ext);
+        if (!small) continue;
+        const url = await saveFile(small, "music", "mp3", "audio/mpeg");
+        await updateDaily((s) => {
+          s.music = (s.music || []).map((m) => (m.url === song.url ? { ...m, url, small: true, kb: Math.round(small.length / 1024) } : m));
+        });
+        deleteStorageImages([song.url]).catch(() => {});
+      } catch (error) {
+        console.error("OLD SONG SHRINK ERROR:", error.message);
+      }
+    }
+  }
+
   // calm songs for one-bag / model reels, upbeat for many-bag reels
   function pickSong(state, kind) {
     const usable = (state.music || []).filter((m) => !m.check || m.check.use);
@@ -1327,11 +1376,13 @@ module.exports = function setupDaily(app, deps, ap) {
     try {
       if (!req.file) return res.status(400).json({ success: false, message: "Gaana nahi mila." });
       const ext = (path.extname(req.file.originalname || "") || ".mp3").replace(".", "").toLowerCase();
-      const check = await checkSong(req.file.buffer, ext);
-      const url = await saveFile(req.file.buffer, "music", ext, req.file.mimetype || "audio/mpeg");
+      const small = await shrinkSong(req.file.buffer, ext);
+      const keep = small || req.file.buffer;
+      const check = await checkSong(keep, small ? "mp3" : ext);
+      const url = await saveFile(keep, "music", small ? "mp3" : ext, small ? "audio/mpeg" : req.file.mimetype || "audio/mpeg");
       const name = path.basename(req.file.originalname || "song", path.extname(req.file.originalname || "")).slice(0, 60);
       await updateDaily((s) => {
-        s.music = [...(s.music || []), { url, name, at: Date.now(), check }].slice(-15);
+        s.music = [...(s.music || []), { url, name, at: Date.now(), check, small: Boolean(small), kb: Math.round(keep.length / 1024), originalKb: Math.round(req.file.buffer.length / 1024) }].slice(-15);
       });
       return ok(res);
     } catch (error) {
