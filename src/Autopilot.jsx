@@ -587,6 +587,7 @@ function DailyPanel({ d, busy, act }) {
           <div key={m.url} className="apl-row" style={{ marginTop: 4 }}>
             <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
               ♪ {m.name}
+              {m.kb ? <span style={{ color: "#888" }}> · {m.kb} KB{m.originalKb && m.originalKb > m.kb ? ` (pehle ${(m.originalKb / 1024).toFixed(1)} MB)` : ""}</span> : null}
               {m.check ? (
                 <span style={{ display: "block", color: m.check.use ? "#2e7d32" : "#b23b1e" }}>
                   {m.check.use
