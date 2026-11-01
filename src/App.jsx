@@ -454,11 +454,13 @@ const ACCESSORY_ONLY_CATEGORIES = ACCESSORY_CATEGORIES;
 
 /* The announcement bar's real, existing claims - unchanged text, just
    now shown one at a time with rotation instead of all three at once. */
+// (2026-11-01) one bar only: the NEW15 offer moved in here (the second
+// yellow bar is gone) - fewer stacked strips = calmer, more premium top.
 const ANNOUNCEMENT_MESSAGES = [
-  "✦ FREE DELIVERY ON ALL PREPAID ORDERS",
-  "CASH ON DELIVERY AVAILABLE · ₹150 DELIVERY CHARGE ON COD",
-  "PREMIUM COLLECTION · SECURE SHOPPING",
-  "HANDPICKED STYLES · CURATED FOR YOU",
+  "FREE DELIVERY ON PREPAID ORDERS",
+  "USE CODE NEW15 · 15% OFF YOUR FIRST ORDER",
+  "CASH ON DELIVERY AVAILABLE · ₹150 COD CHARGE",
+  "EASY 5-DAY RETURNS",
 ];
 
 const API = "https://luxora-store-mkva.onrender.com";
@@ -4078,13 +4080,7 @@ function App() {
         </button>
       </div>
 
-      {/* OFFER BANNER */}
-      <div className="lux-offer-banner">
-        <span>🎉</span>
-        <p>
-          Use code <strong>{NEW_CUSTOMER_OFFER_CODE}</strong> at checkout for {NEW_CUSTOMER_OFFER_TEXT.toLowerCase()} your first order
-        </p>
-      </div>
+      {/* OFFER BANNER - (2026-11-01) now one of the announcement bar messages */}
 
       {/* HEADER */}
       <header className="lux-header">
@@ -4115,7 +4111,7 @@ function App() {
             <img src={shrimohIcon} alt="" className="lux-logo-mark" width="128" height="128" />
             <div className="lux-logo-text">
               <span>SHRIMOH</span>
-              <small>THE LUXURY STORE</small>
+              <small>HANDBAGS FOR WOMEN</small>
             </div>
           </a>
 
@@ -4541,7 +4537,7 @@ function App() {
               <h2>Featured Products</h2>
               <p className="lux-section-subtitle">
                 {bestsellers.length > 0
-                  ? "Our Bestsellers — Most Ordered"
+                  ? "Handpicked for you"
                   : "Curated Favourites — The SHRIMOH Edit"}
               </p>
             </div>
@@ -5151,6 +5147,10 @@ function App() {
                             fetchPriority="high"
                             onError={handleImageFallback}
                           />
+                          {/* (2026-11-01) honest label on AI-made lifestyle photos */}
+                          {String(selectedImage || "").includes("/autopilot/lifestyle/") && (
+                            <span className="lux-styled-tag">Styled image</span>
+                          )}
                         </div>
                       ) : (
                         <div className="lux-image-empty">
@@ -5161,7 +5161,7 @@ function App() {
                       {isSoldOut ? (
                         <div className="lux-pdp-badge">Sold out</div>
                       ) : (
-                        hasDiscount && <div className="lux-pdp-badge">Sale</div>
+                        null /* (2026-11-01) no "Sale" badge - the price row already shows the offer */
                       )}
 
                       <button
@@ -5555,7 +5555,7 @@ function App() {
               <img src={shrimohIcon} alt="" className="lux-footer-logo-mark" />
               <span>SHRIMOH</span>
             </div>
-            <p>THE LUXURY STORE</p>
+            <p>HANDBAGS FOR WOMEN</p>
             <span>Timeless pieces for modern distinction.</span>
             <div className="lux-footer-social">
               <a href={INSTAGRAM_URL} target="_blank" rel="noreferrer" aria-label="SHRIMOH on Instagram">
@@ -5805,8 +5805,12 @@ function App() {
 
                   <div>
                     <span>Delivery</span>
-                    <strong>{deliveryCharge === 0 ? "FREE" : `₹${deliveryCharge}`}</strong>
+                    <strong>{deliveryCharge === 0 ? "FREE on prepaid" : `₹${deliveryCharge}`}</strong>
                   </div>
+                  {/* (2026-11-01) no surprise at checkout: COD charge said up front */}
+                  {COD_AVAILABLE && (
+                    <p className="lux-cart-cod-note">Cash on Delivery: +₹150 delivery charge</p>
+                  )}
 
                   <div className="lux-total">
                     <span>Total</span>
@@ -6112,7 +6116,7 @@ function App() {
             <div className="lux-mobile-nav-header">
               <div className="lux-logo">
                 <span>SHRIMOH</span>
-                <small>THE LUXURY STORE</small>
+                <small>HANDBAGS FOR WOMEN</small>
               </div>
 
               <button type="button" onClick={closeMobileMenu} aria-label="Close menu">
