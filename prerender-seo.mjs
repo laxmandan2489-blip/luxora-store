@@ -315,7 +315,7 @@ write(
     <main>
       <img src="/icon-192.png" alt="" width="72" height="72" />
       <a class="logo" href="/">SHRIMOH</a>
-      <small>THE LUXURY STORE</small>
+      <small>HANDBAGS FOR WOMEN</small>
       <h1>Page not found</h1>
       <p>Sorry, we couldn't find the page you were looking for. It may have been moved, or the link may be incorrect.</p>
       <a class="home" href="/">Back to homepage</a>
