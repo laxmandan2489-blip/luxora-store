@@ -468,5 +468,11 @@ module.exports = function setupPro(app, deps, ap) {
     }
   });
 
-  return { runAudit, weeklyDue, isWorking: () => Boolean(working), start };
+  // for the Admin "bot ne kya kiya" feed
+  async function recent() {
+    const s = await readPro();
+    return { applied: (s.applied || []).slice(0, 40), lastAuditAt: s.lastAuditAt || 0, stage: working ? working.stage : "" };
+  }
+
+  return { runAudit, weeklyDue, isWorking: () => Boolean(working), start, recent };
 };

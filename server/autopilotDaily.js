@@ -1221,6 +1221,53 @@ module.exports = function setupDaily(app, deps, ap) {
 
   app.get("/api/admin/autopilot/daily", requireAdmin, async (req, res) => ok(res));
 
+  /*
+   * ACTIVITY (v12) - one simple feed: what the bot did, when, and what it
+   * is doing right now. Built from the logs the bot already keeps.
+   */
+  app.get("/api/admin/autopilot/activity", requireAdmin, async (req, res) => {
+    try {
+      const d = await readDaily();
+      const a = await ap.readState();
+      const p = weekly ? await weekly.recent() : { applied: [], lastAuditAt: 0, stage: "" };
+      const events = [];
+      const push = (at, icon, text, link, ok = true) => at && events.push({ at, icon, text, link: link || "", ok });
+      for (const e of a.log || []) {
+        if (e.dryRun) continue;
+        const ig = e.results?.instagram;
+        push(e.at, e.kind === "model" ? "🖼" : "👜", `${e.ok ? "Post daali" : "Post nahi gayi"}: ${String(e.label || "").replace(/^(Bag|Model) · /, "")}${e.ok ? "" : ` - ${e.message || ig?.message || ""}`}`, ig?.link, e.ok);
+      }
+      for (const r of d.reelLog || []) push(r.at, "🎬", `${r.ok ? "Reel daali" : "Reel nahi gayi"}: ${r.label.replace(/^Reel · /, "")}${r.music ? ` (♪ ${r.music})` : ""}`, r.results?.instagram?.link, r.ok);
+      for (const st of d.storyLog || []) push(st.at, "📖", `Story lagayi: ${st.bags.join(" + ")} → highlight "${st.highlight}" mein daalo`, "", Boolean(st.results?.instagram?.ok || st.results?.facebook?.ok));
+      for (const r of d.replyLog || []) if (r.reply && r.ok) push(r.at, r.action === "alert" ? "⚠️" : "💬", `${r.action === "alert" ? "Shikayat - aapko email bheja" : "Comment ka jawab diya"}: ${r.user} - "${r.text.slice(0, 50)}"`, r.link);
+      for (const f of d.fixLog || []) push(f.at, f.kind === "lifestyle" ? "🌿" : f.kind === "compress" ? "🪶" : "🔧", `${f.kind === "lifestyle" ? "Website pe lifestyle photo lagayi" : f.kind === "compress" ? "Bhaari photo halki ki" : "Front photo theek ki"}: ${f.name}${f.undone ? " (aapne wapas kiya)" : ""}`);
+      for (const x of p.applied || []) push(x.appliedAt, "✏️", `${x.field === "name" ? "Naam badla" : "Description theek ki"}: ${x.field === "name" ? `"${x.before}" → "${x.after}"` : x.after.slice(0, 60)}${x.undone ? " (wapas kiya)" : ""}`);
+      if (d.report?.at) push(d.report.at, "📅", `Roz ka check kiya, email bheja${d.report.review?.score != null ? ` (grid ${d.report.review.score}/10)` : ""}`);
+      if (p.lastAuditAt) push(p.lastAuditAt, "🧠", "Hafte ka pro audit kiya, email bheja");
+      events.sort((x, y) => y.at - x.at);
+      const today = ap.istDay();
+      const isToday = (at) => new Date(at + 5.5 * 3600 * 1000).toISOString().slice(0, 10) === today;
+      const count = (icon) => events.filter((e) => e.icon === icon && e.ok && isToday(e.at)).length;
+      const now = [ap.isRunning() ? "post bana raha hai" : "", working ? working.stage || "kaam kar raha hai" : "", p.stage || ""].filter(Boolean).join(" · ");
+      return res.json({
+        success: true,
+        enabled: Boolean(a.enabled),
+        now,
+        lastTickAt: d.lastTickAt || 0,
+        today: {
+          posts: count("👜") + count("🖼"),
+          reels: count("🎬"),
+          stories: count("📖"),
+          replies: count("💬"),
+          fixes: count("✏️") + count("🔧") + count("🌿") + count("🪶"),
+        },
+        events: events.slice(0, 40),
+      });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
   app.post("/api/admin/autopilot/daily/settings", requireAdmin, async (req, res) => {
     try {
       const body = req.body || {};
