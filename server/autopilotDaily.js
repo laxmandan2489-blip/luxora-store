@@ -370,7 +370,7 @@ module.exports = function setupDaily(app, deps, ap) {
       const prompt =
         "This image is the top of the Instagram grid of SHRIMOH, a small Indian women's handbag brand (newest post is tile 1 at top-left, numbered left to right, row by row). " +
         "Judge it like the creative director of a premium fashion brand that sells through Instagram (like Miraggio or Mira & Moss). " +
-        "The owner's rules: one bag per post, Cream and Black backgrounds taking turns, model/lifestyle photos between bag photos, minimal text on photos, the whole bag visible. " +
+        "The owner's grid plan: bag photo and a photo of a woman model with the bag take turns (a calm checkerboard in 3 columns); bag photos switch Cream and Black backgrounds, one background per post; every 9th post is a simple trust card (Cash on Delivery, returns, how to order, real photos) in the same style; reel covers match the grid; one font style, little text, no sale banners, no white boxes, no collages, the whole bag always visible, the same bag never next to itself. Judge the grid against this plan and against what makes a buyer TRUST a small shop. " +
         "Reply in simple Hinglish (Roman script). Return ONLY JSON: " +
         '{"score":0-10,"verdict":"one sentence","problems":["max 4, specific"],"archive":[tile numbers that hurt the grid most, max 4],"good":["max 2"],"next_post":"what the next post should look like to fix the grid"}';
       try {
@@ -1333,7 +1333,7 @@ module.exports = function setupDaily(app, deps, ap) {
       for (const e of a.log || []) {
         if (e.dryRun) continue;
         const ig = e.results?.instagram;
-        push(e.at, e.kind === "model" ? "🖼" : "👜", `${e.ok ? "Post daali" : "Post nahi gayi"}: ${String(e.label || "").replace(/^(Bag|Model) · /, "")}${e.ok ? "" : ` - ${e.message || ig?.message || ""}`}`, ig?.link, e.ok);
+        push(e.at, e.kind === "model" ? "🖼" : e.kind === "trust" ? "🤝" : "👜", `${e.ok ? "Post daali" : "Post nahi gayi"}: ${String(e.label || "").replace(/^(Bag|Model) · /, "")}${e.ok ? "" : ` - ${e.message || ig?.message || ""}`}`, ig?.link, e.ok);
       }
       for (const r of d.reelLog || []) push(r.at, "🎬", `${r.ok ? "Reel daali" : "Reel nahi gayi"}: ${r.label.replace(/^Reel · /, "")}${r.music ? ` (♪ ${r.music})` : ""}`, r.results?.instagram?.link, r.ok);
       for (const st of d.storyLog || []) push(st.at, "📖", `Story lagayi: ${st.bags.join(" + ")} → highlight "${st.highlight}" mein daalo`, "", Boolean(st.results?.instagram?.ok || st.results?.facebook?.ok));
@@ -1354,7 +1354,7 @@ module.exports = function setupDaily(app, deps, ap) {
         lastTickAt: d.lastTickAt || 0,
         lastWorkAt: d.lastWorkAt || 0,
         today: {
-          posts: count("👜") + count("🖼"),
+          posts: count("👜") + count("🖼") + count("🤝"),
           reels: count("🎬"),
           stories: count("📖"),
           replies: count("💬"),

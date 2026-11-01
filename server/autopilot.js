@@ -43,7 +43,44 @@ const BACKGROUNDS = {
 };
 const TINY_LINE = "FREE DELIVERY (PREPAID)  ·  COD AVAILABLE";
 // order of posts: 0 bag cream, 1 model, 2 bag black, 3 model
-const PATTERN = ["bag-cream", "model", "bag-black", "model"];
+/*
+ * GRID PLAN (v22) - what a trusted, premium shop grid looks like:
+ *  - bag photo and girl-with-bag photo take turns; with 3 columns this
+ *    makes a calm checkerboard (bag / model / bag ...)
+ *  - bag photos switch Cream <-> Black, one background per post
+ *  - every 9th post is a TRUST card in the same style (COD, returns,
+ *    how to order, real photos) - answers the buyer's doubts in the grid
+ *  - same fonts and colours everywhere, little text, no sale banners
+ */
+const PATTERN = ["bag-cream", "model", "bag-black", "model", "bag-cream", "model", "bag-black", "model", "trust"];
+
+// honest trust cards (taking turns)
+const TRUST_CARDS = [
+  {
+    key: "cod",
+    title: "Cash on Delivery",
+    lines: ["Available on every order", "₹150 COD charge · free delivery on prepaid"],
+    caption: "Pay when it reaches you 🤍\nCash on Delivery is available on every order (₹150 COD charge).\nFree delivery on prepaid orders.",
+  },
+  {
+    key: "returns",
+    title: "Easy 5-day returns",
+    lines: ["Not the right fit?", "Send it back within 5 days of delivery"],
+    caption: "Shop without worry 🤍\nNot the right fit? Return it within 5 days of delivery.",
+  },
+  {
+    key: "order",
+    title: "How to order",
+    lines: ["1 · Tap the link in bio", "2 · Choose your bag & colour", "3 · Pay online or Cash on Delivery"],
+    caption: "Ordering takes a minute 🤍\n1. Tap the link in bio\n2. Choose your bag and colour\n3. Pay online or choose Cash on Delivery",
+  },
+  {
+    key: "real",
+    title: "Real product photos",
+    lines: ["Every bag page shows real photos", "Styled looks are always marked"],
+    caption: "What you see is what you get 🤍\nEvery bag on our website has real product photos. Styled looks (AI) are always marked.",
+  },
+];
 
 // (v20) every scene has a woman model with the bag - the owner wants model
 // photos between the bag photos so the grid looks premium
@@ -806,6 +843,7 @@ module.exports = function setupAutopilot(app, deps) {
   async function buildPost(state, queue, wantKind, notes) {
     const products = await loadProducts();
     if (!products.length) throw new Error("Koi active bag nahi mila");
+    if (wantKind === "trust") return buildTrustPost(state);
     const kind = wantKind === "model" ? "model" : "bag";
     if (kind === "model") {
       setStage("Pehle se bani lifestyle photos dhoondh raha hai");
@@ -861,6 +899,46 @@ module.exports = function setupAutopilot(app, deps) {
       return { ...post, fallback: true };
     }
     return buildBagPost(state, products, queue, product, wantKind === "bag-black" ? "black" : "cream", hookIndex);
+  }
+
+  async function renderTrustCard(card, bg) {
+    const W = 1080;
+    const H = 1350;
+    const theme = BACKGROUNDS[bg];
+    const layers = [];
+    const wordmark = await textImage("SHRIMOH", { serif: true, weight: "SemiBold", size: 36, color: theme.ink, spacing: 18 });
+    layers.push({ ...wordmark, left: Math.round((W - wordmark.width) / 2), top: 110 });
+    const title = await textImage(card.title, { serif: true, weight: "Medium", size: 92, color: theme.ink, width: W - 180 });
+    const rule = await sharp({ create: { width: 80, height: 2, channels: 4, background: theme.soft } }).png().toBuffer();
+    const lines = [];
+    for (const line of card.lines) lines.push(await textImage(line, { weight: "Medium", size: 34, color: theme.muted === "#8f877c" ? "#5c5245" : "#d9d2c6", width: W - 200 }));
+    const total = title.height + 50 + 2 + 50 + lines.reduce((n, l) => n + l.height, 0) + (lines.length - 1) * 22;
+    let y = Math.round((H - total) / 2);
+    layers.push({ ...title, left: Math.round((W - title.width) / 2), top: y });
+    y += title.height + 50;
+    layers.push({ input: rule, left: Math.round((W - 80) / 2), top: y, width: 80, height: 2 });
+    y += 52;
+    for (const line of lines) {
+      layers.push({ ...line, left: Math.round((W - line.width) / 2), top: y });
+      y += line.height + 22;
+    }
+    const foot = await textImage("HANDBAGS FOR WOMEN  ·  LINK IN BIO", { weight: "SemiBold", size: 18, color: theme.soft, spacing: 5 });
+    layers.push({ ...foot, left: Math.round((W - foot.width) / 2), top: H - 110 - foot.height });
+    return sharp({ create: { width: W, height: H, channels: 3, background: theme.rgb } })
+      .composite(layers.map((l) => ({ input: l.input, left: l.left, top: l.top })))
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+  }
+
+  async function buildTrustPost(state) {
+    const card = TRUST_CARDS[(Number(state.trustIdx) || 0) % TRUST_CARDS.length];
+    const bg = state.lastBagBg === "cream" ? "black" : "cream";
+    setStage(`Bharose wala card ban raha hai: ${card.title}`);
+    const slide = await renderTrustCard(card, bg);
+    const text = `${card.caption}\n\nLink in bio 🛍\n\n#shrimoh #handbags #bagsforwomen #cashondelivery`;
+    const fb = text.replace("Link in bio 🛍", `Shop: ${SITE}/?utm_source=facebook&utm_medium=social&utm_campaign=autopilot-trust`);
+    const product = { id: `trust-${card.key}`, images: [] };
+    return { kind: "trust", product, bg, slides: [slide], story: null, captions: { instagram: text, facebook: fb }, thumb: null, label: `Bharosa · ${card.title}` };
   }
 
   async function buildBagPost(state, products, queue, product, bg, hookIndex) {
@@ -938,6 +1016,7 @@ module.exports = function setupAutopilot(app, deps) {
       state.dayPosts = state.dayKey === today ? (Number(state.dayPosts) || 0) + 1 : 1;
       state.dayKey = today;
       if (prepared.kind === "bag") state.lastBagBg = prepared.bg;
+      if (prepared.kind === "trust") state.trustIdx = (Number(state.trustIdx) || 0) + 1;
       // a model post that fell back to a bag post keeps "model" as the next turn
       if (!prepared.fallback) state.step = ((Number(state.step) || 0) + 1) % PATTERN.length;
       state.lastAutoAt = Date.now();
@@ -1164,6 +1243,8 @@ module.exports = function setupAutopilot(app, deps) {
 
   // shared with server/autopilotDaily.js (reels, stories, daily check, replies)
   return {
+    renderTrustCard,
+    TRUST_CARDS,
     maybeRunFromCron,
     isRunning: () => Boolean(running),
     istDay,
