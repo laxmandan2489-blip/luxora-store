@@ -689,7 +689,7 @@ function ProPanel({ p, busy, act }) {
             {showAll ? (
               <div className="apl-small" style={{ marginTop: 6, color: "#333" }}>
                 {audit.findings.map((f, i) => (
-                  <div key={i}>{f.level === "high" ? "🔴" : f.level === "mid" ? "🟡" : "⚪"} <b>{AREA[f.area] || f.area}:</b> {f.text}</div>
+                  <div key={i}>{f.level === "done" ? "✅" : f.level === "high" ? "🔴" : f.level === "mid" ? "🟡" : "⚪"} <b>{AREA[f.area] || f.area}:</b> {f.text}</div>
                 ))}
                 {(audit.perProduct || []).length ? <div style={{ marginTop: 8, fontWeight: 600 }}>Har bag:</div> : null}
                 {(audit.perProduct || []).map((x) => (
