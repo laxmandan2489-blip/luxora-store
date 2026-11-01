@@ -230,10 +230,15 @@ export default function Autopilot({ API, adminFetch }) {
             </div>
 
             <div className="apl-row">
-              <span className="apl-small" style={{ color: "#333" }}>Hafte mein posts:</span>
-              {[3, 4, 5, 7].map((n) => (
+              <span className="apl-small" style={{ color: "#333" }}>Posts:</span>
+              {[
+                [4, "hafte mein 4"],
+                [7, "1 roz"],
+                [14, "2 roz"],
+                [21, "3 roz"],
+              ].map(([n, label]) => (
                 <button key={n} type="button" className={s.perWeek === n ? "apl-mini on" : "apl-mini"} disabled={busy} onClick={() => act("/api/admin/autopilot/settings", { perWeek: n })}>
-                  {n}
+                  {label}
                 </button>
               ))}
             </div>
@@ -252,6 +257,13 @@ export default function Autopilot({ API, adminFetch }) {
               ))}
             </div>
 
+            {daily ? (
+              <div className="apl-small" style={{ marginTop: 8, color: daily.lastTickAt && Date.now() - daily.lastTickAt < 6 * 3600 * 1000 ? "#2e7d32" : "#b23b1e" }}>
+                {daily.lastTickAt
+                  ? `⏱ Timer aakhri baar chala: ${when(daily.lastTickAt)}${Date.now() - daily.lastTickAt > 6 * 3600 * 1000 ? " - 6 ghante se zyada ho gaye, cron-job.org check karo" : " ✅"}`
+                  : "⏱ Timer abhi tak ek baar bhi nahi chala - cron-job.org par social-post wala job check karo"}
+              </div>
+            ) : null}
             {!s.cronReady ? (
               <div className="apl-small" style={{ marginTop: 10, color: "#b23b1e" }}>
                 ⚠️ Timer (CRON_SECRET) set nahi hai - Auto Post tab mein “Setup kaise karein” dekho. Uske bina autopilot apne-aap nahi chalega.
@@ -275,8 +287,8 @@ export default function Autopilot({ API, adminFetch }) {
             <summary style={{ fontWeight: 700, cursor: "pointer" }}>📋 Switch ON hone par bot kya-kya karta hai</summary>
             <div className="apl-small" style={{ color: "#333", marginTop: 8 }}>
               <b>Din mein 4 baar:</b> naye comments ka jawab (shikayat ho to aapko email) · line khaali ho to agli post.<br />
-              <b>Roz:</b> grid + posts ke numbers + website check, email report · 1 story · front photos theek · 2 bags par website lifestyle photo.<br />
-              <b>Hafte mein:</b> 4 posts (bag / model) · 2 reels gaane ke saath · pro audit (website, products, Instagram, Facebook) + naam / description ke sujhav.<br />
+              <b>Roz:</b> 2 posts (bag / model) · 2 reels gaane ke saath · 3 stories · grid + website check, email report · front photos theek · 4 bags par website lifestyle photo.<br />
+              <b>Hafte mein:</b> pro audit (website, products, Instagram, Facebook) · naam / description khud theek.<br />
               <b>Aapke haath:</b> story sticker / link, highlight mein daalna, archive, bio badalna, ✅ dabana.
             </div>
           </details>
@@ -548,10 +560,17 @@ function DailyPanel({ d, busy, act }) {
       <div className="apl-box">
         <div className="apl-switch">
           <div>
-            <div style={{ fontWeight: 700 }}>📖 Roz ek story</div>
-            <div className="apl-small">Baari-baari: New in, This or that, Easy ordering, Styled look. Agli: <b>{STORY_LABEL[d.nextStory]}</b></div>
+            <div style={{ fontWeight: 700 }}>📖 Stories</div>
+            <div className="apl-small">Baari-baari: New in, This or that, Easy ordering, Styled look. Agli: <b>{STORY_LABEL[d.nextStory]}</b> · aaj {d.todayStories}/{d.storiesPerDay}</div>
           </div>
-          <button type="button" aria-label="Daily story on / off" className={d.storyDaily ? "apl-toggle on" : "apl-toggle"} disabled={lock} onClick={() => act("/api/admin/autopilot/daily/settings", { storyDaily: !d.storyDaily })} />
+        </div>
+        <div className="apl-row">
+          <span className="apl-small" style={{ color: "#333" }}>Roz stories:</span>
+          {[0, 1, 2, 3, 4].map((n) => (
+            <button key={n} type="button" className={d.storiesPerDay === n ? "apl-mini on" : "apl-mini"} disabled={lock} onClick={() => act("/api/admin/autopilot/daily/settings", { storiesPerDay: n, storyDaily: n > 0 })}>
+              {n === 0 ? "Band" : n}
+            </button>
+          ))}
         </div>
         {d.storyLog.slice(0, 4).map((st, i) => (
           <div className="apl-item" key={`${st.at}-${i}`}>
@@ -574,12 +593,13 @@ function DailyPanel({ d, busy, act }) {
         <div style={{ fontWeight: 700, marginBottom: 4 }}>🎬 Reels</div>
         <div className="apl-small">Server khud reel banata hai (ek bag ya kai bags), aapke gaane ke saath, aur Instagram + Facebook par daalta hai.</div>
         <div className="apl-row">
-          <span className="apl-small" style={{ color: "#333" }}>Hafte mein reels:</span>
-          {[0, 2, 3, 4].map((n) => (
-            <button key={n} type="button" className={d.reelsPerWeek === n ? "apl-mini on" : "apl-mini"} disabled={lock} onClick={() => act("/api/admin/autopilot/daily/settings", { reelsPerWeek: n })}>
+          <span className="apl-small" style={{ color: "#333" }}>Roz reels:</span>
+          {[0, 1, 2, 3].map((n) => (
+            <button key={n} type="button" className={d.reelsPerDay === n ? "apl-mini on" : "apl-mini"} disabled={lock} onClick={() => act("/api/admin/autopilot/daily/settings", { reelsPerDay: n })}>
               {n === 0 ? "Band" : n}
             </button>
           ))}
+          <span className="apl-small"> · aaj {d.todayReels}/{d.reelsPerDay}</span>
         </div>
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600 }}>🎵 Gaane ({d.music.length})</div>
         <div className="apl-small">Pixabay Music se free instrumental gaane daalo. Bot har gaana sun ke dekhta hai: shaant gaane ek bag / model reels par, tez gaane kai bags wali reels par. Jo na jache wo nahi lagega.</div>
@@ -595,7 +615,9 @@ function DailyPanel({ d, busy, act }) {
                     : `❌ Reels mein nahi lagega - ${m.check.vocals ? "isme bol (singing) hain" : `jachta nahi (${m.check.fit}/10)`}`}
                   {m.check.note ? ` · ${m.check.note}` : ""}
                 </span>
-              ) : null}
+              ) : (
+                <span style={{ display: "block", color: "#8a7650" }}>⏳ Bot ne ye gaana abhi suna nahi - neeche “Gaane check karo” dabao</span>
+              )}
             </span>
             <button type="button" className="apl-mini" disabled={lock} onClick={() => window.confirm("Ye gaana hata dun?") && act("/api/admin/autopilot/music/delete", { url: m.url })}>✕</button>
           </div>
@@ -617,6 +639,11 @@ function DailyPanel({ d, busy, act }) {
             }}
           />
         </label>
+        {d.music.some((m) => !m.check || !m.small) ? (
+          <button type="button" className="apl-mini" style={{ marginTop: 8, marginLeft: 6 }} disabled={lock} onClick={() => act("/api/admin/autopilot/music/fix")}>
+            🎧 Gaane check karo
+          </button>
+        ) : null}
         {!d.ffmpegReady ? <div className="apl-small" style={{ color: "#b23b1e", marginTop: 6 }}>⚠️ Server par video banane ka tool (ffmpeg) nahi mila - Render deploy dobara karo.</div> : null}
 
         <div className="apl-row" style={{ marginTop: 12 }}>
