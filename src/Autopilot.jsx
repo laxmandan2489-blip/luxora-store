@@ -424,8 +424,18 @@ function DailyPanel({ d, busy, act }) {
   const review = report?.review || {};
   const issues = report?.website?.issues || [];
   const [showIssues, setShowIssues] = useState(false);
+  const [testStyle, setTestStyle] = useState("");
+  const [newTime, setNewTime] = useState("13:00");
   const working = Boolean(d.working);
   const lock = busy || working;
+  const reelTimes = Array.isArray(d.reelTimes) ? d.reelTimes : [];
+  const styleList = Array.isArray(d.reelStyleList) ? d.reelStyleList : [];
+  const onStyles = Array.isArray(d.reelStyles) && d.reelStyles.length ? d.reelStyles : styleList.map((x) => x.key);
+  const nextSong = [...(d.music || [])].filter((m) => !m.check || m.check.use).sort((a, b) => (Number(d.songUsedAt?.[a.url]) || 0) - (Number(d.songUsedAt?.[b.url]) || 0))[0];
+  const ampm = (t) => {
+    const [h, m] = String(t).split(":").map(Number);
+    return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+  };
 
   return (
     <>
@@ -595,7 +605,7 @@ function DailyPanel({ d, busy, act }) {
 
       <div className="apl-box">
         <div style={{ fontWeight: 700, marginBottom: 4 }}>🎬 Reels</div>
-        <div className="apl-small">Server khud reel banata hai (ek bag ya kai bags), aapke gaane ke saath, aur Instagram + Facebook par daalta hai.</div>
+        <div className="apl-small">Server khud reel banata hai, aapke gaane ke saath, aur Instagram + Facebook par daalta hai. Har reel ka style alag (baari-baari), photo gaane ki beat par badalti hai, har baar agla gaana.</div>
         <div className="apl-row">
           <span className="apl-small" style={{ color: "#333" }}>Roz reels:</span>
           {[0, 1, 2, 3].map((n) => (
@@ -605,6 +615,60 @@ function DailyPanel({ d, busy, act }) {
           ))}
           <span className="apl-small"> · aaj {d.todayReels}/{d.reelsPerDay}</span>
         </div>
+        <div style={{ marginTop: 8, fontSize: 14, fontWeight: 600 }}>⏰ Reel kab jaaye (India time)</div>
+        <div className="apl-row" style={{ alignItems: "center" }}>
+          {reelTimes.length ? (
+            reelTimes.map((t) => (
+              <span key={t} className="apl-mini on" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                {ampm(t)}
+                <button
+                  type="button"
+                  aria-label="hatao"
+                  disabled={lock}
+                  onClick={() => act("/api/admin/autopilot/daily/settings", { reelTimes: reelTimes.filter((x) => x !== t) })}
+                  style={{ border: 0, background: "transparent", color: "inherit", padding: 0, font: "inherit", cursor: "pointer" }}
+                >
+                  ✕
+                </button>
+              </span>
+            ))
+          ) : (
+            <span className="apl-small">Koi time nahi - reels band hain</span>
+          )}
+        </div>
+        {reelTimes.length < 4 ? (
+          <div className="apl-row" style={{ alignItems: "center" }}>
+            <input type="time" value={newTime} onChange={(event) => setNewTime(event.target.value)} disabled={lock} style={{ font: "inherit", fontSize: 16, padding: "6px 8px", borderRadius: 8, border: "1px solid #ccc", maxWidth: 140 }} />
+            <button type="button" className="apl-mini" disabled={lock || !newTime} onClick={() => act("/api/admin/autopilot/daily/settings", { reelTimes: [...reelTimes, newTime] })}>
+              ➕ Time jodo
+            </button>
+          </div>
+        ) : null}
+        <div className="apl-small">Bot is time par khud reel bana ke daal deta hai (server jaaga ho tab; 3 ghante tak der se bhi chalegi).</div>
+
+        {styleList.length ? (
+          <>
+            <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600 }}>🎞 Reel styles (baari-baari)</div>
+            <div className="apl-row">
+              {styleList.map((st) => {
+                const on = onStyles.includes(st.key);
+                return (
+                  <button
+                    key={st.key}
+                    type="button"
+                    className={on ? "apl-mini on" : "apl-mini"}
+                    disabled={lock || (on && onStyles.length <= 2)}
+                    onClick={() => act("/api/admin/autopilot/daily/settings", { reelStyles: on ? onStyles.filter((k) => k !== st.key) : [...onStyles, st.key] })}
+                  >
+                    {on ? "✓ " : ""}
+                    {st.label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="apl-small">Kam se kam 2 style on rahenge. Jo style us din ban na sake (jaise 2+ colour wala bag nahi), bot agla style bana deta hai.</div>
+          </>
+        ) : null}
         <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600 }}>🎵 Gaane ({d.music.length})</div>
         <div className="apl-small">Pixabay Music se free instrumental gaane daalo. Bot har gaana sun ke dekhta hai: shaant gaane ek bag / model reels par, tez gaane kai bags wali reels par. Jo na jache wo nahi lagega.</div>
         {d.music.map((m) => (
@@ -612,6 +676,9 @@ function DailyPanel({ d, busy, act }) {
             <span className="apl-small" style={{ color: "#333", flex: 1, minWidth: 0, overflowWrap: "anywhere" }}>
               ♪ {songName(m.name)}
               {m.kb ? <span style={{ color: "#888" }}> · {m.kb} KB{m.originalKb && m.originalKb > m.kb ? ` (pehle ${(m.originalKb / 1024).toFixed(1)} MB)` : ""}</span> : null}
+              {m.beat?.bpm ? <span style={{ color: "#888" }}> · {m.beat.bpm} BPM</span> : null}
+              {nextSong && nextSong.url === m.url ? <b style={{ color: "#8a7650" }}> · agla yahi</b> : null}
+              {d.songUsedAt?.[m.url] ? <span style={{ color: "#888" }}> · last {when(d.songUsedAt[m.url])}</span> : null}
               {m.check ? (
                 <span style={{ display: "block", color: m.check.use ? "#2e7d32" : "#b23b1e" }}>
                   {m.check.use
@@ -643,15 +710,25 @@ function DailyPanel({ d, busy, act }) {
             }}
           />
         </label>
-        {d.music.some((m) => !m.check || !m.small) ? (
+        {d.music.some((m) => !m.check || !m.small || !m.beat) ? (
           <button type="button" className="apl-mini" style={{ marginTop: 8, marginLeft: 6 }} disabled={lock} onClick={() => act("/api/admin/autopilot/music/fix")}>
             🎧 Gaane check karo
           </button>
         ) : null}
         {!d.ffmpegReady ? <div className="apl-small" style={{ color: "#b23b1e", marginTop: 6 }}>⚠️ Server par video banane ka tool (ffmpeg) nahi mila - Render deploy dobara karo.</div> : null}
 
-        <div className="apl-row" style={{ marginTop: 12 }}>
-          <button type="button" className="apl-btn" disabled={lock} onClick={() => act("/api/admin/autopilot/reel/test")}>Test reel banao</button>
+        <div className="apl-small" style={{ marginTop: 6 }}>💡 Instagram par sirf copyright-free gaane chalte hain (Pixabay Music / YouTube Audio Library). Bollywood / film gaane daale to Instagram reel ki awaaz band kar sakta hai.</div>
+
+        <div className="apl-row" style={{ marginTop: 12, alignItems: "center" }}>
+          <select value={testStyle} onChange={(event) => setTestStyle(event.target.value)} disabled={lock} style={{ font: "inherit", fontSize: 16, padding: "8px", borderRadius: 8, border: "1px solid #ccc", maxWidth: "100%" }}>
+            <option value="">Agla style (baari se)</option>
+            {styleList.map((st) => (
+              <option key={st.key} value={st.key}>
+                {st.label}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="apl-btn" disabled={lock} onClick={() => act("/api/admin/autopilot/reel/test", testStyle ? { style: testStyle } : null)}>Test reel banao</button>
         </div>
         {d.reelPreview ? (
           <div style={{ marginTop: 10 }}>

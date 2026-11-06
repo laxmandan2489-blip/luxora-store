@@ -8,6 +8,12 @@ import { renderReel, drawPreview, prepareCutouts, QUALITIES, REEL_W, REEL_H } fr
  * soft fades, text). Made fully on the phone (reelEngine.js): nothing is
  * uploaded or stored on Supabase / Render / Vercel. Save the video, then
  * add a song in Instagram.
+ *
+ * (2026-11-06) GAANA: after the video is made, "🎵 Gaana lagao" sends it
+ * to the server, which lays one of your Autopilot songs under it (picture
+ * copied as it is - only the sound is added), every time the next song and
+ * from a full part of it. Then save it, or post it straight to Instagram +
+ * Facebook from here.
  */
 
 // (2026-10-29 v3) 10 many-bag + 11 one-bag templates. kind:
@@ -71,6 +77,10 @@ export default function ReelMaker({ API, adminFetch, products }) {
   const [notice, setNotice] = useState("");
   const [fontsReady, setFontsReady] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [songs, setSongs] = useState([]);
+  const [songPick, setSongPick] = useState(""); // "" = auto (next song)
+  const [withSong, setWithSong] = useState(null); // { videoUrl, coverUrl, song }
+  const [songBusy, setSongBusy] = useState("");
 
   const rule = STYLES[style];
 
@@ -79,6 +89,89 @@ export default function ReelMaker({ API, adminFetch, products }) {
   }, []);
 
   useEffect(() => () => video && URL.revokeObjectURL(video.url), [video]);
+
+  // a new / cleared video drops the old song version
+  useEffect(() => {
+    setWithSong(null);
+  }, [video]);
+
+  useEffect(() => {
+    adminFetch(`${API}/api/admin/reel-maker/songs`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => data && Array.isArray(data.songs) && setSongs(data.songs))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function addSong() {
+    if (!video || songBusy) return;
+    setSongBusy("song");
+    setNotice("");
+    try {
+      const type = video.blob.type || "video/mp4";
+      const form = new FormData();
+      form.append("video", new File([video.blob], `reel.${type.includes("webm") ? "webm" : "mp4"}`, { type }));
+      form.append("mood", rule.group === "multi" ? "upbeat" : "calm");
+      if (songPick) form.append("song", songPick);
+      const response = await adminFetch(`${API}/api/admin/reel-maker/add-song`, { method: "POST", body: form });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.message || "Gaana nahi laga");
+      setWithSong(data);
+      setSongs((list) => list.map((item) => (item.url === data.songUrl ? { ...item, usedAt: Date.now() } : item)));
+      setNotice(`✅ Gaana laga: ♪ ${data.song}. Neeche video chala ke suno.`);
+    } catch (error) {
+      setNotice(`❌ ${error?.message || "Gaana nahi laga"} - dobara try karo.`);
+    } finally {
+      setSongBusy("");
+    }
+  }
+
+  async function saveSongVideo() {
+    if (!withSong) return;
+    setSongBusy("save");
+    try {
+      const blob = await (await fetch(withSong.videoUrl)).blob();
+      const file = new File([blob], `shrimoh-reel-${style}-gaana.mp4`, { type: "video/mp4" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file] });
+        setNotice("✅ “Save Video” chuno - gaane wali video Photos mein aa jayegi.");
+      } else {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = file.name;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setNotice("✅ Video download ho gayi.");
+      }
+    } catch (error) {
+      if (!(error && error.name === "AbortError")) setNotice("❌ Save nahi hui - dobara try karo.");
+    } finally {
+      setSongBusy("");
+    }
+  }
+
+  async function postSongVideo() {
+    if (!withSong || songBusy) return;
+    if (!window.confirm("Ye reel (gaane ke saath) Instagram + Facebook par daal dun?")) return;
+    setSongBusy("post");
+    setNotice("⏳ Reel Instagram par ja rahi hai - 1-2 minute, screen on rakho...");
+    try {
+      const response = await adminFetch(`${API}/api/admin/reel-maker/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoUrl: withSong.videoUrl, coverUrl: withSong.coverUrl, caption: captionFor(style, bags), song: withSong.song }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.message || "Reel nahi gayi");
+      const ig = data.results?.instagram;
+      setNotice(`✅ Reel chali gayi${ig?.ok ? " - Instagram ✅" : ""}${data.results?.facebook?.ok ? " · Facebook ✅" : ""}`);
+    } catch (error) {
+      setNotice(`❌ ${error?.message || "Reel nahi gayi"}`);
+    } finally {
+      setSongBusy("");
+    }
+  }
 
   const list = useMemo(() => {
     const active = (Array.isArray(products) ? products : []).filter(
@@ -356,14 +449,16 @@ export default function ReelMaker({ API, adminFetch, products }) {
         <h2 className="panel-title">Reel Maker</h2>
       </div>
       <p className="rm-small" style={{ marginTop: 0 }}>
-        Bags chuno → “🎬 Reel banao”. Video phone mein hi banti hai (server par kuch upload nahi hota). Save karke Instagram mein gaana lagao.
+        Bags chuno → “🎬 Reel banao” (video phone mein banti hai) → “🎵 Gaana lagao” → save karo ya seedha Instagram + Facebook par daalo.
       </p>
       {notice ? <div className="rm-tip">{notice}</div> : null}
 
       <div className="rm-wrap">
         <div>
           <div className="rm-stage">
-            {video ? (
+            {withSong ? (
+              <video key={withSong.videoUrl} src={withSong.videoUrl} poster={withSong.coverUrl || undefined} controls playsInline loop />
+            ) : video ? (
               <video src={video.url} controls playsInline muted loop autoPlay />
             ) : (
               <canvas ref={previewRef} />
@@ -399,6 +494,44 @@ export default function ReelMaker({ API, adminFetch, products }) {
             )}
           </div>
           {video ? (
+            <div className="rm-tip">
+              <b>🎵 Gaana</b> (Autopilot mein daale hue gaane)
+              {songs.length ? (
+                <>
+                  <div className="rm-row" style={{ marginTop: 8, marginBottom: 8 }}>
+                    {chip(!songPick, "🔀 Agla gaana (auto)", () => setSongPick(""), "auto")}
+                    {songs.map((item) => chip(songPick === item.url, `♪ ${String(item.name || "gaana").slice(0, 26)}`, () => setSongPick(item.url), item.url))}
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button type="button" className="rm-btn main" onClick={addSong} disabled={Boolean(songBusy) || busy}>
+                      {songBusy === "song" ? "⏳ Gaana lag raha hai..." : withSong ? "🔁 Doosra gaana lagao" : "🎵 Gaana lagao"}
+                    </button>
+                    {withSong ? (
+                      <>
+                        <button type="button" className="rm-btn" onClick={saveSongVideo} disabled={Boolean(songBusy)}>
+                          {songBusy === "save" ? "⏳..." : "⬇ Gaane wali video save karo"}
+                        </button>
+                        <button type="button" className="rm-btn" onClick={postSongVideo} disabled={Boolean(songBusy)}>
+                          {songBusy === "post" ? "⏳ Ja rahi hai..." : "🚀 Instagram + Facebook par daalo"}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                  {withSong ? (
+                    <div className="rm-small" style={{ marginTop: 6 }}>
+                      ♪ {withSong.song}
+                      {withSong.bpm ? ` · ${withSong.bpm} BPM` : ""} · upar video chala ke suno
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="rm-small" style={{ marginTop: 6 }}>
+                  Abhi koi gaana nahi. Autopilot tab → 🎬 Reels → “➕ Gaana daalo” se copyright-free gaane daalo (Pixabay Music), phir yahan gaana lag jayega.
+                </div>
+              )}
+            </div>
+          ) : null}
+          {video ? (
             <div className="rm-small" style={{ textAlign: "center", marginTop: 6 }}>
               {Math.round(video.seconds)} second ki reel · {video.took} second mein bani
               {video.busy ? " · kuch photos ka background saaf nahi tha (frame ki tarah lagi)" : ""}
@@ -407,7 +540,7 @@ export default function ReelMaker({ API, adminFetch, products }) {
 
           {bags.length ? (
             <div className="rm-tip">
-              <b>Instagram mein:</b> + → Reel → video chuno → 🎵 library se gaana → caption paste → “Share to Facebook” on → Share.
+              <b>Khud daalna ho to:</b> + → Reel → video chuno → (gaana na laga ho to 🎵 library se gaana) → caption paste → “Share to Facebook” on → Share.
               <div style={{ marginTop: 8 }}>
                 <button type="button" className="rm-chip" onClick={copyCaption}>
                   {copied ? "✓ Caption copy ho gaya" : "📋 Reel ka caption copy karo"}
