@@ -1,0 +1,679 @@
+{
+ "source": "Adapted from github.com/Jakeschincariol/instagram-agent-skill (ig-human/slop.json), MIT License, Copyright (c) 2026 Jake Schincariol",
+ "invisible": [
+  "U+200B",
+  "U+200C",
+  "U+200D",
+  "U+2060",
+  "U+FEFF",
+  "U+00AD",
+  "U+180E",
+  "U+061C",
+  "U+200E",
+  "U+200F",
+  "U+E0000-U+E007F",
+  "U+2063"
+ ],
+ "spaces": [
+  "U+00A0",
+  "U+202F",
+  "U+2009",
+  "U+2007",
+  "U+2003",
+  "U+2002"
+ ],
+ "typographic": [
+  {
+   "from": "—",
+   "to": ", "
+  },
+  {
+   "from": "–",
+   "to": "-"
+  },
+  {
+   "from": "‘",
+   "to": "'"
+  },
+  {
+   "from": "’",
+   "to": "'"
+  },
+  {
+   "from": "“",
+   "to": "\""
+  },
+  {
+   "from": "”",
+   "to": "\""
+  },
+  {
+   "from": "…",
+   "to": "..."
+  },
+  {
+   "from": "′",
+   "to": "'"
+  }
+ ],
+ "phrases": [
+  {
+   "find": "in today's fast-paced world",
+   "replace": "right now"
+  },
+  {
+   "find": "in today's digital age",
+   "replace": "right now"
+  },
+  {
+   "find": "in the ever-evolving landscape of",
+   "replace": "in"
+  },
+  {
+   "find": "in the ever-changing world of",
+   "replace": "in"
+  },
+  {
+   "find": "let's face it",
+   "replace": ""
+  },
+  {
+   "find": "here's the thing",
+   "replace": ""
+  },
+  {
+   "find": "picture this",
+   "replace": ""
+  },
+  {
+   "find": "imagine a world where",
+   "replace": "imagine if"
+  },
+  {
+   "find": "it's no secret that",
+   "replace": ""
+  },
+  {
+   "find": "we've all been there",
+   "replace": ""
+  },
+  {
+   "find": "let that sink in",
+   "replace": ""
+  },
+  {
+   "find": "the choice is yours",
+   "replace": ""
+  },
+  {
+   "find": "food for thought",
+   "replace": ""
+  },
+  {
+   "find": "the future is here",
+   "replace": ""
+  },
+  {
+   "find": "what are your thoughts?",
+   "replace": ""
+  },
+  {
+   "find": "drop a comment below",
+   "replace": ""
+  },
+  {
+   "find": "at the end of the day",
+   "replace": ""
+  },
+  {
+   "find": "needle-moving",
+   "replace": "useful"
+  },
+  {
+   "find": "move the needle",
+   "replace": "make a difference"
+  },
+  {
+   "find": "a testament to",
+   "replace": "proof of"
+  },
+  {
+   "find": "had the opportunity to",
+   "replace": "got to"
+  },
+  {
+   "find": "i am excited to announce",
+   "replace": ""
+  },
+  {
+   "find": "i'm thrilled to share",
+   "replace": ""
+  },
+  {
+   "find": "i am humbled to",
+   "replace": ""
+  },
+  {
+   "find": "without further ado",
+   "replace": ""
+  },
+  {
+   "find": "buckle up",
+   "replace": ""
+  },
+  {
+   "find": "the harsh truth is",
+   "replace": ""
+  },
+  {
+   "find": "spoiler alert",
+   "replace": ""
+  },
+  {
+   "find": "read that again",
+   "replace": ""
+  },
+  {
+   "find": "you're welcome",
+   "replace": ""
+  },
+  {
+   "find": "save this for later",
+   "replace": ""
+  },
+  {
+   "find": "who's with me",
+   "replace": ""
+  },
+  {
+   "find": "stop scrolling",
+   "replace": ""
+  },
+  {
+   "find": "don't scroll past this",
+   "replace": ""
+  },
+  {
+   "find": "in this video i'm going to show you",
+   "replace": ""
+  },
+  {
+   "find": "in today's video",
+   "replace": ""
+  },
+  {
+   "find": "watch till the end",
+   "replace": ""
+  },
+  {
+   "find": "you won't believe",
+   "replace": ""
+  },
+  {
+   "find": "nobody is talking about this",
+   "replace": "few people do this"
+  },
+  {
+   "find": "no one is talking about this",
+   "replace": "few people do this"
+  },
+  {
+   "find": "this changed everything",
+   "replace": "this worked"
+  },
+  {
+   "find": "this is your sign to",
+   "replace": ""
+  },
+  {
+   "find": "little did i know",
+   "replace": ""
+  },
+  {
+   "find": "fast forward to today",
+   "replace": "now"
+  },
+  {
+   "find": "and just like that",
+   "replace": ""
+  },
+  {
+   "find": "the rest is history",
+   "replace": ""
+  },
+  {
+   "find": "run don't walk",
+   "replace": ""
+  },
+  {
+   "find": "trust me on this one",
+   "replace": ""
+  },
+  {
+   "find": "don't sleep on this",
+   "replace": ""
+  },
+  {
+   "find": "follow for more",
+   "replace": ""
+  },
+  {
+   "find": "hit follow for more",
+   "replace": ""
+  },
+  {
+   "find": "double tap if",
+   "replace": ""
+  },
+  {
+   "find": "tag someone who needs this",
+   "replace": ""
+  },
+  {
+   "find": "let me know in the comments",
+   "replace": ""
+  },
+  {
+   "find": "share this with someone who needs it",
+   "replace": ""
+  },
+  {
+   "find": "the algorithm loves",
+   "replace": "Instagram pushes"
+  },
+  {
+   "find": "beat the algorithm",
+   "replace": "get reach"
+  },
+  {
+   "find": "go viral overnight",
+   "replace": "get reach"
+  }
+ ],
+ "words": [
+  {
+   "find": "delve into",
+   "replace": "look at"
+  },
+  {
+   "find": "delve",
+   "replace": "look"
+  },
+  {
+   "find": "dive deep into",
+   "replace": "get into"
+  },
+  {
+   "find": "deep dive",
+   "replace": "breakdown"
+  },
+  {
+   "find": "leverage",
+   "replace": "use"
+  },
+  {
+   "find": "leveraging",
+   "replace": "using"
+  },
+  {
+   "find": "utilize",
+   "replace": "use"
+  },
+  {
+   "find": "utilizing",
+   "replace": "using"
+  },
+  {
+   "find": "harness",
+   "replace": "use"
+  },
+  {
+   "find": "embark on",
+   "replace": "start"
+  },
+  {
+   "find": "foster",
+   "replace": "build"
+  },
+  {
+   "find": "facilitate",
+   "replace": "help"
+  },
+  {
+   "find": "showcase",
+   "replace": "show"
+  },
+  {
+   "find": "unlock",
+   "replace": "get"
+  },
+  {
+   "find": "elevate",
+   "replace": "improve"
+  },
+  {
+   "find": "streamline",
+   "replace": "simplify"
+  },
+  {
+   "find": "spearhead",
+   "replace": "lead"
+  },
+  {
+   "find": "underscore",
+   "replace": "show"
+  },
+  {
+   "find": "underscores",
+   "replace": "shows"
+  },
+  {
+   "find": "cultivate",
+   "replace": "build"
+  },
+  {
+   "find": "amplify",
+   "replace": "boost"
+  },
+  {
+   "find": "curate",
+   "replace": "pick"
+  },
+  {
+   "find": "curated",
+   "replace": "picked"
+  },
+  {
+   "find": "empower",
+   "replace": "let"
+  },
+  {
+   "find": "revolutionize",
+   "replace": "change"
+  },
+  {
+   "find": "transformative",
+   "replace": "big"
+  },
+  {
+   "find": "robust",
+   "replace": "solid"
+  },
+  {
+   "find": "seamless",
+   "replace": "clean"
+  },
+  {
+   "find": "seamlessly",
+   "replace": "cleanly"
+  },
+  {
+   "find": "pivotal",
+   "replace": "key"
+  },
+  {
+   "find": "crucial",
+   "replace": "important"
+  },
+  {
+   "find": "vital",
+   "replace": "important"
+  },
+  {
+   "find": "comprehensive",
+   "replace": "complete"
+  },
+  {
+   "find": "cutting-edge",
+   "replace": "new"
+  },
+  {
+   "find": "game-changing",
+   "replace": "big"
+  },
+  {
+   "find": "game-changer",
+   "replace": "big deal"
+  },
+  {
+   "find": "groundbreaking",
+   "replace": "new"
+  },
+  {
+   "find": "unparalleled",
+   "replace": "unmatched"
+  },
+  {
+   "find": "invaluable",
+   "replace": "useful"
+  },
+  {
+   "find": "meticulous",
+   "replace": "careful"
+  },
+  {
+   "find": "meticulously",
+   "replace": "carefully"
+  },
+  {
+   "find": "myriad of",
+   "replace": "many"
+  },
+  {
+   "find": "myriad",
+   "replace": "many"
+  },
+  {
+   "find": "multifaceted",
+   "replace": "complicated"
+  },
+  {
+   "find": "holistic",
+   "replace": "whole"
+  },
+  {
+   "find": "bespoke",
+   "replace": "custom"
+  },
+  {
+   "find": "innovative",
+   "replace": "new"
+  },
+  {
+   "find": "profound",
+   "replace": "big"
+  },
+  {
+   "find": "remarkable",
+   "replace": "notable"
+  },
+  {
+   "find": "compelling",
+   "replace": "convincing"
+  },
+  {
+   "find": "tapestry",
+   "replace": "mix"
+  },
+  {
+   "find": "realm",
+   "replace": "world"
+  },
+  {
+   "find": "landscape",
+   "replace": "market"
+  },
+  {
+   "find": "journey",
+   "replace": "process"
+  },
+  {
+   "find": "testament to",
+   "replace": "proof of"
+  },
+  {
+   "find": "cornerstone",
+   "replace": "base"
+  },
+  {
+   "find": "beacon",
+   "replace": "signal"
+  },
+  {
+   "find": "paradigm",
+   "replace": "model"
+  },
+  {
+   "find": "synergy",
+   "replace": "overlap"
+  },
+  {
+   "find": "ecosystem",
+   "replace": "system"
+  },
+  {
+   "find": "treasure trove",
+   "replace": "pile"
+  },
+  {
+   "find": "plethora of",
+   "replace": "lots of"
+  },
+  {
+   "find": "plethora",
+   "replace": "lots"
+  },
+  {
+   "find": "arsenal",
+   "replace": "set"
+  },
+  {
+   "find": "north star",
+   "replace": "goal"
+  },
+  {
+   "find": "moreover",
+   "replace": "also"
+  },
+  {
+   "find": "furthermore",
+   "replace": "also"
+  },
+  {
+   "find": "additionally",
+   "replace": "also"
+  },
+  {
+   "find": "nevertheless",
+   "replace": "still"
+  },
+  {
+   "find": "consequently",
+   "replace": "so"
+  },
+  {
+   "find": "thus",
+   "replace": "so"
+  },
+  {
+   "find": "hence",
+   "replace": "so"
+  },
+  {
+   "find": "notably",
+   "replace": ""
+  },
+  {
+   "find": "importantly",
+   "replace": ""
+  },
+  {
+   "find": "ultimately",
+   "replace": "in the end"
+  },
+  {
+   "find": "in essence",
+   "replace": "basically"
+  },
+  {
+   "find": "in conclusion",
+   "replace": "so"
+  },
+  {
+   "find": "when it comes to",
+   "replace": "with"
+  },
+  {
+   "find": "in order to",
+   "replace": "to"
+  },
+  {
+   "find": "a wide range of",
+   "replace": "many"
+  },
+  {
+   "find": "it is worth noting that",
+   "replace": "note that"
+  },
+  {
+   "find": "supercharge",
+   "replace": "speed up"
+  },
+  {
+   "find": "skyrocket",
+   "replace": "raise"
+  },
+  {
+   "find": "unleash",
+   "replace": "release"
+  },
+  {
+   "find": "effortlessly",
+   "replace": "easily"
+  },
+  {
+   "find": "captivating",
+   "replace": "interesting"
+  },
+  {
+   "find": "stunning",
+   "replace": "good"
+  },
+  {
+   "find": "breathtaking",
+   "replace": "striking"
+  },
+  {
+   "find": "iconic",
+   "replace": "known"
+  },
+  {
+   "find": "must-have",
+   "replace": "favourite"
+  },
+  {
+   "find": "no-brainer",
+   "replace": "obvious"
+  },
+  {
+   "find": "hidden gem",
+   "replace": "good one"
+  },
+  {
+   "find": "secret sauce",
+   "replace": "the actual method"
+  },
+  {
+   "find": "ultimate guide",
+   "replace": "guide"
+  },
+  {
+   "find": "level up",
+   "replace": "improve"
+  },
+  {
+   "find": "hack",
+   "replace": "trick"
+  }
+ ]
+}

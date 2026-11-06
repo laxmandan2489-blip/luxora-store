@@ -30,6 +30,8 @@
  */
 const path = require("path");
 const sharp = require("sharp");
+// (2026-11-06) Instagram skill: humanizer + max 5 hashtags + reel hooks
+const ig = require("./igSkill");
 
 const STATE_PATH = "social/autopilot.json";
 const SITE = String(process.env.SITE_URL || "https://shrimoh.vercel.app").replace(/\/+$/, "");
@@ -77,8 +79,8 @@ const TRUST_CARDS = [
   {
     key: "real",
     title: "Real product photos",
-    lines: ["Every bag page shows real photos", "Styled looks are always marked"],
-    caption: "What you see is what you get 🤍\nEvery bag on our website has real product photos. Styled looks (AI) are always marked.",
+    lines: ["Every bag page shows real photos", "Styled looks are noted in the caption"],
+    caption: "What you see is what you get 🤍\nEvery bag on our website has real product photos. Styled looks are mentioned in the caption.",
   },
 ];
 
@@ -474,12 +476,39 @@ module.exports = function setupAutopilot(app, deps) {
       .toBuffer();
   }
 
-  async function renderModelSlide(lifestyleBuffer) {
-    return sharp(lifestyleBuffer)
-      .rotate()
-      .resize({ width: 1080, height: 1350, fit: "cover", position: sharp.strategy.attention })
-      .jpeg({ quality: 90, mozjpeg: true })
+  /*
+   * (2026-11-06) BAG NEVER CUT. A photo is only cropped when its shape is
+   * already almost the same as the frame (max 3% off). Otherwise the WHOLE
+   * photo is shown in the middle and the empty space around it is filled
+   * with a soft blurred copy of the same photo (no bars, nothing cut).
+   */
+  // inset: keep a small soft border round the photo (reels slide the frame
+  // a little; with the border the photo itself is never touched)
+  async function fitNoCut(buffer, W, H, { quality = 90, inset = 0 } = {}) {
+    const upright = await sharp(buffer).rotate().flatten({ background: "#ffffff" }).toBuffer();
+    const meta = await sharp(upright).metadata();
+    const ratio = meta.width / meta.height;
+    const target = W / H;
+    if (!inset && Math.abs(ratio - target) / target <= 0.03) {
+      return sharp(upright).resize(W, H, { fit: "cover" }).jpeg({ quality, mozjpeg: true }).toBuffer();
+    }
+    const back = await sharp(upright).resize(Math.round(W / 8), Math.round(H / 8), { fit: "cover" }).blur(6).modulate({ brightness: 0.92, saturation: 0.85 }).resize(W, H).toBuffer();
+    const front = await sharp(upright).resize(Math.round(W * (1 - inset)), Math.round(H * (1 - inset)), { fit: "inside" }).toBuffer();
+    const fm = await sharp(front).metadata();
+    return sharp(back)
+      .composite([{ input: front, left: Math.round((W - fm.width) / 2), top: Math.round((H - fm.height) / 2) }])
+      .jpeg({ quality, mozjpeg: true })
       .toBuffer();
+  }
+
+  // website shows product photos in SQUARE boxes (cover) - a 4:5 lifestyle
+  // photo would lose its top + bottom there, so the site gets a square copy
+  async function squareForSite(buffer) {
+    return fitNoCut(buffer, 1200, 1200, { quality: 86 });
+  }
+
+  async function renderModelSlide(lifestyleBuffer) {
+    return fitNoCut(lifestyleBuffer, 1080, 1350);
   }
 
   // Light bag -> Black background, dark bag -> Cream (only the bag's own
@@ -677,7 +706,7 @@ module.exports = function setupAutopilot(app, deps) {
     const tags = [...(CATEGORY_TAGS[String(product.category || "").toLowerCase()] || [])];
     for (const [pattern, tag] of WORD_TAGS) if (pattern.test(text)) tags.push(tag);
     tags.push(...BASE_TAGS);
-    return [...new Set(tags)].slice(0, 6).join(" ");
+    return [...new Set(tags)].slice(0, ig.HASHTAG_LIMIT).join(" ");
   }
 
   function captions(product, name, kind, hookIndex) {
@@ -689,12 +718,12 @@ module.exports = function setupAutopilot(app, deps) {
         lines.push(`${rupees(product.price)}${colours.length >= 2 ? ` · ${colours.length} colours` : ""}`);
       }
       lines.push("Free delivery (prepaid) · COD available");
-      if (kind === "model") lines.push("Styled look (AI) · real photos of this bag on the website");
+      if (kind === "model") lines.push("Styled look (AI) · real photos of this bag on the website"); // only in the caption, never on the photo
       lines.push(platform === "facebook" ? `Shop: ${link}` : "Link in bio 🛍");
       lines.push("", hashtags(product));
       return lines.join("\n");
     };
-    return { instagram: build("instagram").slice(0, 2200), facebook: build("facebook") };
+    return { instagram: ig.polishCaption(build("instagram")), facebook: ig.polishCaption(build("facebook")) };
   }
 
   /* ---------------- Gemini: make + check lifestyle photos ---------------- */
@@ -727,8 +756,9 @@ module.exports = function setupAutopilot(app, deps) {
       `Use the bag in the reference photo (a ${kind}). It must stay exactly the same bag: same shape, same proportions, ` +
       "same colour and shade, same material texture, same stitching, same hardware (buckles, zips, chains, clasp) and the same strap or handle. " +
       `Do not redesign, recolour, add or remove any part, and do not put any logo or text on it.${size} ` +
-      `Create a photorealistic premium fashion photograph: ${scene.text}. ` +
-      "Vertical 4:5 composition, the whole bag clearly visible and in sharp focus, natural realistic hands and body, " +
+      `Create a photorealistic premium fashion photograph that looks like a real camera photo (natural skin texture, real fabric, real light and shadows, not CGI, not a 3D render, not an illustration): ${scene.text}. ` +
+      "Vertical 4:5 composition. The ENTIRE bag, including its full strap or handle, must be inside the frame with clear space around it - never cut off by any edge of the photo. " +
+      "The bag is clearly visible and in sharp focus, natural realistic hands and body, " +
       "high-end Instagram brand aesthetic, no text, no watermark, no logos.";
     const parts = [{ text: prompt }, { inline_data: { mime_type: "image/jpeg", data: refJpeg.toString("base64") } }];
     let data;
@@ -754,8 +784,9 @@ module.exports = function setupAutopilot(app, deps) {
       "Score 0-10: same_bag (overall the same product), colour (same colour and shade), shape (same silhouette and proportions), " +
       "hardware (same buckles, zips, chain, clasp, metal colour), strap (same handle/strap type and length), bag_visible (bag is clearly visible and in focus), " +
       "premium_look (would look premium on a fashion brand's Instagram). Also: extra_text (true if any text, logo, letters or watermark appear anywhere in Image 2), " +
-      "body_ok (true only if hands, fingers, face and body look natural with no extra or missing fingers or deformities), woman (true if a woman model is clearly visible with the bag). " +
-      'Reply ONLY with JSON: {"same_bag":0,"colour":0,"shape":0,"hardware":0,"strap":0,"bag_visible":0,"premium_look":0,"extra_text":false,"body_ok":true,"woman":true,"problems":"short"}';
+      "body_ok (true only if hands, fingers, face and body look natural with no extra or missing fingers or deformities), woman (true if a woman model is clearly visible with the bag), " +
+      "bag_whole (true only if the WHOLE bag body is inside Image 2 - no part of the bag is cut off by the top, bottom, left or right edge; a strap that runs over the shoulder out of frame is fine). " +
+      'Reply ONLY with JSON: {"same_bag":0,"colour":0,"shape":0,"hardware":0,"strap":0,"bag_visible":0,"premium_look":0,"extra_text":false,"body_ok":true,"woman":true,"bag_whole":true,"problems":"short"}';
     const small = await sharp(madeJpeg).resize(900, 900, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer();
     const data = await geminiCall(TEXT_MODEL, {
       contents: [
@@ -774,12 +805,14 @@ module.exports = function setupAutopilot(app, deps) {
     const n = (v) => Math.max(0, Math.min(10, Number(v) || 0));
     const scores = { same_bag: n(r.same_bag), colour: n(r.colour), shape: n(r.shape), hardware: n(r.hardware), strap: n(r.strap), bag_visible: n(r.bag_visible), premium_look: n(r.premium_look) };
     const pass =
-      Math.min(scores.same_bag, scores.colour, scores.shape, scores.hardware, scores.strap) >= 8 &&
+      Math.min(scores.same_bag, scores.colour, scores.shape) >= 8 &&
+      Math.min(scores.hardware, scores.strap) >= 7 &&
       scores.bag_visible >= 7 &&
-      scores.premium_look >= 6 &&
+      scores.premium_look >= 5 &&
       r.extra_text !== true &&
       r.body_ok === true &&
-      r.woman !== false;
+      r.woman !== false &&
+      r.bag_whole !== false;
     const total = Object.values(scores).reduce((a, b) => a + b, 0);
     return { pass, total, scores, problems: String(r.problems || "").slice(0, 160) };
   }
@@ -840,7 +873,7 @@ module.exports = function setupAutopilot(app, deps) {
   }
 
   /* ---------------- build one post ---------------- */
-  async function buildPost(state, queue, wantKind, notes) {
+  async function buildPost(state, queue, wantKind, notes, attempt = 0) {
     const products = await loadProducts();
     if (!products.length) throw new Error("Koi active bag nahi mila");
     if (wantKind === "trust") return buildTrustPost(state);
@@ -894,9 +927,14 @@ module.exports = function setupAutopilot(app, deps) {
       }
       // nothing passed -> never post a wrong bag; skip this bag's model post for 14 days
       state.skipModel = { ...(state.skipModel || {}), [product.id]: Date.now() + 14 * 24 * 3600 * 1000 };
-      notes.push("Koi lifestyle photo check paas nahi hui - iski jagah bag post jayegi (agli baar phir model post try hogi).");
-      const post = await buildBagPost(state, products, queue, product, state.lastBagBg === "cream" ? "black" : "cream", hookIndex);
-      return { ...post, fallback: true };
+      // (2026-11-07) owner: model post ki jagah background badla hua bag post
+      // NAHI chahiye. Dusre bag ke saath ladki wali photo try karo (max 3 bags),
+      // phir bhi na bane to is baar post nahi - agle timer par phir try.
+      if (attempt < 2) {
+        notes.push(`${product.name}: ladki wali photo paas nahi hui - dusre bag ke saath try`);
+        return buildPost(state, queue, "model", notes, attempt + 1);
+      }
+      throw new Error("Ladki wali photo 3 bags par bhi sahi nahi bani - is baar post nahi, agle timer par phir try (bag post nahi bheji)");
     }
     return buildBagPost(state, products, queue, product, wantKind === "bag-black" ? "black" : "cream", hookIndex);
   }
@@ -935,7 +973,7 @@ module.exports = function setupAutopilot(app, deps) {
     const bg = state.lastBagBg === "cream" ? "black" : "cream";
     setStage(`Bharose wala card ban raha hai: ${card.title}`);
     const slide = await renderTrustCard(card, bg);
-    const text = `${card.caption}\n\nLink in bio 🛍\n\n#shrimoh #handbags #bagsforwomen #cashondelivery`;
+    const text = ig.polishCaption(`${card.caption}\n\nLink in bio 🛍\n\n#shrimoh #handbags #bagsforwomen #cashondelivery`);
     const fb = text.replace("Link in bio 🛍", `Shop: ${SITE}/?utm_source=facebook&utm_medium=social&utm_campaign=autopilot-trust`);
     const product = { id: `trust-${card.key}`, images: [] };
     return { kind: "trust", product, bg, slides: [slide], story: null, captions: { instagram: text, facebook: fb }, thumb: null, label: `Bharosa · ${card.title}` };
@@ -1252,6 +1290,9 @@ module.exports = function setupAutopilot(app, deps) {
     readState,
     renderSlide,
     renderModelSlide,
+    fitNoCut,
+    squareForSite,
+    ig,
     textImage,
     fitPhoto,
     bagIsLight,

@@ -18,6 +18,12 @@
  *   4. REEL (2-3 a week) - made on the server with ffmpeg: one-bag reel
  *                  or many-bags reel, with a song from the songs you
  *                  upload in Admin (taking turns). Instagram + Facebook.
+ * (2026-11-06) REELS v2 - 6 reel styles taking turns (ek bag + look,
+ *   sab colours, new this week, guess the price, this or that, styled
+ *   looks), photo changes on the beat, slow movement, every song in turn
+ *   and from its fullest part. Reels go at the owner's fixed times
+ *   (default 10:30 am + 7:30 pm). Lifestyle photos are never cut and have
+ *   no "AI / stock" text on the picture (the caption says it honestly).
  * State: social/daily.json in the same Supabase bucket.
  */
 const fs = require("fs");
@@ -26,6 +32,8 @@ const path = require("path");
 const { execFile } = require("child_process");
 const sharp = require("sharp");
 const multer = require("multer");
+// (2026-11-06) reel engine v2: beat-timed cuts, slow movement, best part of the song
+const reelBot = require("./reelBot");
 
 let ffmpegPath = null;
 try {
@@ -92,6 +100,12 @@ module.exports = function setupDaily(app, deps, ap) {
       storyLog: [],
       reelLog: [],
       reelPreview: null,
+      reelTimes: ["10:30", "19:30"],
+      reelStyles: [],
+      reelSlots: {},
+      songUsedAt: {},
+      songUses: {},
+      squareOk: {},
     };
   }
 
@@ -106,10 +120,19 @@ module.exports = function setupDaily(app, deps, ap) {
         saved.storiesPerDay = 3;
         saved.v11 = true;
       }
+      if (!saved.v12) {
+        // (v12) reels at fixed times: morning + evening
+        saved.reelTimes = defaultReelTimes(saved.reelsPerDay ?? 2);
+        saved.v12 = true;
+      }
       return saved;
     } catch {
       return emptyState();
     }
+  }
+
+  function defaultReelTimes(n) {
+    return { 0: [], 1: ["19:30"], 2: ["10:30", "19:30"], 3: ["10:30", "14:30", "19:30"], 4: ["10:00", "13:30", "17:00", "20:30"] }[Math.max(0, Math.min(4, Math.round(Number(n) || 0)))];
   }
 
   // how many of a kind went out today (India date)
@@ -543,8 +566,16 @@ module.exports = function setupDaily(app, deps, ap) {
         pick = { url: result.url };
         apState = await ap.readState();
       }
+      // (2026-11-06) website boxes are square: put a square copy (whole photo,
+      // soft blurred sides) so the bag is never cut on the website
+      let siteUrl = pick.url;
+      try {
+        siteUrl = await ap.saveJpeg(await ap.squareForSite(await ap.fetchBuffer(pick.url)), "autopilot/lifestyle");
+      } catch (error) {
+        console.error("SQUARE COPY ERROR:", error.message);
+      }
       const before = p.images;
-      const after = [before[0], pick.url, ...before.slice(1)];
+      const after = [before[0], siteUrl, ...before.slice(1)];
       try {
         await writeProductList(p.id, "images", after, before, "add");
         p.images = after;
@@ -554,6 +585,46 @@ module.exports = function setupDaily(app, deps, ap) {
       }
     }
     return added;
+  }
+
+  /*
+   * (2026-11-06) OLD LIFESTYLE PHOTOS ON THE WEBSITE - photos the bot put
+   * there earlier are 4:5, and the website's square boxes cut their top and
+   * bottom (the bag looked cut). Each one is swapped for a square copy of
+   * the WHOLE photo (soft blurred sides). A few per run; ↩️ brings it back.
+   */
+  async function fixCutLifestyle(products, budget, state) {
+    const done = [];
+    const okMap = (state && state.squareOk) || {};
+    for (const p of products) {
+      if (done.length >= budget) break;
+      const list = p.images || [];
+      for (const url of list) {
+        if (done.length >= budget) break;
+        if (!ap.isLifestyleUrl(url) || okMap[url]) continue;
+        try {
+          const buffer = await ap.fetchBuffer(url);
+          const meta = await sharp(buffer).metadata();
+          if (Math.abs(meta.width / meta.height - 1) <= 0.02) {
+            okMap[url] = 1;
+            continue;
+          }
+          stage(`Lifestyle photo poori dikhe aisi kar raha hai: ${p.name}`);
+          const newUrl = await ap.saveJpeg(await ap.squareForSite(buffer), "autopilot/lifestyle");
+          const after = list.map((u) => (u === url ? newUrl : u));
+          await writeProductList(p.id, "images", after, list, "replace");
+          okMap[newUrl] = 1;
+          done.push({ at: Date.now(), productId: p.id, name: p.name, field: "images", colour: "", before: list, after, kind: "square", reason: "Lifestyle photo website par poori dikhegi (bag kata nahi)" });
+          p.images = after;
+          break;
+        } catch (error) {
+          console.error("SQUARE FIX ERROR:", error.message);
+          okMap[url] = 1;
+        }
+      }
+    }
+    if (state) state.squareOk = okMap;
+    return done;
   }
 
   /*
@@ -823,26 +894,33 @@ module.exports = function setupDaily(app, deps, ap) {
       .toBuffer();
   }
 
-  async function renderStyled(lifestyleBuffer, bag) {
+  /*
+   * (2026-11-06) Styled (lifestyle) frame for stories + reels:
+   *  - the WHOLE photo is shown (4:5 photo in the middle, soft blurred copy
+   *    of the same photo above and below) - the bag is never cut
+   *  - nothing like "AI" / "stock" is written on the picture; the caption
+   *    says it honestly instead
+   */
+  async function renderStyled(lifestyleBuffer, bag, hook = "") {
     const W = 1080;
     const H = 1920;
-    const base = await sharp(lifestyleBuffer).resize(W, H, { fit: "cover", position: sharp.strategy.attention }).toBuffer();
-    const shade = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.62"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/></svg>`);
-    const name = await textLayer(bag.name, { serif: true, weight: "Medium", size: 64, color: "#ffffff", width: W - 160 });
-    const price = await textLayer(`${rupees(bag.price)}  ·  link in bio`, { weight: "SemiBold", size: 34, color: "#ffffff" });
-    const note = await textLayer("styled look (AI)  ·  real photos on the website", { weight: "Medium", size: 20, color: "#e9e4dc", spacing: 2 });
+    const base = await ap.fitNoCut(lifestyleBuffer, W, H, { inset: 0.08 });
+    const shade = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.38"/><stop offset="0.16" stop-color="#000" stop-opacity="0"/><stop offset="0.72" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.62"/></linearGradient></defs><rect width="${W}" height="${H}" fill="url(#g)"/></svg>`);
+    const layers = [{ input: shade, left: 0, top: 0 }];
     const wordmark = await textLayer("SHRIMOH", { serif: true, weight: "SemiBold", size: 34, color: "#ffffff", spacing: 17 });
-    const bottom = H - 150;
-    return sharp(base)
-      .composite([
-        { input: shade, left: 0, top: 0 },
-        { input: wordmark.input, left: Math.round((W - wordmark.width) / 2), top: 134 },
-        { input: note.input, left: 80, top: bottom - note.height },
-        { input: price.input, left: 80, top: bottom - note.height - 30 - price.height },
-        { input: name.input, left: 80, top: bottom - note.height - 30 - price.height - 20 - name.height },
-      ])
-      .jpeg({ quality: 90 })
-      .toBuffer();
+    layers.push({ input: wordmark.input, left: Math.round((W - wordmark.width) / 2), top: 120 });
+    if (hook) {
+      const hookImg = await textLayer(hook, { serif: true, weight: "Medium", size: 58, color: "#ffffff", width: W - 160 });
+      layers.push({ input: hookImg.input, left: Math.round((W - hookImg.width) / 2), top: 120 + wordmark.height + 34 });
+    }
+    if (bag) {
+      const name = await textLayer(bag.name, { serif: true, weight: "Medium", size: 60, color: "#ffffff", width: W - 160 });
+      const price = await textLayer(`${rupees(bag.price)}  ·  link in bio`, { weight: "SemiBold", size: 32, color: "#ffffff" });
+      const bottom = H - 140;
+      layers.push({ input: price.input, left: Math.round((W - price.width) / 2), top: bottom - price.height });
+      layers.push({ input: name.input, left: Math.round((W - name.width) / 2), top: bottom - price.height - 22 - name.height });
+    }
+    return sharp(base).composite(layers).jpeg({ quality: 90 }).toBuffer();
   }
 
   async function makeStory(state, kindWanted) {
@@ -948,106 +1026,197 @@ module.exports = function setupDaily(app, deps, ap) {
       .toBuffer();
   }
 
-  async function buildReelFrames(state) {
-    const products = await ap.loadProducts();
-    if (!products.length) throw new Error("Koi bag nahi mila");
-    const apState = await ap.readState();
-    const kind = (Number(state.reelStep) || 0) % 2 === 0 ? "one" : "many";
-    const byReel = [...products].sort((a, b) => (Number(state.reelAt?.[a.id]) || 0) - (Number(state.reelAt?.[b.id]) || 0) || Math.random() - 0.5);
+  /*
+   * REEL STYLES (2026-11-06) - 6 kinds, taking turns, so no two reels in a
+   * row look the same. A style that can't be made right now (e.g. no bag
+   * with 2+ colours) is skipped and the next one is made instead.
+   * Each frame has `want` seconds; makeReel() snaps it to the song's beat.
+   */
+  const REEL_STYLES = {
+    look: { label: "Ek bag + styled look", mood: "calm", transitions: ["fade", "smoothleft", "fade", "slideup"] },
+    many: { label: "New this week (4-5 bags)", mood: "upbeat", transitions: ["slideleft", "smoothleft", "slideleft", "smoothup"] },
+    guess: { label: "Guess the price", mood: "calm", transitions: ["fade", "fade", "circleopen", "fade"] },
+    colours: { label: "1 bag, sab colours", mood: "upbeat", transitions: ["smoothleft", "smoothright", "smoothleft", "fadeblack"] },
+    looks: { label: "Styled looks (2-3 bags)", mood: "calm", transitions: ["fade", "fadeblack", "fade"] },
+    thisorthat: { label: "This or that", mood: "upbeat", transitions: ["slideright", "slideleft", "circleopen"] },
+  };
+  const STYLE_ORDER = ["look", "many", "guess", "colours", "looks", "thisorthat"];
+
+  function reelCaption(lines, tagsFrom, extraTags = []) {
+    const tags = ap.hashtags(tagsFrom || {});
+    const instagram = ap.ig.polishCaption(`${lines.join("\n")}\nFree delivery (prepaid) · COD available\nLink in bio 🛍\n\n${tags}`, extraTags);
+    const facebook = instagram.replace("Link in bio 🛍", `Shop: ${ap.SITE}/?utm_source=facebook&utm_medium=social&utm_campaign=autopilot-reel`);
+    return { instagram, facebook };
+  }
+
+  const AI_NOTE = "Styled look is AI-made · real product photos on the website";
+
+  async function bgFor(bags) {
+    let light = 0;
+    for (const bag of bags) if (await ap.bagIsLight(await ap.fetchBuffer(bag.images[0]).catch(() => Buffer.alloc(0))).catch(() => false)) light += 1;
+    return light > bags.length / 2 ? "black" : "cream";
+  }
+
+  async function storySlide(photo, bag, bg, label, { hidePrice = false, name } = {}) {
+    return ap.renderSlide(photo, { kind: "story", bg, name: name || bag.name, price: hidePrice ? 0 : bag.price, mrp: hidePrice ? 0 : bag.oldPrice, label: label || null });
+  }
+
+  async function buildStyle(style, ctx) {
+    const { apState, byReel, turn } = ctx;
+    const hook = (n) => ap.ig.hookFor(style, n, turn);
+    const life = (bag) => ap.lifestylePhotos(apState, bag.id);
     const frames = [];
     const used = [];
-    if (kind === "one") {
-      const bag = byReel.find((p) => ap.lifestylePhotos(apState, p.id).length) || byReel[0];
+
+    if (style === "look") {
+      const bag = byReel.find((p) => life(p).length) || byReel[0];
+      if (!bag) return null;
       used.push(bag);
       const realPhoto = await ap.fetchBuffer(bag.images[0]);
       const bg = (await ap.bagIsLight(realPhoto)) ? "black" : "cream";
-      const life = ap.lifestylePhotos(apState, bag.id)[0];
-      if (life) frames.push({ image: await renderStyled(await ap.fetchBuffer(life.url), bag), seconds: 2.6 });
-      const variants = ap.variantsOf(bag).slice(0, 4);
+      const look = life(bag)[0];
+      if (look) frames.push({ image: await renderStyled(await ap.fetchBuffer(look.url), bag, hook(1)), want: 2.6, motion: "up" });
+      const variants = ap.variantsOf(bag).slice(0, 3);
       for (const variant of variants) {
         const photo = variant.photos[0] === bag.images[0] ? realPhoto : await ap.fetchBuffer(variant.photos[0]).catch(() => null);
-        if (!photo) continue;
-        frames.push({ image: await ap.renderSlide(photo, { kind: "story", bg, name: variant.name, price: bag.price, mrp: bag.oldPrice, label: variant.colour || null }), seconds: 2.2 });
+        if (photo) frames.push({ image: await storySlide(photo, bag, bg, frames.length ? variant.colour || null : hook(1), { name: variant.name }), want: 2.2 });
       }
-      if (variants.length < 2) {
+      if (frames.length < 3) {
         for (const url of bag.images.slice(1, 3)) {
+          if (ap.isLifestyleUrl(url)) continue;
           const photo = await ap.fetchBuffer(url).catch(() => null);
-          if (photo) frames.push({ image: await ap.renderSlide(photo, { kind: "story", bg, name: bag.name, price: bag.price, mrp: bag.oldPrice, label: null }), seconds: 2 });
+          if (photo) frames.push({ image: await storySlide(photo, bag, bg, null), want: 2 });
         }
       }
-      frames.push({ image: await textFrame([{ text: bag.name, size: 66 }, { text: rupees(bag.price), serif: false, weight: "SemiBold", size: 54 }, { text: "COD AVAILABLE  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 26, soft: true, spacing: 6 }], bg), seconds: 2.4 });
-      const caption = ap.captions(bag, bag.name, "bag", Math.floor(Math.random() * 6));
-      if (life) {
-        const note = "Opening look is AI-styled · real product photos follow";
-        caption.instagram = caption.instagram.replace("Free delivery (prepaid) · COD available", `Free delivery (prepaid) · COD available\n${note}`);
-        caption.facebook = caption.facebook.replace("Free delivery (prepaid) · COD available", `Free delivery (prepaid) · COD available\n${note}`);
+      frames.push({ image: await textFrame([{ text: bag.name, size: 66 }, { text: rupees(bag.price), serif: false, weight: "SemiBold", size: 54 }, { text: "COD AVAILABLE  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 26, soft: true, spacing: 6 }], bg), want: 2.4, motion: "none" });
+      const caption = ap.captions(bag, bag.name, "bag", turn);
+      if (look) {
+        caption.instagram = caption.instagram.replace("Free delivery (prepaid) · COD available", `Free delivery (prepaid) · COD available\n${AI_NOTE}`);
+        caption.facebook = caption.facebook.replace("Free delivery (prepaid) · COD available", `Free delivery (prepaid) · COD available\n${AI_NOTE}`);
       }
-      return { kind, frames, used, caption };
+      return { frames, used, caption, label: `Reel · ${bag.name}` };
     }
-    const bags = byReel.slice(0, 5);
-    // one background for the whole reel: Black only when most bags are light
-    let light = 0;
-    for (const bag of bags) if (await ap.bagIsLight(await ap.fetchBuffer(bag.images[0]).catch(() => Buffer.alloc(0)))) light += 1;
-    const bg = light > bags.length / 2 ? "black" : "cream";
-    frames.push({ image: await textFrame([{ text: "New this week", size: 84 }, { text: `${bags.length} bags you'll love`, serif: false, weight: "Medium", size: 30, soft: true, spacing: 4 }], bg), seconds: 1.8 });
-    for (const bag of bags) {
-      const photo = await ap.fetchBuffer(bag.images[0]).catch(() => null);
-      if (!photo) continue;
+
+    if (style === "many") {
+      const bags = byReel.slice(0, 5);
+      if (bags.length < 3) return null;
+      const bg = await bgFor(bags);
+      frames.push({ image: await textFrame([{ text: hook(bags.length), size: 80 }, { text: "new this week", serif: false, weight: "Medium", size: 30, soft: true, spacing: 4 }], bg), want: 1.8, motion: "none" });
+      for (const bag of bags) {
+        const photo = await ap.fetchBuffer(bag.images[0]).catch(() => null);
+        if (!photo) continue;
+        used.push(bag);
+        frames.push({ image: await storySlide(photo, bag, bg, String(used.length)), want: 1.8 });
+      }
+      frames.push({ image: await textFrame([{ text: "Which one is yours?", size: 70 }, { text: `COMMENT 1-${used.length}  ·  LINK IN BIO`, serif: false, weight: "SemiBold", size: 26, soft: true, spacing: 6 }], bg), want: 2.2, motion: "none" });
+      const caption = reelCaption([`New this week 🤍`, `Which one is yours? Comment 1-${used.length}`, ...used.map((b, i) => `${i + 1}. ${b.name} - ${rupees(b.price)}`)], used[0]);
+      return { frames, used, caption, label: `Reel · ${used.length} bags` };
+    }
+
+    if (style === "guess") {
+      const bag = byReel.find((p) => Number(p.price) > 0 && (p.images || []).filter((u) => !ap.isLifestyleUrl(u)).length >= 2) || byReel.find((p) => Number(p.price) > 0);
+      if (!bag) return null;
       used.push(bag);
-      frames.push({ image: await ap.renderSlide(photo, { kind: "story", bg, name: bag.name, price: bag.price, mrp: bag.oldPrice, label: null }), seconds: 1.9 });
+      const photos = (bag.images || []).filter((u) => !ap.isLifestyleUrl(u)).slice(0, 3);
+      const first = await ap.fetchBuffer(photos[0]);
+      const bg = (await ap.bagIsLight(first)) ? "black" : "cream";
+      frames.push({ image: await storySlide(first, bag, bg, hook(0), { hidePrice: true }), want: 2.4 });
+      for (const url of photos.slice(1)) {
+        const photo = await ap.fetchBuffer(url).catch(() => null);
+        if (photo) frames.push({ image: await storySlide(photo, bag, bg, "Your guess?", { hidePrice: true }), want: 1.8 });
+      }
+      const priceLines = [{ text: "Price", serif: false, weight: "Medium", size: 30, soft: true, spacing: 8 }, { text: rupees(bag.price), serif: false, weight: "SemiBold", size: 120 }];
+      if (Number(bag.oldPrice) > Number(bag.price)) priceLines.push({ text: `MRP ${rupees(bag.oldPrice)}`, serif: false, weight: "Medium", size: 30, soft: true });
+      priceLines.push({ text: bag.name, size: 54 }, { text: "COD AVAILABLE  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 24, soft: true, spacing: 6 });
+      frames.push({ image: await textFrame(priceLines, bg), want: 2.8, motion: "none", transition: "circleopen" });
+      const caption = reelCaption([`${bag.name} 🤍`, "Guess the price? Comment your guess 👇", "The answer is in the reel"], bag);
+      return { frames, used, caption, label: `Reel · Guess · ${bag.name}` };
     }
-    frames.push({ image: await textFrame([{ text: "Which one is yours?", size: 70 }, { text: "COD AVAILABLE  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 26, soft: true, spacing: 6 }], bg), seconds: 2.2 });
-    const tags = ap.hashtags(bags[0] || {});
-    const caption = `New this week 🤍\nWhich one is yours? Comment 1-${used.length}\n${used.map((b, i) => `${i + 1}. ${b.name} - ${rupees(b.price)}`).join("\n")}\nFree delivery (prepaid) · COD available\nLink in bio 🛍\n\n${tags} #reels #bagreels`;
-    const fbCaption = caption.replace("Link in bio 🛍", `Shop: ${ap.SITE}/?utm_source=facebook&utm_medium=social&utm_campaign=autopilot-reel`);
-    return { kind, frames, used, caption: { instagram: caption.slice(0, 2200), facebook: fbCaption } };
+
+    if (style === "colours") {
+      const bag = byReel.find((p) => ap.variantsOf(p).filter((v) => v.photos[0]).length >= 2);
+      if (!bag) return null;
+      used.push(bag);
+      const variants = ap.variantsOf(bag).filter((v) => v.photos[0]).slice(0, 5);
+      const firstPhoto = await ap.fetchBuffer(variants[0].photos[0]);
+      const bg = (await ap.bagIsLight(firstPhoto)) ? "black" : "cream";
+      frames.push({ image: await textFrame([{ text: hook(variants.length), size: 80 }, { text: bag.name, serif: false, weight: "Medium", size: 30, soft: true, spacing: 4 }], bg), want: 1.6, motion: "none" });
+      for (const [i, variant] of variants.entries()) {
+        const photo = i === 0 ? firstPhoto : await ap.fetchBuffer(variant.photos[0]).catch(() => null);
+        if (photo) frames.push({ image: await storySlide(photo, bag, bg, `${i + 1} · ${variant.colour || "colour"}`, { name: variant.name }), want: 1.6 });
+      }
+      frames.push({ image: await textFrame([{ text: "Which colour?", size: 76 }, { text: `${rupees(bag.price)}  ·  COMMENT 1-${variants.length}`, serif: false, weight: "SemiBold", size: 28, soft: true, spacing: 5 }], bg), want: 2.2, motion: "none" });
+      const caption = reelCaption([`${bag.name} 🤍`, `Which colour is yours? Comment 1-${variants.length}`, ...variants.map((v, i) => `${i + 1}. ${v.colour || v.name}`), rupees(bag.price)], bag);
+      return { frames, used, caption, label: `Reel · Colours · ${bag.name}` };
+    }
+
+    if (style === "looks") {
+      const bags = byReel.filter((p) => life(p).length).slice(0, 3);
+      if (bags.length < 2) return null;
+      for (const [i, bag] of bags.entries()) {
+        const items = life(bag);
+        const look = items[turn % items.length];
+        const buffer = await ap.fetchBuffer(look.url).catch(() => null);
+        if (!buffer) continue;
+        used.push(bag);
+        frames.push({ image: await renderStyled(buffer, bag, i === 0 ? hook(bags.length) : ""), want: 2.4, motion: i % 2 ? "down" : "up" });
+      }
+      if (used.length < 2) return null;
+      const bg = await bgFor(used);
+      frames.push({ image: await textFrame([{ text: "Shop the look", size: 76 }, { text: used.map((b) => b.name).join("  ·  "), serif: false, weight: "Medium", size: 26, soft: true }, { text: "COD AVAILABLE  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 24, soft: true, spacing: 6 }], bg), want: 2.2, motion: "none" });
+      const caption = reelCaption(["Styled looks 🤍", ...used.map((b, i) => `${i + 1}. ${b.name} - ${rupees(b.price)}`), AI_NOTE], used[0]);
+      return { frames, used, caption, label: `Reel · Looks · ${used.length} bags` };
+    }
+
+    if (style === "thisorthat") {
+      const pair = byReel.slice(0, 2);
+      if (pair.length < 2) return null;
+      const bg = await bgFor(pair);
+      // both bags side by side first (the hook), then each one, then both again
+      const both = await renderThisOrThat(pair[0], pair[1], bg);
+      frames.push({ image: both, want: 2.0, motion: "none" });
+      for (const [i, bag] of pair.entries()) {
+        const photo = await ap.fetchBuffer(bag.images[0]).catch(() => null);
+        if (!photo) return null;
+        used.push(bag);
+        frames.push({ image: await storySlide(photo, bag, bg, String(i + 1)), want: 2.0, motion: i ? "right" : "left" });
+      }
+      frames.push({ image: await textFrame([{ text: "1 or 2?", size: 96 }, { text: "COMMENT YOUR PICK  ·  LINK IN BIO", serif: false, weight: "SemiBold", size: 26, soft: true, spacing: 6 }], bg), want: 2.2, motion: "none" });
+      const caption = reelCaption(["This or that? Comment 1 or 2 🤍", ...pair.map((b, i) => `${i + 1}. ${b.name} - ${rupees(b.price)}`)], pair[0]);
+      return { frames, used, caption, label: `Reel · This or that` };
+    }
+    return null;
   }
 
-  async function renderReel(frames, musicUrl) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reel-"));
-    try {
-      const args = ["-y", "-loglevel", "error"];
-      const fade = 0.45;
-      frames.forEach((frame, i) => {
-        const file = path.join(dir, `f${i}.jpg`);
-        fs.writeFileSync(file, frame.image);
-        args.push("-loop", "1", "-t", String(frame.seconds + fade), "-i", file);
-      });
-      const total = frames.reduce((sum, f) => sum + f.seconds, 0) + fade;
-      let audioIndex = frames.length;
-      if (musicUrl) {
-        const musicFile = path.join(dir, "music");
-        fs.writeFileSync(musicFile, await ap.fetchBuffer(musicUrl));
-        args.push("-stream_loop", "-1", "-i", musicFile);
-      } else {
-        args.push("-f", "lavfi", "-t", String(total), "-i", "anullsrc=r=44100:cl=stereo");
+  async function buildReelFrames(state, forcedStyle) {
+    const products = await ap.loadProducts();
+    if (!products.length) throw new Error("Koi bag nahi mila");
+    const apState = await ap.readState();
+    // bags that were in a reel longest ago come first
+    const byReel = [...products].sort((a, b) => (Number(state.reelAt?.[a.id]) || 0) - (Number(state.reelAt?.[b.id]) || 0) || Math.random() - 0.5);
+    const turn = Number(state.reelStep) || 0;
+    const chosen = (Array.isArray(state.reelStyles) ? state.reelStyles : []).filter((k) => REEL_STYLES[k]);
+    const enabled = chosen.length ? chosen : STYLE_ORDER;
+    let order = enabled.map((_, i) => enabled[(turn + i) % enabled.length]);
+    // never the same style twice in a row
+    if (order.length > 1 && order[0] === state.lastReelStyle) order = [...order.slice(1), order[0]];
+    if (forcedStyle && REEL_STYLES[forcedStyle]) order = [forcedStyle, ...order.filter((k) => k !== forcedStyle)];
+    for (const style of order) {
+      try {
+        const built = await buildStyle(style, { products, apState, byReel, turn });
+        if (built && built.frames.length >= 2) return { ...built, kind: style, mood: REEL_STYLES[style].mood, transitions: REEL_STYLES[style].transitions };
+      } catch (error) {
+        console.error(`REEL STYLE ${style} SKIPPED:`, error.message);
       }
-      const transitions = ["fade", "smoothleft", "fade", "slideup", "fade", "smoothright"];
-      const parts = frames.map((f, i) => `[${i}:v]scale=1080:1920,setsar=1,fps=30,format=yuv420p[v${i}]`);
-      let last = "v0";
-      let offset = 0;
-      for (let i = 1; i < frames.length; i++) {
-        offset += frames[i - 1].seconds;
-        const out = i === frames.length - 1 ? "vout" : `x${i}`;
-        parts.push(`[${last}][v${i}]xfade=transition=${transitions[(i - 1) % transitions.length]}:duration=${fade}:offset=${offset.toFixed(2)}[${out}]`);
-        last = out;
-      }
-      if (frames.length === 1) parts.push("[v0]null[vout]");
-      parts.push(`[${audioIndex}:a]atrim=0:${total.toFixed(2)},afade=t=in:d=0.6,afade=t=out:st=${Math.max(0, total - 1.2).toFixed(2)}:d=1.2,volume=0.9[aout]`);
-      const outFile = path.join(dir, "reel.mp4");
-      args.push(
-        "-filter_complex", parts.join(";"),
-        "-map", "[vout]", "-map", "[aout]",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-r", "30",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "44100",
-        "-t", total.toFixed(2), "-movflags", "+faststart", "-threads", "1",
-        outFile
-      );
-      await runFfmpeg(args);
-      return fs.readFileSync(outFile);
-    } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
     }
+    throw new Error("Reel ke liye bags / photos nahi mile");
+  }
+
+  // kept for old callers (stories etc. never used it, but it was exported)
+  async function renderReel(frames, musicUrl) {
+    const buffer = musicUrl ? await ap.fetchBuffer(musicUrl) : null;
+    const { video } = await reelBot.renderVideo(ffmpegPath, frames.map((f) => ({ ...f, motion: f.motion || "none" })), buffer ? { buffer, start: 0 } : null, { transitions: ["fade", "smoothleft", "fade", "slideup"], fade: 0.45 });
+    return video;
   }
 
   async function waitVideo(id) {
@@ -1067,7 +1236,7 @@ module.exports = function setupDaily(app, deps, ap) {
       try {
         const container = await metaCall(`${ids.igId}/media`, {
           method: "POST",
-          params: { media_type: "REELS", video_url: prepared.videoUrl, cover_url: prepared.coverUrl, caption: prepared.caption.instagram, share_to_feed: "true" },
+          params: { media_type: "REELS", video_url: prepared.videoUrl, ...(prepared.coverUrl ? { cover_url: prepared.coverUrl } : {}), caption: prepared.caption.instagram, share_to_feed: "true" },
         });
         await waitVideo(container.id);
         const done = await metaCall(`${ids.igId}/media_publish`, { method: "POST", params: { creation_id: container.id } });
@@ -1091,16 +1260,33 @@ module.exports = function setupDaily(app, deps, ap) {
     return results;
   }
 
-  async function makeReel(dryRun) {
+  async function makeReel(dryRun, forcedStyle) {
     const state = await readDaily();
     stage("Reel ke frames ban rahe hain");
-    const built = await buildReelFrames(state);
-    const music = pickSong(state, built.kind);
-    stage(`Video ban rahi hai${music ? ` (gaana: ${music.name})` : " (bina gaane)"} - 1-3 minute`);
-    const video = await renderReel(built.frames, music ? music.url : null);
+    const built = await buildReelFrames(state, forcedStyle);
+    const song = await pickSong(state, built.mood);
+    const beat = song?.beat?.beat || 0;
+    // photo changes on the beat, whole reel max ~22 seconds
+    let frames = built.frames.map((f) => ({ ...f, seconds: reelBot.onBeat(f.want, beat) }));
+    while (frames.length > 3 && frames.reduce((a, f) => a + f.seconds, 0) > 22) frames = [...frames.slice(0, -2), frames[frames.length - 1]];
+    stage(`Video ban rahi hai${song ? ` (gaana: ${song.name}${song.beat ? `, ${song.beat.bpm} BPM` : ""})` : " (bina gaane)"} - 1-3 minute`);
+    const { video, seconds } = await reelBot.renderVideo(ffmpegPath, frames, song ? { buffer: song.buffer, start: song.start } : null, { transitions: built.transitions });
     const videoUrl = await saveFile(video, "social/autopilot", "mp4", "video/mp4");
-    const coverUrl = await saveFile(built.frames[0].image, "social/autopilot", "jpg", "image/jpeg");
-    const prepared = { at: Date.now(), kind: built.kind, label: built.kind === "one" ? `Reel · ${built.used[0]?.name}` : `Reel · ${built.used.length} bags`, videoUrl, coverUrl, caption: built.caption, music: music ? music.name : "", musicUrl: music ? music.url : "", bags: built.used.map((b) => b.id) };
+    const coverUrl = await saveFile(frames[0].image, "social/autopilot", "jpg", "image/jpeg");
+    const prepared = {
+      at: Date.now(),
+      kind: built.kind,
+      style: built.kind,
+      label: built.label,
+      videoUrl,
+      coverUrl,
+      caption: built.caption,
+      seconds: Math.round(seconds),
+      music: song ? song.name : "",
+      musicUrl: song ? song.url : "",
+      musicStart: song ? song.start : 0,
+      bags: built.used.map((b) => b.id),
+    };
     if (dryRun) {
       await updateDaily((s) => {
         if (s.reelPreview) deleteStorageImages([s.reelPreview.videoUrl, s.reelPreview.coverUrl]).catch(() => {});
@@ -1122,9 +1308,12 @@ module.exports = function setupDaily(app, deps, ap) {
         bumpToday(s, "reel");
         s.lastReelAt = Date.now();
         s.reelStep = (Number(s.reelStep) || 0) + 1;
+        if (prepared.style) s.lastReelStyle = prepared.style;
         if (prepared.music) {
           s.musicIdx = (Number(s.musicIdx) || 0) + 1;
           s.lastSongUrl = prepared.musicUrl || "";
+          s.songUsedAt = { ...(s.songUsedAt || {}), [prepared.musicUrl]: Date.now() };
+          s.songUses = { ...(s.songUses || {}), [prepared.musicUrl]: (Number(s.songUses?.[prepared.musicUrl]) || 0) + 1 };
         }
         for (const id of prepared.bags || []) s.reelAt = { ...(s.reelAt || {}), [id]: Date.now() };
       }
@@ -1143,6 +1332,14 @@ module.exports = function setupDaily(app, deps, ap) {
    * timer + lock
    * ================================================================ */
   function start(task, fn) {
+    // (2026-11-07) a job stuck for 12+ minutes is dropped, so "ban raha hai" never hangs forever
+    if (working && Date.now() - (working.startedAt || 0) > 12 * 60 * 1000) {
+      console.error("AUTOPILOT DAILY: stuck job dropped:", working.task, working.stage);
+      updateDaily((s) => {
+        s.lastError = { at: Date.now(), task: working.task, message: `Atak gaya tha (${working.stage || working.task}) - chhod diya, dobara try karo` };
+      }).catch(() => {});
+      working = null;
+    }
     if (working) return false;
     working = { task, stage: "Shuru", startedAt: Date.now() };
     (async () => {
@@ -1202,6 +1399,7 @@ module.exports = function setupDaily(app, deps, ap) {
     const fixes = [];
     fixes.push(...(await fixFrontPhotos(state, products, 2)));
     fixes.push(...(await lightenHeavyPhotos(products, 1, state)));
+    fixes.push(...(await fixCutLifestyle(products, 2, state)));
     if (countToday(state, "lifestyle") < 4) {
       const added = await addLifestyleToGalleries(products, 1);
       fixes.push(...added);
@@ -1210,9 +1408,60 @@ module.exports = function setupDaily(app, deps, ap) {
     await updateDaily((s) => {
       s.frontChecks = state.frontChecks || s.frontChecks;
       s.lightOk = state.lightOk || s.lightOk;
+      s.squareOk = state.squareOk || s.squareOk;
       if (real.length) s.fixLog = [...real, ...(s.fixLog || [])].slice(0, 60);
       for (const f of real) if (f.kind === "lifestyle") bumpToday(s, "lifestyle");
     });
+  }
+
+  /*
+   * (2026-11-06) REEL TIMES - reels go at the owner's fixed times (India
+   * time), default 10:30 am + 7:30 pm. Checked every 5 minutes inside the
+   * server, so it does not depend on cron-job.org times. If the server was
+   * asleep, a reel is still made up to 3 hours late; a failed reel is tried
+   * once more after 20 minutes.
+   */
+  function istMinutes() {
+    const d = new Date(Date.now() + 5.5 * 3600 * 1000);
+    return d.getUTCHours() * 60 + d.getUTCMinutes();
+  }
+  function reelDue(state) {
+    const times = Array.isArray(state.reelTimes) ? state.reelTimes : [];
+    if (!times.length) return null;
+    const now = istMinutes();
+    if (now < 7 * 60 || now > 23 * 60 + 30) return null; // no reels at night
+    const today = ap.istDay();
+    for (const time of [...times].sort()) {
+      const [h, m] = String(time).split(":").map(Number);
+      const at = h * 60 + (m || 0);
+      if (!(now >= at && now < at + 180)) continue;
+      const key = `${today}#${time}`;
+      const slot = (state.reelSlots || {})[key];
+      if (!slot) return key;
+      if (slot.done || (slot.tries || 0) >= 2) continue;
+      if (Date.now() - (slot.lastTry || 0) > 20 * 60 * 1000) return key;
+    }
+    return null;
+  }
+  async function runReelSlot(key) {
+    await updateDaily((s) => {
+      const slots = s.reelSlots || {};
+      const old = slots[key] || {};
+      slots[key] = { ...old, tries: (old.tries || 0) + 1, lastTry: Date.now() };
+      // keep only the last few days
+      for (const k of Object.keys(slots)) if (k.slice(0, 10) < new Date(Date.now() - 4 * DAY).toISOString().slice(0, 10)) delete slots[k];
+      s.reelSlots = slots;
+    });
+    for (let i = 0; i < 72 && ap.isRunning(); i++) {
+      stage("Post poori hone ka intezaar, phir reel");
+      await sleep(5000);
+    }
+    const result = await makeReel(false);
+    if (result && result.ok) {
+      await updateDaily((s) => {
+        s.reelSlots = { ...(s.reelSlots || {}), [key]: { ...((s.reelSlots || {})[key] || {}), done: true } };
+      });
+    }
   }
 
   // kaam wala timer (every 5 minutes)
@@ -1224,6 +1473,12 @@ module.exports = function setupDaily(app, deps, ap) {
         }).catch(() => {});
         const apState = await ap.readState();
         if (!apState.enabled || working) return;
+        const d = await readDaily();
+        const slot = ap.isRunning() ? null : reelDue(d);
+        if (slot) {
+          start("reel", () => runReelSlot(slot));
+          return;
+        }
         start("work", () => maintenance(true));
       } catch (error) {
         console.error("AUTOPILOT WORK ERROR:", error.message);
@@ -1253,14 +1508,9 @@ module.exports = function setupDaily(app, deps, ap) {
           const storiesPerDay = state.storyDaily === false ? 0 : Number(state.storiesPerDay ?? 1);
           if (countToday(state, "story") < storiesPerDay && gapOk(state.lastStoryAt)) await postStory();
           state = await readDaily();
-          const reelsPerDay = Number(state.reelsPerDay ?? 0);
-          if (reelsPerDay > 0 && countToday(state, "reel") < reelsPerDay && gapOk(state.lastReelAt)) {
-            for (let i = 0; i < 72 && ap.isRunning(); i++) {
-              stage("Post poori hone ka intezaar, phir reel");
-              await sleep(5000);
-            }
-            if (!ap.isRunning()) await makeReel(false);
-          }
+          // (2026-11-06) reels only at the reel times (see reelDue)
+          const slot = reelDue(state);
+          if (slot) await runReelSlot(slot);
         });
       } catch (error) {
         console.error("AUTOPILOT TICK ERROR:", error.message);
@@ -1304,6 +1554,11 @@ module.exports = function setupDaily(app, deps, ap) {
       storyLog: (s.storyLog || []).slice(0, 8),
       reelLog: (s.reelLog || []).slice(0, 8),
       reelPreview: s.reelPreview,
+      reelTimes: Array.isArray(s.reelTimes) ? s.reelTimes : [],
+      reelStyles: Array.isArray(s.reelStyles) ? s.reelStyles : [],
+      reelStyleList: STYLE_ORDER.map((key) => ({ key, label: REEL_STYLES[key].label })),
+      lastReelStyle: s.lastReelStyle || "",
+      songUsedAt: s.songUsedAt || {},
       music: s.music || [],
       nextStory: STORY_KINDS[(Number(s.storyStep) || 0) % STORY_KINDS.length],
       lastError: s.lastError || null,
@@ -1338,7 +1593,7 @@ module.exports = function setupDaily(app, deps, ap) {
       for (const r of d.reelLog || []) push(r.at, "🎬", `${r.ok ? "Reel daali" : "Reel nahi gayi"}: ${r.label.replace(/^Reel · /, "")}${r.music ? ` (♪ ${r.music})` : ""}`, r.results?.instagram?.link, r.ok);
       for (const st of d.storyLog || []) push(st.at, "📖", `Story lagayi: ${st.bags.join(" + ")} → highlight "${st.highlight}" mein daalo`, "", Boolean(st.results?.instagram?.ok || st.results?.facebook?.ok));
       for (const r of d.replyLog || []) if (r.reply && r.ok) push(r.at, r.action === "alert" ? "⚠️" : "💬", `${r.action === "alert" ? "Shikayat - aapko email bheja" : "Comment ka jawab diya"}: ${r.user} - "${r.text.slice(0, 50)}"`, r.link);
-      for (const f of d.fixLog || []) push(f.at, f.kind === "lifestyle" ? "🌿" : f.kind === "compress" ? "🪶" : "🔧", `${f.kind === "lifestyle" ? "Website pe lifestyle photo lagayi" : f.kind === "compress" ? "Bhaari photo halki ki" : "Front photo theek ki"}: ${f.name}${f.undone ? " (aapne wapas kiya)" : ""}`);
+      for (const f of d.fixLog || []) push(f.at, f.kind === "lifestyle" ? "🌿" : f.kind === "compress" ? "🪶" : f.kind === "square" ? "🖼" : "🔧", `${f.kind === "lifestyle" ? "Website pe lifestyle photo lagayi" : f.kind === "compress" ? "Bhaari photo halki ki" : f.kind === "square" ? "Lifestyle photo poori dikhe aisi ki (bag kata nahi)" : "Front photo theek ki"}: ${f.name}${f.undone ? " (aapne wapas kiya)" : ""}`);
       for (const x of p.applied || []) push(x.appliedAt, "✏️", `${x.field === "name" ? "Naam badla" : "Description theek ki"}: ${x.field === "name" ? `"${x.before}" → "${x.after}"` : x.after.slice(0, 60)}${x.undone ? " (wapas kiya)" : ""}`);
       if (d.report?.at) push(d.report.at, "📅", `Roz ka check kiya, email bheja${d.report.review?.score != null ? ` (grid ${d.report.review.score}/10)` : ""}`);
       if (p.lastAuditAt) push(p.lastAuditAt, "🧠", "Hafte ka pro audit kiya, email bheja");
@@ -1374,7 +1629,16 @@ module.exports = function setupDaily(app, deps, ap) {
         if (typeof body.repliesOn === "boolean") s.repliesOn = body.repliesOn;
         if (typeof body.storyDaily === "boolean") s.storyDaily = body.storyDaily;
         if (body.reelsPerWeek != null) s.reelsPerWeek = Math.max(0, Math.min(7, Math.round(Number(body.reelsPerWeek) || 0)));
-        if (body.reelsPerDay != null) s.reelsPerDay = Math.max(0, Math.min(4, Math.round(Number(body.reelsPerDay) || 0)));
+        if (body.reelsPerDay != null) {
+          s.reelsPerDay = Math.max(0, Math.min(4, Math.round(Number(body.reelsPerDay) || 0)));
+          s.reelTimes = defaultReelTimes(s.reelsPerDay);
+        }
+        if (Array.isArray(body.reelTimes)) {
+          const clean = [...new Set(body.reelTimes.map((t) => String(t).trim()).filter((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)))].sort().slice(0, 4);
+          s.reelTimes = clean;
+          s.reelsPerDay = clean.length;
+        }
+        if (Array.isArray(body.reelStyles)) s.reelStyles = body.reelStyles.filter((k) => REEL_STYLES[k]);
         if (body.storiesPerDay != null) s.storiesPerDay = Math.max(0, Math.min(5, Math.round(Number(body.storiesPerDay) || 0)));
       });
       return ok(res);
@@ -1425,7 +1689,7 @@ module.exports = function setupDaily(app, deps, ap) {
       const state = await readDaily();
       const fix = (state.fixLog || []).find((f) => f.at === at && String(f.productId) === String(productId));
       if (!fix || fix.undone) return res.status(404).json({ success: false, message: "Ye badlav nahi mila." });
-      await writeProductList(fix.productId, fix.field, fix.before, fix.after, fix.kind === "lifestyle" ? "add" : fix.kind === "compress" ? "replace" : "reorder");
+      await writeProductList(fix.productId, fix.field, fix.before, fix.after, fix.kind === "lifestyle" ? "add" : fix.kind === "compress" || fix.kind === "square" ? "replace" : "reorder");
       await updateDaily((s) => {
         for (const f of s.fixLog || []) if (f.at === at && String(f.productId) === String(productId)) f.undone = true;
         // remember the owner's order so the bot does not move it again
@@ -1437,7 +1701,7 @@ module.exports = function setupDaily(app, deps, ap) {
     }
   });
   app.post("/api/admin/autopilot/daily/story", requireAdmin, job("story", () => postStory(true)));
-  app.post("/api/admin/autopilot/reel/test", requireAdmin, job("reel", () => makeReel(true)));
+  app.post("/api/admin/autopilot/reel/test", requireAdmin, job("reel", (req) => makeReel(true, String(req.body?.style || ""))));
   app.post(
     "/api/admin/autopilot/reel/publish",
     requireAdmin,
@@ -1507,9 +1771,15 @@ module.exports = function setupDaily(app, deps, ap) {
       const input = path.join(dir, `in.${ext || "mp3"}`);
       const out = path.join(dir, "out.mp3");
       fs.writeFileSync(input, buffer);
+      // (2026-11-06) keep the song's FULLEST 60 seconds (not just the intro)
+      const full = await reelBot.analyzeSong(ffmpegPath, buffer, ext).catch(() => null);
+      const from = full && full.peak60 > 0 ? full.peak60 : 0;
       await runFfmpeg([
         "-y", "-loglevel", "error", "-i", input, "-vn",
-        "-af", "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.1,atrim=0:60,afade=t=out:st=58:d=2",
+        "-af",
+        from > 0
+          ? `atrim=start=${from.toFixed(3)}:duration=60,asetpts=PTS-STARTPTS,afade=t=in:d=0.3,afade=t=out:st=58:d=2`
+          : "silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.1,atrim=0:60,afade=t=out:st=58:d=2",
         "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "96k", out,
       ]);
       const small = fs.readFileSync(out);
@@ -1525,7 +1795,7 @@ module.exports = function setupDaily(app, deps, ap) {
   // songs uploaded earlier: make them small and let the AI listen to them (once)
   async function shrinkOldSongs() {
     const state = await readDaily();
-    const todo = (state.music || []).filter((m) => !m.small || !m.check).slice(0, 4);
+    const todo = (state.music || []).filter((m) => !m.small || !m.check || !m.beat).slice(0, 4);
     for (const song of todo) {
       try {
         const original = await ap.fetchBuffer(song.url);
@@ -1542,9 +1812,10 @@ module.exports = function setupDaily(app, deps, ap) {
           }
         }
         const check = song.check || (await checkSong(buffer, url === song.url ? ext : "mp3"));
+        const beat = url === song.url && song.beat ? song.beat : await reelBot.analyzeSong(ffmpegPath, buffer, url === song.url ? ext : "mp3").catch(() => null);
         await updateDaily((s) => {
           s.music = (s.music || []).map((m) =>
-            m.url === song.url ? { ...m, url, small: url !== song.url || m.small, kb, originalKb: m.originalKb || Math.round(original.length / 1024), check: check || m.check } : m
+            m.url === song.url ? { ...m, url, small: url !== song.url || m.small, kb, originalKb: m.originalKb || Math.round(original.length / 1024), check: check || m.check, beat: beat || m.beat || null } : m
           );
         });
         if (url !== song.url) deleteStorageImages([song.url]).catch(() => {});
@@ -1562,15 +1833,46 @@ module.exports = function setupDaily(app, deps, ap) {
   });
 
   // calm songs for one-bag / model reels, upbeat for many-bag reels
-  function pickSong(state, kind) {
+  /*
+   * (2026-11-06) SONG CHOICE v2
+   *  - calm songs for calm styles, upbeat for fast ones (if both kinds exist)
+   *  - every song in turn: the one used longest ago goes next, never the
+   *    same song twice in a row
+   *  - each time the same song comes back it starts from a DIFFERENT full
+   *    part of the song (up to 3 parts), on the beat
+   */
+  async function songBeat(song) {
+    if (song.beat && song.beat.beat) return song.beat;
+    const buffer = await ap.fetchBuffer(song.url);
+    const ext = (song.url.split("?")[0].split(".").pop() || "mp3").toLowerCase();
+    const beat = await reelBot.analyzeSong(ffmpegPath, buffer, ext);
+    await updateDaily((s) => {
+      s.music = (s.music || []).map((m) => (m.url === song.url ? { ...m, beat } : m));
+    }).catch(() => {});
+    return beat;
+  }
+
+  async function pickSong(state, mood, wantedUrl) {
     const usable = (state.music || []).filter((m) => !m.check || m.check.use);
     if (!usable.length) return null;
-    const want = kind === "many" ? "upbeat" : "calm";
-    const matching = usable.filter((m) => (m.check?.mood || "calm") === want);
-    const list = matching.length ? matching : usable;
-    const last = state.lastSongUrl || "";
-    const options = list.length > 1 ? list.filter((m) => m.url !== last) : list;
-    return options[(Number(state.musicIdx) || 0) % options.length];
+    let song = wantedUrl ? usable.find((m) => m.url === wantedUrl) : null;
+    if (!song) {
+      const matching = usable.filter((m) => (m.check?.mood || "calm") === mood);
+      const list = matching.length ? matching : usable;
+      const last = state.lastSongUrl || "";
+      const options = list.length > 1 ? list.filter((m) => m.url !== last) : list;
+      song = [...options].sort((a, b) => (Number(state.songUsedAt?.[a.url]) || 0) - (Number(state.songUsedAt?.[b.url]) || 0) || (Number(a.at) || 0) - (Number(b.at) || 0))[0];
+    }
+    const buffer = await ap.fetchBuffer(song.url);
+    let beat = null;
+    try {
+      beat = await songBeat(song);
+    } catch (error) {
+      console.error("SONG BEAT ERROR:", error.message);
+    }
+    const starts = beat?.starts?.length ? beat.starts : [0];
+    const uses = Number(state.songUses?.[song.url]) || 0;
+    return { ...song, buffer, beat, start: starts[uses % starts.length] || 0 };
   }
 
   app.post("/api/admin/autopilot/music", requireAdmin, audioUpload.single("song"), async (req, res) => {
@@ -1580,10 +1882,11 @@ module.exports = function setupDaily(app, deps, ap) {
       const small = await shrinkSong(req.file.buffer, ext);
       const keep = small || req.file.buffer;
       const check = await checkSong(keep, small ? "mp3" : ext);
+      const beat = await reelBot.analyzeSong(ffmpegPath, keep, small ? "mp3" : ext).catch(() => null);
       const url = await saveFile(keep, "music", small ? "mp3" : ext, small ? "audio/mpeg" : req.file.mimetype || "audio/mpeg");
       const name = path.basename(req.file.originalname || "song", path.extname(req.file.originalname || "")).slice(0, 60);
       await updateDaily((s) => {
-        s.music = [...(s.music || []), { url, name, at: Date.now(), check, small: Boolean(small), kb: Math.round(keep.length / 1024), originalKb: Math.round(req.file.buffer.length / 1024) }].slice(-15);
+        s.music = [...(s.music || []), { url, name, at: Date.now(), check, beat, small: Boolean(small), kb: Math.round(keep.length / 1024), originalKb: Math.round(req.file.buffer.length / 1024) }].slice(-15);
       });
       return ok(res);
     } catch (error) {
@@ -1598,6 +1901,72 @@ module.exports = function setupDaily(app, deps, ap) {
     });
     if (url.includes("/music/")) deleteStorageImages([url]).catch(() => {});
     return ok(res);
+  });
+
+  /*
+   * (2026-11-06) ADMIN > REEL MAKER + GAANA. The phone makes the video (as
+   * before); the server lays one of your songs under it (picture copied as
+   * it is, a few seconds of work) and can post it to Instagram + Facebook.
+   */
+  const videoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 80 * 1024 * 1024 } });
+  let muxing = false;
+  app.post("/api/admin/reel-maker/add-song", requireAdmin, videoUpload.single("video"), async (req, res) => {
+    if (muxing) return res.status(409).json({ success: false, message: "Ek reel mein gaana lag raha hai, 1 minute baad." });
+    muxing = true;
+    try {
+      if (!req.file) return res.status(400).json({ success: false, message: "Video nahi mili." });
+      const state = await readDaily();
+      const mood = String(req.body?.mood || "calm") === "upbeat" ? "upbeat" : "calm";
+      const song = await pickSong(state, mood, String(req.body?.song || "") || null);
+      if (!song) return res.status(400).json({ success: false, message: "Pehle Autopilot > Reels mein gaane upload karo." });
+      const made = await reelBot.addSongToVideo(ffmpegPath, req.file.buffer, { buffer: song.buffer, start: song.start });
+      const videoUrl = await saveFile(made.video, "social/reelmaker", "mp4", "video/mp4");
+      const coverUrl = made.cover ? await saveFile(made.cover, "social/reelmaker", "jpg", "image/jpeg") : null;
+      await updateDaily((s) => {
+        // only the latest Reel Maker video is kept on Supabase (space)
+        if (s.lastMakerVideo) deleteStorageImages([s.lastMakerVideo.videoUrl, s.lastMakerVideo.coverUrl].filter(Boolean)).catch(() => {});
+        s.lastMakerVideo = { videoUrl, coverUrl };
+        s.lastSongUrl = song.url;
+        s.songUsedAt = { ...(s.songUsedAt || {}), [song.url]: Date.now() };
+        s.songUses = { ...(s.songUses || {}), [song.url]: (Number(s.songUses?.[song.url]) || 0) + 1 };
+      });
+      return res.json({ success: true, videoUrl, coverUrl, song: song.name, songUrl: song.url, seconds: Math.round(made.seconds), bpm: song.beat?.bpm || 0 });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    } finally {
+      muxing = false;
+    }
+  });
+
+  app.post("/api/admin/reel-maker/publish", requireAdmin, async (req, res) => {
+    try {
+      const videoUrl = String(req.body?.videoUrl || "");
+      if (!/\/social\/reelmaker\//.test(videoUrl)) return res.status(400).json({ success: false, message: "Pehle gaana lagao (video server par honi chahiye)." });
+      const caption = ap.ig.polishCaption(String(req.body?.caption || ""));
+      const fb = caption.replace(/Link in bio 🛍/g, `Shop: ${ap.SITE}/?utm_source=facebook&utm_medium=social&utm_campaign=reel-maker`);
+      const prepared = { videoUrl, coverUrl: String(req.body?.coverUrl || "") || undefined, caption: { instagram: caption, facebook: fb } };
+      const results = await publishReel(prepared);
+      const okAny = Object.values(results).some((r) => r.ok);
+      await updateDaily((s) => {
+        if (okAny) bumpToday(s, "reel");
+        if (results.instagram?.ok && s.lastMakerVideo && s.lastMakerVideo.videoUrl === videoUrl) {
+          deleteStorageImages([s.lastMakerVideo.videoUrl, s.lastMakerVideo.coverUrl].filter(Boolean)).catch(() => {});
+          s.lastMakerVideo = null;
+        }
+        s.reelLog = [{ at: Date.now(), label: "Reel · Reel Maker se", music: String(req.body?.song || ""), ok: okAny, results }, ...(s.reelLog || [])];
+      });
+      return res.json({ success: okAny, results, message: okAny ? "Reel chali gayi" : results.instagram?.message || results.facebook?.message || "Reel nahi gayi" });
+    } catch (error) {
+      return res.status(500).json({ success: false, message: error.message });
+    }
+  });
+
+  app.get("/api/admin/reel-maker/songs", requireAdmin, async (req, res) => {
+    const s = await readDaily();
+    return res.json({
+      success: true,
+      songs: (s.music || []).filter((m) => !m.check || m.check.use).map((m) => ({ url: m.url, name: m.name, mood: m.check?.mood || "calm", bpm: m.beat?.bpm || 0, usedAt: s.songUsedAt?.[m.url] || 0 })),
+    });
   });
 
   return { tick, setWeekly: (pro) => { weekly = pro; }, renderReel, buildReelFrames, makeStory, renderThisOrThat, renderStyled, textFrame };
